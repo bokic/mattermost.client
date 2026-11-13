@@ -8,6 +8,31 @@
 import Foundation
 import os
 
+enum DebugLog {
+    static var logPath: String {
+        return (NSTemporaryDirectory() as NSString).appendingPathComponent("mattermost_debug.log")
+    }
+    
+    static func log(_ message: String) {
+        let ts = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(ts)] \(message)\n"
+        print("[STATUS_LOG] \(line)", terminator: "")
+        fflush(stdout)
+        NSLog("[STATUS_LOG] %@", message)
+        
+        if let data = line.data(using: .utf8) {
+            let path = logPath
+            if let fileHandle = FileHandle(forWritingAtPath: path) {
+                fileHandle.seekToEndOfFile()
+                fileHandle.write(data)
+                try? fileHandle.close()
+            } else {
+                try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            }
+        }
+    }
+}
+
 enum WebServiceError: LocalizedError {
     case invalidHostname
     case invalidRequestBody
@@ -116,9 +141,20 @@ struct MMPostList: Codable {
     }
 }
 
+struct MMUserStatus: Codable {
+    let user_id: String
+    let status: String
+    let manual: Bool?
+    let last_activity_at: Int64?
+    let active_channel: String?
+    let dnd_end_time: Int64?
+}
+
 enum MMWebSocketEvent {
+    case hello
     case posted(post: MMPost, senderName: String?, channelDisplayName: String?, channelName: String?, teamId: String?)
     case statusChange(userId: String, status: String)
+    case userStatuses(statuses: [String: String])
     case typing(userId: String, channelId: String, parentId: String?)
     case updateTeam(team: MMTeam)
     case addedToTeam(teamId: String, userId: String)
@@ -180,6 +216,7 @@ final class WebService: NSObject {
     var mPort: UInt16 = 8065
     var mToken: String = ""
     var mConnected: Bool = false
+    var currentUserId: String = UserDefaults.standard.string(forKey: "currentUserId") ?? ""
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "mattermost.client", category: "WebService")
 
     override init() {
@@ -259,16 +296,27 @@ final class WebService: NSObject {
             }
         }
         
+        if path.contains("status") {
+            DebugLog.log("HTTP \(method) \(path) sending body=\(String(describing: body))")
+        }
+        
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
+            if path.contains("status") {
+                DebugLog.log("HTTP \(method) \(path) network error: \(error.localizedDescription)")
+            }
             throw WebServiceError.networkError(error)
         }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw WebServiceError.invalidResponse
+        }
+        
+        if path.contains("status") {
+            DebugLog.log("HTTP \(method) \(path) status=\(httpResponse.statusCode), body=\(String(decoding: data, as: UTF8.self))")
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -338,7 +386,10 @@ final class WebService: NSObject {
         }
         
         do {
-            return try JSONDecoder().decode(LoginWebService.self, from: data)
+            let user = try JSONDecoder().decode(LoginWebService.self, from: data)
+            self.currentUserId = user.id
+            UserDefaults.standard.set(user.id, forKey: "currentUserId")
+            return user
         } catch {
             throw WebServiceError.decodingError(error)
         }
@@ -371,6 +422,10 @@ final class WebService: NSObject {
             }
 
             updateToken(token: token)
+            if let user = try? JSONDecoder().decode(LoginWebService.self, from: data) {
+                self.currentUserId = user.id
+                UserDefaults.standard.set(user.id, forKey: "currentUserId")
+            }
             logger.info("checkToken succeeded")
             return true
         } catch {
@@ -382,7 +437,10 @@ final class WebService: NSObject {
     // MARK: - Users, Teams, Channels, Categories & Posts REST API
     
     func fetchCurrentUser() async throws -> LoginWebService {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/me")
+        let user: LoginWebService = try await performAuthenticatedRequest(path: "/api/v4/users/me")
+        self.currentUserId = user.id
+        UserDefaults.standard.set(user.id, forKey: "currentUserId")
+        return user
     }
     
     func fetchUsersByIds(_ userIds: [String]) async throws -> [LoginWebService] {
@@ -436,6 +494,46 @@ final class WebService: NSObject {
         return data
     }
     
+    @discardableResult
+    func updateUserStatus(userId: String = "", status: String, dndEndTime: Int64? = nil) async throws -> MMUserStatus {
+        var resolvedUserId = userId
+        if resolvedUserId.isEmpty || resolvedUserId == "me" || resolvedUserId == "usr" || resolvedUserId == "sample_usr" {
+            if !currentUserId.isEmpty {
+                resolvedUserId = currentUserId
+            } else if let savedId = UserDefaults.standard.string(forKey: "currentUserId"), !savedId.isEmpty {
+                resolvedUserId = savedId
+            } else {
+                let me = try await fetchCurrentUser()
+                resolvedUserId = me.id
+            }
+        }
+        guard !resolvedUserId.isEmpty else {
+            throw WebServiceError.invalidRequestBody
+        }
+        var payload: [String: Any] = [
+            "user_id": resolvedUserId,
+            "status": status
+        ]
+        if let dndEndTime = dndEndTime {
+            let seconds = dndEndTime > 10_000_000_000 ? (dndEndTime / 1000) : dndEndTime
+            payload["dnd_end_time"] = seconds
+        }
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(resolvedUserId)/status",
+            method: "PUT",
+            body: payload
+        )
+    }
+    
+    func fetchUserStatuses(userIds: [String]) async throws -> [MMUserStatus] {
+        guard !userIds.isEmpty else { return [] }
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users/status/ids",
+            method: "POST",
+            body: userIds
+        )
+    }
+    
     func fetchTeams() async throws -> [MMTeam] {
         return try await performAuthenticatedRequest(path: "/api/v4/users/me/teams")
     }
@@ -483,6 +581,8 @@ final class WebService: NSObject {
     
     private var webSocketTask: URLSessionWebSocketTask?
     private var wsSequence: Int = 1
+    private var pingTimer: Timer?
+    private var reconnectTimer: Timer?
     
     // Callbacks for WebSocket events
     var onWebSocketMessage: ((String) -> Void)?
@@ -491,6 +591,7 @@ final class WebService: NSObject {
     var onWebSocketEvent: ((MMWebSocketEvent) -> Void)?
     var onPostReceived: ((MMPost, String?) -> Void)?
     var onStatusChanged: ((String, String) -> Void)?
+    var onMultipleStatusesReceived: (([String: String]) -> Void)?
     var onUserTyping: ((String, String, String?) -> Void)?
     var onTeamUpdated: ((MMTeam) -> Void)?
     var onUserTeamsChanged: (() -> Void)?
@@ -507,16 +608,57 @@ final class WebService: NSObject {
         disconnectWebSocket()
         wsSequence = 1
         
-        webSocketTask = URLSession.shared.webSocketTask(with: url)
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        
+        webSocketTask = URLSession.shared.webSocketTask(with: request)
         webSocketTask?.resume()
         
         receiveWebSocketMessage()
         sendWebSocketAuthentication(token: mToken)
+        startPingTimer()
     }
     
     func disconnectWebSocket() {
+        stopPingTimer()
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
+    }
+    
+    private func startPingTimer() {
+        stopPingTimer()
+        DispatchQueue.main.async { [weak self] in
+            self?.pingTimer = Timer.scheduledTimer(withTimeInterval: 25.0, repeats: true) { [weak self] _ in
+                guard let self = self, let task = self.webSocketTask, task.state == .running else { return }
+                task.sendPing { [weak self] error in
+                    if let error = error {
+                        self?.logger.error("WebSocket ping failed: \(error.localizedDescription)")
+                        self?.scheduleReconnect()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func stopPingTimer() {
+        pingTimer?.invalidate()
+        pingTimer = nil
+    }
+    
+    private func scheduleReconnect() {
+        guard isLogged(), reconnectTimer == nil else { return }
+        stopPingTimer()
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+                self?.reconnectTimer = nil
+                self?.connectWebSocket()
+            }
+        }
     }
     
     func sendWebSocketMessage(action: String, data: [String: Any]) {
@@ -525,21 +667,34 @@ final class WebService: NSObject {
             "action": action,
             "data": data
         ]
+        let currentSeq = wsSequence
         wsSequence += 1
         
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: message)
             if let jsonString = String(data: jsonData, encoding: .utf8) {
+                DebugLog.log("WS SEND [seq=\(currentSeq)]: action=\(action) payload=\(jsonString)")
                 let wsMessage = URLSessionWebSocketTask.Message.string(jsonString)
                 webSocketTask?.send(wsMessage) { [weak self] error in
                     if let error = error {
+                        DebugLog.log("WS SEND ERROR [seq=\(currentSeq)]: \(error.localizedDescription)")
                         self?.logger.error("WebSocket send error: \(error.localizedDescription)")
                     }
                 }
             }
         } catch {
+            DebugLog.log("WS SEND SERIALIZATION ERROR for action=\(action)")
             logger.error("Failed to serialize WebSocket message")
         }
+    }
+    
+    func requestStatuses() {
+        sendWebSocketMessage(action: "get_statuses", data: [:])
+    }
+    
+    func requestStatusesByIds(_ userIds: [String]) {
+        guard !userIds.isEmpty else { return }
+        sendWebSocketMessage(action: "get_statuses_by_ids", data: ["user_ids": userIds])
     }
     
     func sendUserTyping(channelId: String, parentId: String = "") {
@@ -562,25 +717,29 @@ final class WebService: NSObject {
             
             switch result {
             case .failure(let error):
+                DebugLog.log("WS RECV FAILURE: \(error.localizedDescription)")
+                self.logger.error("WebSocket receive error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.onWebSocketDisconnected?(error)
                 }
+                self.scheduleReconnect()
             case .success(let message):
                 switch message {
                 case .string(let text):
+                    DebugLog.log("WS RECV: \(text)")
                     NSLog("WebSocket message: \(text)")
                     self.handleIncomingWebSocketMessage(text)
                 case .data(let data):
-                    NSLog("WebSocket data: \(data)")
                     if let text = String(data: data, encoding: .utf8) {
+                        DebugLog.log("WS RECV: \(text)")
+                        NSLog("WebSocket data: \(text)")
                         self.handleIncomingWebSocketMessage(text)
                     }
                 @unknown default:
                     break
                 }
                 
-                if self.webSocketTask?.state == .running {
-                    // Continue receiving
+                if self.webSocketTask != nil {
                     self.receiveWebSocketMessage()
                 }
             }
@@ -593,16 +752,46 @@ final class WebService: NSObject {
         
         if let data = text.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if let status = json["status"] as? String, status == "OK",
-               let seqReply = json["seq_reply"] as? Int, seqReply == 1 {
-                didConnect = true
+            
+            if let status = json["status"] as? String, status == "OK" {
+                if let seqReply = json["seq_reply"] as? Int, seqReply == 1 {
+                    didConnect = true
+                }
+                if let statuses = json["data"] as? [String: String] {
+                    parsedEvent = .userStatuses(statuses: statuses)
+                } else if let statusesDict = json["data"] as? [String: Any] {
+                    var strStatuses: [String: String] = [:]
+                    for (k, v) in statusesDict {
+                        if let s = v as? String {
+                            strStatuses[k] = s
+                        }
+                    }
+                    if !strStatuses.isEmpty {
+                        parsedEvent = .userStatuses(statuses: strStatuses)
+                    }
+                }
             }
             
             if let eventName = json["event"] as? String {
-                let eventData = (json["data"] as? [String: Any]) ?? [:]
+                if eventName == "hello" {
+                    didConnect = true
+                    parsedEvent = .hello
+                }
+                
+                var eventData: [String: Any] = [:]
+                if let dict = json["data"] as? [String: Any] {
+                    eventData = dict
+                } else if let str = json["data"] as? String,
+                          let strData = str.data(using: .utf8),
+                          let dict = try? JSONSerialization.jsonObject(with: strData) as? [String: Any] {
+                    eventData = dict
+                }
+                
                 let broadcast = (json["broadcast"] as? [String: Any]) ?? [:]
                 
                 switch eventName {
+                case "hello":
+                    parsedEvent = .hello
                 case "posted":
                     if let postJSONString = eventData["post"] as? String,
                        let postData = postJSONString.data(using: .utf8),
@@ -662,19 +851,32 @@ final class WebService: NSObject {
     
     private func handleIncomingWebSocketMessage(_ text: String) {
         let (didConnect, parsedEvent) = parseWebSocketMessage(text)
+        if let event = parsedEvent {
+            DebugLog.log("WS DISPATCH EVENT: \(event)")
+        } else if !didConnect {
+            DebugLog.log("WS UNPARSED MSG: \(text)")
+        }
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if didConnect {
                 self.onWebSocketConnected?()
+                self.requestStatuses()
             }
             if let event = parsedEvent {
                 self.onWebSocketEvent?(event)
                 switch event {
+                case .hello:
+                    break
                 case .posted(let post, let senderName, _, _, _):
                     self.onPostReceived?(post, senderName)
                 case .statusChange(let userId, let status):
                     self.onStatusChanged?(userId, status)
+                case .userStatuses(let statuses):
+                    self.onMultipleStatusesReceived?(statuses)
+                    for (userId, status) in statuses {
+                        self.onStatusChanged?(userId, status)
+                    }
                 case .typing(let userId, let channelId, let parentId):
                     self.onUserTyping?(userId, channelId, parentId)
                 case .updateTeam(let team):

@@ -311,5 +311,53 @@ final class WebServiceTests: XCTestCase {
         } else {
             XCTFail("Expected .addedToTeam WebSocket event")
         }
+
+        // 7. Hello event
+        let helloPayload = #"{"event":"hello","data":{"server_version":"12.1.0"},"seq":0}"#
+        let helloResult = ws.parseWebSocketMessage(helloPayload)
+        XCTAssertTrue(helloResult.didConnect)
+        if case .hello = helloResult.event {
+            // Success
+        } else {
+            XCTFail("Expected .hello event")
+        }
+
+        // 8. get_statuses reply
+        let getStatusesReply = #"{"status":"OK","seq_reply":2,"data":{"u123":"online","u456":"away"}}"#
+        let getStatusesResult = ws.parseWebSocketMessage(getStatusesReply)
+        if case .userStatuses(let statuses) = getStatusesResult.event {
+            XCTAssertEqual(statuses["u123"], "online")
+            XCTAssertEqual(statuses["u456"], "away")
+        } else {
+            XCTFail("Expected .userStatuses event")
+        }
+    }
+
+    func testDecodeMMUserStatus() throws {
+        let statusJSON = """
+        {
+            "user_id": "u12345",
+            "status": "away",
+            "manual": true,
+            "last_activity_at": 1765415300000,
+            "active_channel": "ch_town_square",
+            "dnd_end_time": 0
+        }
+        """.data(using: .utf8)!
+
+        let status = try JSONDecoder().decode(MMUserStatus.self, from: statusJSON)
+        XCTAssertEqual(status.user_id, "u12345")
+        XCTAssertEqual(status.status, "away")
+        XCTAssertEqual(status.manual, true)
+        XCTAssertEqual(status.last_activity_at, 1765415300000)
+    }
+
+    func testUserStatusUpdateURL() {
+        let ws = WebService(host: "chat.example.com", port: 8065)
+        let url = ws.buildURL(path: "/api/v4/users/u12345/status")
+        XCTAssertEqual(url?.absoluteString, "http://chat.example.com:8065/api/v4/users/u12345/status")
+
+        let meUrl = ws.buildURL(path: "/api/v4/users/me/status")
+        XCTAssertEqual(meUrl?.absoluteString, "http://chat.example.com:8065/api/v4/users/me/status")
     }
 }

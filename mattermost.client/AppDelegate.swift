@@ -10,11 +10,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var zoomPercentMenuItem: NSMenuItem?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        DebugLog.log("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
         setupMainMenu()
         
         let statusBar = NSStatusBar.system
         statusBarItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
-        statusBarItem.button?.image = NSImage(named: NSImage.Name("MenuIcon16"))
+        let icon = NSImage(named: NSImage.Name("MenuIcon16"))
+        icon?.isTemplate = true
+        statusBarItem.button?.image = icon
         statusBarItem.button?.target = self
         statusBarItem.button?.action = #selector(AppDelegate.statusBarButtonClicked(_:))
         statusBarItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])

@@ -54,20 +54,39 @@ class RoundedEdgePanel: NSView {
         trackingArea = area
     }
 
+    func setHovered(_ hovered: Bool) {
+        guard isHovered != hovered else { return }
+        isHovered = hovered
+        onHoverChanged?(hovered)
+    }
+
+    func updateHoverRecursively(windowMouseLocation: NSPoint, isWindowActiveAndInScrollView: Bool) {
+        let isInside: Bool
+        if !isWindowActiveAndInScrollView {
+            isInside = false
+        } else {
+            let localPoint = convert(windowMouseLocation, from: nil)
+            isInside = bounds.contains(localPoint)
+        }
+        if onHoverChanged != nil {
+            setHovered(isInside)
+        }
+        
+        for subview in subviews {
+            if let panel = subview as? RoundedEdgePanel {
+                panel.updateHoverRecursively(windowMouseLocation: windowMouseLocation, isWindowActiveAndInScrollView: isInside)
+            }
+        }
+    }
+
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        if !isHovered {
-            isHovered = true
-            onHoverChanged?(true)
-        }
+        setHovered(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        if isHovered {
-            isHovered = false
-            onHoverChanged?(false)
-        }
+        setHovered(false)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -131,9 +150,4 @@ class RoundedEdgePanel: NSView {
             baseLayer.shadowPath = nil
         }
     }
-
-    // MARK: - Drawing
-    // We no longer need custom drawing for a rounded rect background.
-    // Removing draw(_:) avoids unnecessary CPU work; Core Animation handles rendering.
 }
-

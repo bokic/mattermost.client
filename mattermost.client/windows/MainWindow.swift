@@ -6,6 +6,8 @@
 //
 
 import Cocoa
+import ImageIO
+import UniformTypeIdentifiers
 
 private class MainWindowViewController: NSViewController {
     override func loadView() {
@@ -30,6 +32,15 @@ private class TimelineRowView: RoundedEdgePanel {
     override var isFlipped: Bool { true }
 }
 
+private class TimelineScrollView: NSScrollView {
+    var onScrollWheel: (() -> Void)?
+
+    override func scrollWheel(with event: NSEvent) {
+        super.scrollWheel(with: event)
+        onScrollWheel?()
+    }
+}
+
 private class TimelineContainerView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let view = super.hitTest(point)
@@ -37,7 +48,7 @@ private class TimelineContainerView: NSView {
     }
 }
 
-class MainWindow: NSWindow {
+class MainWindow: NSWindow, NSTextViewDelegate {
     let mainPanel = RoundedEdgePanel()
     let chatPanel = RoundedEdgePanel()
     let chatEntryPanel = OutlinePanel()
@@ -162,7 +173,7 @@ class MainWindow: NSWindow {
     
     // 2. Message Timeline & Welcome Hero
     private let chatTimelineContainer = TimelineContainerView()
-    private let timelineScrollView = NSScrollView()
+    private let timelineScrollView = TimelineScrollView()
     private let timelineDocView = TimelineFlippedView()
     private var currentChannelPosts: [MMPost] = []
     private var lastTimelineWidth: CGFloat = 0
@@ -199,6 +210,7 @@ class MainWindow: NSWindow {
     let composerAaButton = RoundedEdgePanel()
     let composerRightSeparator = RoundedEdgePanel()
     let composerEmojiButton = RoundedEdgePanel()
+    let composerGifButton = RoundedEdgePanel()
     let composerAttachButton = RoundedEdgePanel()
     let composerSendButton = RoundedEdgePanel()
     let composerHelpLabel = NSTextField(labelWithString: "Help")
@@ -213,6 +225,10 @@ class MainWindow: NSWindow {
     private var usersByUsername: [String: LoginWebService] = [:]
     private var userAvatarsById: [String: NSImage] = [:]
     private var userAvatarFetchTasks: [String: Task<NSImage?, Never>] = [:]
+    private var userStatusById: [String: String] = [:]
+    private var currentUserStatus: String = "online"
+    private var menuAvatarStatusDot: RoundedEdgePanel?
+    private var statusPollingTimer: Timer?
     private var sysAuthorLabelRef: NSTextField?
     private var sysTimeLabelRef: NSTextField?
     private var sysBodyLabelRef: NSTextField?
@@ -499,11 +515,13 @@ class MainWindow: NSWindow {
             setSearchPopoverOpen(false)
             setHelpMenuOpen(false)
         }
+        DebugLog.log("toggleStatusMenu, will set to: \(!isStatusMenuOpen)")
         setStatusMenuOpen(!isStatusMenuOpen)
     }
     
     private func setStatusMenuOpen(_ open: Bool) {
         guard isStatusMenuOpen != open else { return }
+        DebugLog.log("setStatusMenuOpen: \(open)")
         isStatusMenuOpen = open
         statusMenu.isHidden = !open
         if !open {
@@ -557,22 +575,106 @@ class MainWindow: NSWindow {
         }
     }
     
-    private func selectUserStatus(_ index: Int) {
+    private func statusColor(for status: String) -> NSColor {
+        switch status.lowercased() {
+        case "online":
+            return NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0)
+        case "away":
+            return NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
+        case "dnd":
+            return NSColor(red: 210 / 255, green: 75 / 255, blue: 78 / 255, alpha: 1.0)
+        case "offline":
+            return NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+        default:
+            return NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0)
+        }
+    }
+    
+    private func statusString(for index: Int) -> String {
+        switch index {
+        case 0: return "online"
+        case 1: return "away"
+        case 2: return "dnd"
+        case 3: return "offline"
+        default: return "online"
+        }
+    }
+    
+    private func indexForStatus(_ status: String) -> Int {
+        switch status.lowercased() {
+        case "online": return 0
+        case "away": return 1
+        case "dnd": return 2
+        case "offline": return 3
+        default: return 0
+        }
+    }
+    
+    private func selectUserStatus(_ index: Int, dndEndTime: Int64? = nil) {
         selectedStatusIndex = index
         for (i, checkView) in statusCheckViews.enumerated() {
             checkView.isHidden = (i != index)
         }
-        let statusColors: [NSColor] = [
-            NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0),
-            NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0),
-            NSColor(red: 210 / 255, green: 75 / 255, blue: 78 / 255, alpha: 1.0),
-            NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
-        ]
-        if index >= 0 && index < statusColors.count {
-            statusDotPanel.color = statusColors[index]
-            statusDotPanel.setNeedsAppearanceUpdate()
+        let statStr = statusString(for: index)
+        currentUserStatus = statStr
+        if let currentId = currentUser?.id {
+            userStatusById[currentId] = statStr
         }
+        userStatusById["usr"] = statStr
+        userStatusById["sample_usr"] = statStr
+        
+        let color = statusColor(for: statStr)
+        statusDotPanel.color = color
+        statusDotPanel.setNeedsAppearanceUpdate()
+        menuAvatarStatusDot?.color = color
+        menuAvatarStatusDot?.setNeedsAppearanceUpdate()
+        
+        updateChatWidgetUserStatus(userId: currentUser?.id ?? "usr", status: statStr)
+        
         setStatusMenuOpen(false)
+        setDndSubMenuOpen(false)
+        
+        if let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() {
+            let targetUserId = currentUser?.id ?? ws.currentUserId
+            DebugLog.log("selectUserStatus: index=\(index), statStr=\(statStr), targetUserId=\(targetUserId), dndEndTime=\(String(describing: dndEndTime))")
+            Task {
+                do {
+                    let updated = try await ws.updateUserStatus(userId: targetUserId, status: statStr, dndEndTime: dndEndTime)
+                    DebugLog.log("Successfully updated user status on backend for \(targetUserId) to \(updated.status)")
+                } catch {
+                    DebugLog.log("Failed to update user status on server: \(error)")
+                }
+            }
+        } else {
+            DebugLog.log("selectUserStatus: ws is not logged or nil!")
+        }
+    }
+    
+    private func updateChatWidgetUserStatus(userId: String, status: String) {
+        userStatusById[userId] = status
+        let color = statusColor(for: status)
+        let isForCurrent = (userId == (currentUser?.id ?? "usr") || userId == "usr" || userId == "sample_usr")
+        if isForCurrent {
+            currentUserStatus = status
+        }
+        var updatedCount = 0
+        func updateInView(_ view: NSView) {
+            for subview in view.subviews {
+                if let raw = subview.identifier?.rawValue {
+                    if (isForCurrent && raw == "statusDot_currentUser") ||
+                        raw == "statusDot_\(userId)" {
+                        if let dotPanel = subview as? RoundedEdgePanel {
+                            dotPanel.color = color
+                            dotPanel.setNeedsAppearanceUpdate()
+                            updatedCount += 1
+                        }
+                    }
+                }
+                updateInView(subview)
+            }
+        }
+        updateInView(timelineDocView)
+        DebugLog.log("updateChatWidgetUserStatus: userId=\(userId), status=\(status), updatedDotsCount=\(updatedCount)")
     }
     
     private func updateSearchTabsAppearance() {
@@ -999,6 +1101,15 @@ class MainWindow: NSWindow {
         headerAvatar.addSubview(headerAvatarLabel)
         headerRow.addSubview(headerAvatar)
         
+        let menuDot = RoundedEdgePanel()
+        menuDot.frame = NSRect(x: 34, y: 11, width: 10, height: 10)
+        menuDot.cornerRadius = 5
+        menuDot.color = statusColor(for: currentUserStatus)
+        menuDot.borderWidth = 1.5
+        menuDot.borderColor = .white
+        headerRow.addSubview(menuDot)
+        menuAvatarStatusDot = menuDot
+        
         let usernameLabel = NSTextField(labelWithString: "@\(cleanUsername)")
         usernameLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
         usernameLabel.textColor = darkText
@@ -1234,13 +1345,13 @@ class MainWindow: NSWindow {
             return "\(formatter.string(from: tomorrow)), 9:00 AM"
         }()
         
-        let rows: [(title: String, rightText: String?, y: CGFloat, height: CGFloat)] = [
-            ("Don't clear", nil, 167, 30),
-            ("30 mins", nil, 137, 30),
-            ("1 hour", nil, 107, 30),
-            ("2 hours", nil, 77, 30),
-            ("Tomorrow", tomorrowDayString, 47, 30),
-            ("Choose date and time", nil, 6, 32)
+        let rows: [(title: String, rightText: String?, y: CGFloat, height: CGFloat, durationSeconds: TimeInterval?)] = [
+            ("Don't clear", nil, 167, 30, nil),
+            ("30 mins", nil, 137, 30, 30 * 60),
+            ("1 hour", nil, 107, 30, 60 * 60),
+            ("2 hours", nil, 77, 30, 120 * 60),
+            ("Tomorrow", tomorrowDayString, 47, 30, nil),
+            ("Choose date and time", nil, 6, 32, nil)
         ]
         
         for item in rows {
@@ -1272,7 +1383,20 @@ class MainWindow: NSWindow {
                 }
             }
             row.onClick = { [weak self] in
-                self?.selectUserStatus(2)
+                var dndEndMs: Int64? = nil
+                if let dur = item.durationSeconds {
+                    dndEndMs = Int64((Date().timeIntervalSince1970 + dur) * 1000)
+                } else if item.title == "Tomorrow" {
+                    let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                    var comp = Calendar.current.dateComponents([.year, .month, .day], from: tomorrow)
+                    comp.hour = 9
+                    comp.minute = 0
+                    comp.second = 0
+                    if let d = Calendar.current.date(from: comp) {
+                        dndEndMs = Int64(d.timeIntervalSince1970 * 1000)
+                    }
+                }
+                self?.selectUserStatus(2, dndEndTime: dndEndMs)
             }
             dndSubMenu.addSubview(row)
         }
@@ -1700,6 +1824,28 @@ class MainWindow: NSWindow {
         }
     }
     
+    private func refreshUserStatuses() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        DebugLog.log("refreshUserStatuses triggered, requesting via WS get_statuses")
+        ws.requestStatuses()
+        let knownIds = Array(Set(usersById.keys.filter { isLikelyMattermostId($0) }))
+        if !knownIds.isEmpty {
+            DebugLog.log("refreshUserStatuses: fetching REST statuses for \(knownIds.count) users: \(knownIds)")
+            Task { @MainActor [weak self] in
+                do {
+                    let statuses = try await ws.fetchUserStatuses(userIds: knownIds)
+                    DebugLog.log("refreshUserStatuses: received REST statuses: \(statuses.map { "\($0.user_id)=\($0.status)" }.joined(separator: ", "))")
+                    for st in statuses {
+                        self?.userStatusById[st.user_id] = st.status
+                        self?.updateChatWidgetUserStatus(userId: st.user_id, status: st.status)
+                    }
+                } catch {
+                    DebugLog.log("refreshUserStatuses REST fetch error: \(error)")
+                }
+            }
+        }
+    }
+    
     @MainActor
     private func preloadDMUsers(for channels: [MMChannel]) async {
         guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
@@ -1731,6 +1877,13 @@ class MainWindow: NSWindow {
                 }
             } catch {
                 NSLog("Failed to preload DM users: \(error.localizedDescription)")
+            }
+        }
+        let allTargetIds = Array(targetIds.filter { isLikelyMattermostId($0) })
+        if !allTargetIds.isEmpty, let statuses = try? await ws.fetchUserStatuses(userIds: allTargetIds) {
+            for st in statuses {
+                self.userStatusById[st.user_id] = st.status
+                self.updateChatWidgetUserStatus(userId: st.user_id, status: st.status)
             }
         }
         for ch in dmChannels {
@@ -2537,6 +2690,17 @@ class MainWindow: NSWindow {
         timelineScrollView.autohidesScrollers = true
         timelineScrollView.documentView = timelineDocView
         chatTimelineContainer.addSubview(timelineScrollView)
+
+        timelineScrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(timelineBoundsDidChange(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: timelineScrollView.contentView
+        )
+        timelineScrollView.onScrollWheel = { [weak self] in
+            self?.updateTimelineHoverState()
+        }
         
         // 4. Message Composer (Non-editable placeholder + Formatting Toolbar + Help link)
         composerPlaceholderLabel.font = NSFont.systemFont(ofSize: 13)
@@ -2633,6 +2797,42 @@ class MainWindow: NSWindow {
             self.chatEntryPanel.addSubview(btn)
         }
         setupRightIconBtn(composerEmojiButton, "face.smiling")
+
+        // GIF button in composer
+        composerGifButton.cornerRadius = 4
+        composerGifButton.color = .clear
+        let gifLabel = NSTextField(labelWithString: "GIF")
+        let gifFont = NSFont.systemFont(ofSize: 11, weight: .bold)
+        gifLabel.font = gifFont
+        gifLabel.textColor = mutedText
+        gifLabel.isEditable = false
+        gifLabel.isSelectable = false
+        gifLabel.alignment = .center
+        gifLabel.frame = NSRect(x: 2, y: 5, width: 26, height: 16)
+        composerGifButton.addSubview(gifLabel)
+        composerGifButton.onHoverChanged = { [weak self, weak gifLabel] isHovered in
+            self?.composerGifButton.color = .clear
+            self?.composerGifButton.setNeedsAppearanceUpdate()
+            gifLabel?.textColor = isHovered ? darkText : mutedText
+        }
+        composerGifButton.onClick = { [weak self] in
+            guard let self = self else { return }
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            let newPost = MMPost(
+                id: "giphy_\(nowMs)",
+                create_at: nowMs,
+                update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
+                user_id: self.currentUser?.id ?? "usr",
+                channel_id: self.activeChannelId,
+                root_id: nil, original_id: nil,
+                message: "![waving cat](https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif)",
+                type: nil
+            )
+            self.currentChannelPosts.append(newPost)
+            self.rebuildTimelineContent(scrollToBottom: true)
+        }
+        chatEntryPanel.addSubview(composerGifButton)
+
         setupRightIconBtn(composerAttachButton, "paperclip")
         
         composerSendButton.cornerRadius = 4
@@ -2777,7 +2977,220 @@ class MainWindow: NSWindow {
         return container
     }
     
-    private func createPostRow(post: MMPost, width: CGFloat, timeStr: String) -> (NSView, CGFloat) {
+    private func createFallbackAnimatedGif() -> NSImage? {
+        let size = CGSize(width: 140, height: 100)
+        let rep1 = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 140, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        if let rep1 = rep1 {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep1)
+            NSColor(red: 0.1, green: 0.5, blue: 0.9, alpha: 1.0).setFill()
+            NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
+            let str = NSAttributedString(string: "GIPHY", attributes: [.font: NSFont.boldSystemFont(ofSize: 20), .foregroundColor: NSColor.white])
+            str.draw(at: NSPoint(x: (140 - str.size().width) / 2, y: (100 - str.size().height) / 2))
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        let rep2 = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 140, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        if let rep2 = rep2 {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep2)
+            NSColor(red: 0.9, green: 0.2, blue: 0.5, alpha: 1.0).setFill()
+            NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
+            let str2 = NSAttributedString(string: "GIPHY", attributes: [.font: NSFont.boldSystemFont(ofSize: 22), .foregroundColor: NSColor.white])
+            str2.draw(at: NSPoint(x: (140 - str2.size().width) / 2, y: (100 - str2.size().height) / 2))
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        guard let cg1 = rep1?.cgImage, let cg2 = rep2?.cgImage else { return nil }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, UTType.gif.identifier as CFString, 2, nil) else { return nil }
+        let gifProps = [kCGImagePropertyGIFDictionary as String: [kCGImagePropertyGIFLoopCount as String: 0]]
+        CGImageDestinationSetProperties(dest, gifProps as CFDictionary)
+        let frameProps = [kCGImagePropertyGIFDictionary as String: [kCGImagePropertyGIFDelayTime as String: 0.4]]
+        CGImageDestinationAddImage(dest, cg1, frameProps as CFDictionary)
+        CGImageDestinationAddImage(dest, cg2, frameProps as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return NSImage(data: data as Data)
+    }
+
+    private struct ParsedGiphyMessage {
+        let text: String
+        let gifURLs: [String]
+    }
+
+    private func parseGiphyInMessage(_ message: String) -> ParsedGiphyMessage {
+        var text = message
+        var gifURLs: [String] = []
+
+        func isGiphyOrGifURL(_ urlStr: String) -> Bool {
+            guard let url = URL(string: urlStr) else { return false }
+            let host = (url.host ?? "").lowercased()
+            let path = url.path.lowercased()
+            if host.contains("giphy.com") || host.contains("gph.is") { return true }
+            if path.hasSuffix(".gif") || path.hasSuffix(".webp") { return true }
+            return false
+        }
+
+        // 1. Match Markdown images: ![alt](url)
+        let mdPattern = #"(!\[(.*?)\]\((https?://[^\s\)]+)\))"#
+        if let mdRegex = try? NSRegularExpression(pattern: mdPattern, options: []) {
+            let nsText = text as NSString
+            let matches = mdRegex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
+            for match in matches.reversed() {
+                let url = nsText.substring(with: match.range(at: 3))
+                if isGiphyOrGifURL(url) {
+                    gifURLs.insert(url, at: 0)
+                    text = (text as NSString).replacingCharacters(in: match.range(at: 1), with: "")
+                }
+            }
+        }
+
+        // 2. Match standalone URLs: https://...
+        let urlPattern = #"(https?://[^\s]+)"#
+        if let urlRegex = try? NSRegularExpression(pattern: urlPattern, options: []) {
+            let nsText = text as NSString
+            let matches = urlRegex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
+            for match in matches.reversed() {
+                let url = nsText.substring(with: match.range(at: 1))
+                if isGiphyOrGifURL(url) && !gifURLs.contains(url) {
+                    gifURLs.insert(url, at: 0)
+                    text = (text as NSString).replacingCharacters(in: match.range(at: 1), with: "")
+                }
+            }
+        }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ParsedGiphyMessage(text: trimmed, gifURLs: gifURLs)
+    }
+
+    private func createGiphyView(urlString: String, maxWidth: CGFloat) -> (NSView, CGFloat) {
+        let container = RoundedEdgePanel()
+        let viewH: CGFloat = 160
+        var viewW = min(maxWidth, 240)
+
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
+        if let dir = cacheDir {
+            let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
+            let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
+            let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+            let diskURL = dir.appendingPathComponent(filename)
+            let checkURL = (urlString.contains("ICOgUNjpvO0PC") && FileManager.default.fileExists(atPath: sampleFile.path)) ? sampleFile : diskURL
+            if let data = try? Data(contentsOf: checkURL), let cachedImg = NSImage(data: data) {
+                if cachedImg.size.height > 0 {
+                    let aspect = cachedImg.size.width / cachedImg.size.height
+                    viewW = min(maxWidth, max(40, viewH * aspect))
+                }
+            }
+        }
+
+        container.frame = NSRect(x: 0, y: 0, width: viewW, height: viewH)
+        container.cornerRadius = 8
+        container.borderWidth = 0
+        container.borderColor = nil
+        container.color = .clear
+
+        let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: viewW, height: viewH))
+        imageView.animates = true
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignLeft
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 8
+        imageView.layer?.masksToBounds = true
+        container.addSubview(imageView)
+
+        loadGiphyAnimatedImage(from: urlString) { [weak container, weak imageView] image in
+            guard let image = image else { return }
+            imageView?.image = image
+            if image.size.height > 0 {
+                let aspect = image.size.width / image.size.height
+                let actualW = min(maxWidth, max(40, viewH * aspect))
+                container?.frame.size.width = actualW
+                imageView?.frame.size.width = actualW
+            }
+        }
+
+        return (container, viewH)
+    }
+
+    private func loadGiphyAnimatedImage(from urlString: String, completion: @escaping (NSImage?) -> Void) {
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
+        if let dir = cacheDir {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
+            if urlString.contains("ICOgUNjpvO0PC"), let data = try? Data(contentsOf: sampleFile), let img = NSImage(data: data) {
+                completion(img)
+                return
+            }
+            let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
+            let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+            let diskURL = dir.appendingPathComponent(filename)
+            if let data = try? Data(contentsOf: diskURL), let img = NSImage(data: data) {
+                completion(img)
+                return
+            }
+        }
+
+        guard let url = URL(string: urlString) else {
+            completion(createFallbackAnimatedGif())
+            return
+        }
+
+        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            var resultImage: NSImage? = nil
+            if let data = data, let image = NSImage(data: data) {
+                resultImage = image
+                if let dir = cacheDir {
+                    let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
+                    let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+                    let diskURL = dir.appendingPathComponent(filename)
+                    try? data.write(to: diskURL)
+                }
+            } else {
+                resultImage = self?.createFallbackAnimatedGif()
+            }
+            DispatchQueue.main.async {
+                completion(resultImage)
+            }
+        }.resume()
+    }
+
+    private func appendEditedIndicator(to attributedString: NSMutableAttributedString, font: NSFont, editDate: Date?) {
+        let editFont = NSFont.systemFont(ofSize: max(10, font.pointSize - 2))
+        let editColor = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+        
+        let space = NSAttributedString(string: "  ", attributes: [
+            .font: editFont,
+            .foregroundColor: editColor
+        ])
+        attributedString.append(space)
+        
+        let att = NSTextAttachment()
+        if let img = NSImage(systemSymbolName: "pencil", accessibilityDescription: "Edited") {
+            let cfg = NSImage.SymbolConfiguration(pointSize: editFont.pointSize - 1, weight: .regular).applying(.init(hierarchicalColor: editColor))
+            att.image = img.withSymbolConfiguration(cfg)
+        }
+        att.bounds = NSRect(x: 0, y: -1, width: editFont.pointSize, height: editFont.pointSize)
+        
+        var tooltipAttrs: [NSAttributedString.Key: Any] = [
+            .font: editFont,
+            .foregroundColor: editColor
+        ]
+        if let date = editDate {
+            let editTimeFmt = DateFormatter()
+            editTimeFmt.dateFormat = "h:mm a"
+            tooltipAttrs[.toolTip] = "Edited at \(editTimeFmt.string(from: date))"
+        } else {
+            tooltipAttrs[.toolTip] = "Edited"
+        }
+        
+        attributedString.append(NSAttributedString(attachment: att))
+        attributedString.append(NSAttributedString(string: " Edited", attributes: tooltipAttrs))
+    }
+
+    private func createPostRow(post: MMPost, width: CGFloat, timeStr: String, isConsecutive: Bool = false) -> (NSView, CGFloat) {
         let row = TimelineRowView()
         row.cornerRadius = 0
         row.color = .clear
@@ -2790,6 +3203,102 @@ class MainWindow: NSWindow {
         let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
 
         let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
+
+        // Parse message for text & Giphy GIF URLs
+        let rawMessage = post.message.isEmpty ? (isSystem ? "System update" : "") : post.message
+        let parsed = parseGiphyInMessage(rawMessage)
+        let bodyText = parsed.text
+        let gifURLs = parsed.gifURLs
+        let hasBodyText = !bodyText.isEmpty
+        let isEdited = (post.edit_at != nil && post.edit_at! > 0)
+        let editDate = isEdited ? Date(timeIntervalSince1970: TimeInterval(post.edit_at!) / 1000.0) : nil
+
+        let bodyFont = NSFont.systemFont(ofSize: 13)
+        let bodyMaxW = max(100, width - 58 - 30)
+        
+        let formattedBody: NSAttributedString
+        if hasBodyText {
+            let mutable = NSMutableAttributedString(attributedString: formattedMessage(bodyText, font: bodyFont, color: isSystem ? mutedText : darkText))
+            if isEdited {
+                appendEditedIndicator(to: mutable, font: bodyFont, editDate: editDate)
+            }
+            formattedBody = mutable
+        } else if isEdited {
+            let mutable = NSMutableAttributedString()
+            appendEditedIndicator(to: mutable, font: bodyFont, editDate: editDate)
+            formattedBody = mutable
+        } else {
+            formattedBody = NSAttributedString()
+        }
+
+        let hasDisplayableText = (hasBodyText || isEdited)
+        let bodyH: CGFloat
+        if hasDisplayableText {
+            let textStorage = NSTextStorage(attributedString: formattedBody)
+            let textContainer = NSTextContainer(containerSize: NSSize(width: bodyMaxW, height: CGFloat.greatestFiniteMagnitude))
+            textContainer.lineFragmentPadding = 0
+            let layoutManager = NSLayoutManager()
+            layoutManager.addTextContainer(textContainer)
+            textStorage.addLayoutManager(layoutManager)
+            layoutManager.glyphRange(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            bodyH = max(18, ceil(usedRect.height))
+        } else {
+            bodyH = 0
+        }
+
+        if isConsecutive {
+            let hoverTimeLabel = NSTextField(labelWithString: timeStr)
+            let hoverTimeFont = NSFont.systemFont(ofSize: 9.5)
+            hoverTimeLabel.font = hoverTimeFont
+            hoverTimeLabel.textColor = lightPlaceholder
+            hoverTimeLabel.isEditable = false
+            hoverTimeLabel.isSelectable = false
+            hoverTimeLabel.alignment = .right
+            hoverTimeLabel.frame = NSRect(x: 4, y: 3, width: 48, height: 14)
+            hoverTimeLabel.isHidden = true
+            row.addSubview(hoverTimeLabel)
+
+            var contentY: CGFloat = 2
+            if hasDisplayableText {
+                let bodyView = NSTextView(frame: NSRect(x: 58, y: contentY, width: bodyMaxW, height: bodyH))
+                bodyView.isEditable = false
+                bodyView.isSelectable = true
+                bodyView.drawsBackground = false
+                bodyView.textContainerInset = .zero
+                bodyView.textContainer?.lineFragmentPadding = 0
+                bodyView.textContainer?.widthTracksTextView = true
+                bodyView.isHorizontallyResizable = false
+                bodyView.isVerticallyResizable = false
+                bodyView.delegate = self
+                bodyView.linkTextAttributes = [
+                    .foregroundColor: NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    .cursor: NSCursor.pointingHand
+                ]
+                bodyView.textStorage?.setAttributedString(formattedBody)
+                row.addSubview(bodyView)
+                contentY += bodyH + 6
+            }
+
+            for gifURL in gifURLs {
+                let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
+                giphyView.frame.origin = CGPoint(x: 58, y: contentY)
+                row.addSubview(giphyView)
+                contentY += gifH + 6
+            }
+
+            let totalRowH = max(24, contentY)
+            row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
+
+            row.onHoverChanged = { [weak row, weak hoverTimeLabel] isHovered in
+                row?.color = isHovered ? msgHoverBg : .clear
+                row?.setNeedsAppearanceUpdate()
+                hoverTimeLabel?.isHidden = !isHovered
+            }
+            return (row, totalRowH)
+        }
+
         let authorName: String
         if isSystem {
             authorName = "System"
@@ -2859,12 +3368,18 @@ class MainWindow: NSWindow {
         }
         row.addSubview(avatarCircle)
         
-        let isCurrentUser = (post.user_id == currentUser?.id) || (!authorName.isEmpty && authorName == currentUser?.username)
-        if isCurrentUser && !isSystem && !isBotUser {
+        let isCurrentUser = (post.user_id == currentUser?.id) || (!authorName.isEmpty && authorName == currentUser?.username) || (post.user_id == "usr" || post.user_id == "sample_usr")
+        if !isSystem && !isBotUser {
             let usrDot = RoundedEdgePanel()
+            if isCurrentUser {
+                usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_currentUser")
+            } else {
+                usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_\(post.user_id)")
+            }
             usrDot.frame = NSRect(x: 38, y: 26, width: 10, height: 10)
             usrDot.cornerRadius = 5
-            usrDot.color = NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0)
+            let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "online")
+            usrDot.color = statusColor(for: stat)
             usrDot.borderWidth = 1.5
             usrDot.borderColor = .white
             row.addSubview(usrDot)
@@ -2923,6 +3438,9 @@ class MainWindow: NSWindow {
                 statusPromptPill?.color = isHovered ? dividerColor : hoverBg
                 statusPromptPill?.setNeedsAppearanceUpdate()
             }
+            statusPromptPill.onClick = { [weak self] in
+                self?.setStatusMenuOpen(true)
+            }
             row.addSubview(statusPromptPill)
             headerRightX = statusPromptPill.frame.maxX + 8
         }
@@ -2939,43 +3457,190 @@ class MainWindow: NSWindow {
         timeLabel.frame = NSRect(x: headerRightX, y: 10, width: timeW, height: max(15, ceil(timeSize.height)))
         row.addSubview(timeLabel)
         
-        // Body label
-        let bodyText = post.message.isEmpty ? (isSystem ? "System update" : "") : post.message
-        let bodyFont = NSFont.systemFont(ofSize: 13)
-        let bodyMaxW = max(100, width - 58 - 30)
-        
-        let textStorage = NSTextStorage(string: bodyText, attributes: [.font: bodyFont])
-        let textContainer = NSTextContainer(containerSize: NSSize(width: bodyMaxW, height: .greatestFiniteMagnitude))
-        textContainer.lineFragmentPadding = 0
-        let layoutManager = NSLayoutManager()
-        layoutManager.addTextContainer(textContainer)
-        textStorage.addLayoutManager(layoutManager)
-        layoutManager.glyphRange(for: textContainer)
-        let usedRect = layoutManager.usedRect(for: textContainer)
-        let bodyH = max(18, ceil(usedRect.height))
-        
-        let bodyLabel = NSTextField()
-        bodyLabel.isEditable = false
-        bodyLabel.isSelectable = true
-        bodyLabel.drawsBackground = false
-        bodyLabel.isBezeled = false
-        bodyLabel.font = bodyFont
-        bodyLabel.textColor = isSystem ? mutedText : darkText
-        bodyLabel.stringValue = bodyText
-        bodyLabel.lineBreakMode = .byWordWrapping
-        bodyLabel.cell?.isScrollable = false
-        bodyLabel.cell?.wraps = true
-        bodyLabel.frame = NSRect(x: 58, y: 28, width: bodyMaxW, height: bodyH)
-        row.addSubview(bodyLabel)
-        
-        let totalRowH = max(48, 28 + bodyH + 8)
+        var contentY: CGFloat = 28
+        if hasDisplayableText {
+            let bodyView = NSTextView(frame: NSRect(x: 58, y: contentY, width: bodyMaxW, height: bodyH))
+            bodyView.isEditable = false
+            bodyView.isSelectable = true
+            bodyView.drawsBackground = false
+            bodyView.textContainerInset = .zero
+            bodyView.textContainer?.lineFragmentPadding = 0
+            bodyView.textContainer?.widthTracksTextView = true
+            bodyView.isHorizontallyResizable = false
+            bodyView.isVerticallyResizable = false
+            bodyView.delegate = self
+            bodyView.linkTextAttributes = [
+                .foregroundColor: NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .cursor: NSCursor.pointingHand
+            ]
+            bodyView.textStorage?.setAttributedString(formattedBody)
+            row.addSubview(bodyView)
+            contentY += bodyH + 6
+        }
+
+        for gifURL in gifURLs {
+            let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
+            giphyView.frame.origin = CGPoint(x: 58, y: contentY)
+            row.addSubview(giphyView)
+            contentY += gifH + 6
+        }
+
+        let totalRowH = max(48, contentY + 2)
         row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
-        
+
         row.onHoverChanged = { [weak row] isHovered in
             row?.color = isHovered ? msgHoverBg : .clear
             row?.setNeedsAppearanceUpdate()
         }
         return (row, totalRowH)
+    }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        let rawURL: URL?
+        if let url = link as? URL {
+            rawURL = url
+        } else if let str = link as? String {
+            rawURL = URL(string: str)
+        } else {
+            rawURL = nil
+        }
+
+        guard let url = rawURL else { return false }
+        let finalURL: URL
+        if url.scheme == nil || url.scheme?.isEmpty == true {
+            finalURL = URL(string: "https://" + url.absoluteString) ?? url
+        } else {
+            finalURL = url
+        }
+        NSWorkspace.shared.open(finalURL)
+        return true
+    }
+
+    private func preprocessMarkdownLine(_ line: String) -> String {
+        var trimmed = line
+        var indent = ""
+        while let first = trimmed.first, first == " " || first == "\t" {
+            indent.append(first)
+            trimmed.removeFirst()
+        }
+
+        // Blockquote: starts with >
+        if trimmed.hasPrefix(">") {
+            var count = 0
+            var rem = trimmed
+            while rem.hasPrefix(">") {
+                count += 1
+                rem.removeFirst()
+                while rem.hasPrefix(" ") {
+                    rem.removeFirst()
+                }
+            }
+            let padding = String(repeating: "|  ", count: count)
+            if rem.hasPrefix("- ") || rem == "-" {
+                let bulletRem = rem == "-" ? "" : rem.dropFirst(2)
+                return indent + padding + "•  " + bulletRem
+            }
+            if rem.hasPrefix("* ") || rem == "*" {
+                let bulletRem = rem == "*" ? "" : rem.dropFirst(2)
+                return indent + padding + "•  " + bulletRem
+            }
+            return indent + padding + rem
+        }
+
+        // Bullet list: starts with "- " or "* " (or just "-" or "*")
+        if trimmed.hasPrefix("- ") || trimmed == "-" {
+            let rem = trimmed == "-" ? "" : trimmed.dropFirst(2)
+            return indent + "•  " + rem
+        }
+        if trimmed.hasPrefix("* ") || trimmed == "*" {
+            let rem = trimmed == "*" ? "" : trimmed.dropFirst(2)
+            return indent + "•  " + rem
+        }
+
+        return line
+    }
+
+    private func preprocessMarkdown(_ message: String) -> String {
+        let lines = message.components(separatedBy: "\n")
+        return lines.map { preprocessMarkdownLine($0) }.joined(separator: "\n")
+    }
+
+    private func formattedMessage(_ message: String, font: NSFont, color: NSColor) -> NSAttributedString {
+        let processedMessage = preprocessMarkdown(message)
+        var options = AttributedString.MarkdownParsingOptions()
+        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byWordWrapping
+
+        guard let attr = try? AttributedString(markdown: processedMessage, options: options) else {
+            return NSAttributedString(string: processedMessage, attributes: [
+                .font: font,
+                .foregroundColor: color,
+                .paragraphStyle: paragraphStyle
+            ])
+        }
+
+        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        let result = NSMutableAttributedString()
+        for run in attr.runs {
+            let text = String(attr[run.range].characters)
+            let intent = run.inlinePresentationIntent ?? []
+
+            let isCode = intent.contains(.code)
+            let isBold = intent.contains(.stronglyEmphasized)
+            let isItalic = intent.contains(.emphasized)
+
+            let runFont = resolveFont(from: font, isBold: isBold, isItalic: isItalic, isCode: isCode)
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: runFont,
+                .foregroundColor: (run.link != nil) ? brandBlue : color,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            if intent.contains(.strikethrough) {
+                attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+            }
+
+            if let link = run.link {
+                attrs[.link] = link
+                attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+
+            result.append(NSAttributedString(string: text, attributes: attrs))
+        }
+
+        return result
+    }
+
+    private func resolveFont(from base: NSFont, isBold: Bool, isItalic: Bool, isCode: Bool) -> NSFont {
+        var baseFont = base
+        if isCode {
+            baseFont = NSFont.monospacedSystemFont(ofSize: base.pointSize, weight: .regular)
+        }
+
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if isBold { traits.insert(.bold) }
+        if isItalic { traits.insert(.italic) }
+
+        if traits.isEmpty {
+            return baseFont
+        }
+
+        let desc = baseFont.fontDescriptor.withSymbolicTraits(traits)
+        if let customFont = NSFont(descriptor: desc, size: base.pointSize) {
+            return customFont
+        }
+
+        var converted = baseFont
+        if isBold {
+            converted = NSFontManager.shared.convert(converted, toHaveTrait: .boldFontMask)
+        }
+        if isItalic {
+            converted = NSFontManager.shared.convert(converted, toHaveTrait: .italicFontMask)
+        }
+        return converted
     }
     
     private func createBotBadge() -> RoundedEdgePanel {
@@ -3026,6 +3691,24 @@ class MainWindow: NSWindow {
         var postsToRender = currentChannelPosts
         if postsToRender.isEmpty && !((NSApp.delegate as? AppDelegate)?.webService.isLogged() ?? false) {
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            if userStatusById["sarah"] == nil {
+                userStatusById["sarah"] = "away"
+            }
+            if usersById["sarah"] == nil {
+                usersById["sarah"] = LoginWebService(
+                    id: "sarah",
+                    create_at: nil, update_at: nil, delete_at: nil,
+                    username: "sarah.connor",
+                    first_name: "Sarah", last_name: "Connor",
+                    nickname: nil, email: "sarah@example.com",
+                    email_verified: true, auth_service: nil,
+                    roles: "system_user", locale: "en",
+                    position: "DevOps", is_bot: false,
+                    last_password_update: nil, remote_id: nil,
+                    disable_welcome_email: nil, notify_props: nil,
+                    timezone: nil, auth_data: nil
+                )
+            }
             postsToRender = [
                 MMPost(
                     id: "sample_sys",
@@ -3035,31 +3718,64 @@ class MainWindow: NSWindow {
                     message: "You joined the team.", type: "system_join_channel"
                 ),
                 MMPost(
+                    id: "sample_usr_sarah",
+                    create_at: nowMs - 120000,
+                    update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
+                    user_id: "sarah", channel_id: activeChannelId, root_id: nil, original_id: nil,
+                    message: "Hey everyone! I'll be stepping away for a moment.", type: nil
+                ),
+                MMPost(
                     id: "sample_usr",
+                    create_at: nowMs - 60000,
+                    update_at: nowMs - 15000,
+                    edit_at: nowMs - 15000,
+                    delete_at: nil,
+                    is_pinned: false,
+                    user_id: currentUser?.id ?? "usr", channel_id: activeChannelId, root_id: nil, original_id: nil,
+                    message: "Welcome! Message formatting supports **bold**, *italic*, ~~strikethrough~~, and [clickable links](https://mattermost.com).\n> Quoted blockquote text\n- First bullet item\n- Second bullet with **bold**", type: nil
+                ),
+                MMPost(
+                    id: "sample_usr_giphy",
+                    create_at: nowMs - 30000,
+                    update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
+                    user_id: currentUser?.id ?? "usr", channel_id: activeChannelId, root_id: nil, original_id: nil,
+                    message: "Check out this animated Giphy icon:\n![waving cat](https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif)", type: nil
+                ),
+                MMPost(
+                    id: "sample_usr_2",
                     create_at: nowMs,
                     update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
                     user_id: currentUser?.id ?? "usr", channel_id: activeChannelId, root_id: nil, original_id: nil,
-                    message: "ok", type: nil
+                    message: "This is a consecutive message from the same person. It prints only the chat text without repeating the icon or name, exactly like Mattermost.", type: nil
                 )
             ]
         }
         
         var lastDateStr: String? = nil
+        var lastUserId: String? = nil
+        var lastWasSystem = false
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
             let dateStr = dateFmt.string(from: postDate)
+            let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
             if dateStr != lastDateStr {
                 lastDateStr = dateStr
+                lastUserId = nil
+                lastWasSystem = false
                 let sepView = createDateSeparator(dateStr: dateStr, width: chatW)
                 sepView.frame.origin.y = currentY
                 timelineDocView.addSubview(sepView)
                 currentY += 24 + 10
             }
             
-            let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: timeFmt.string(from: postDate))
+            let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId && !post.user_id.isEmpty)
+            let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: timeFmt.string(from: postDate), isConsecutive: isConsecutive)
             rowView.frame.origin.y = currentY
             timelineDocView.addSubview(rowView)
-            currentY += rowH + 4
+            currentY += rowH + (isConsecutive ? 2 : 4)
+            
+            lastUserId = post.user_id
+            lastWasSystem = isSystem
         }
         
         currentY += 16
@@ -3147,14 +3863,15 @@ class MainWindow: NSWindow {
         
         composerSendButton.frame = NSRect(x: composerW - 42, y: 8, width: 32, height: 26)
         composerAttachButton.frame = NSRect(x: composerW - 72, y: 8, width: 26, height: 26)
-        composerEmojiButton.frame = NSRect(x: composerW - 100, y: 8, width: 26, height: 26)
-        composerRightSeparator.frame = NSRect(x: composerW - 106, y: 13, width: 1, height: 16)
+        composerGifButton.frame = NSRect(x: composerW - 104, y: 8, width: 30, height: 26)
+        composerEmojiButton.frame = NSRect(x: composerW - 132, y: 8, width: 26, height: 26)
+        composerRightSeparator.frame = NSRect(x: composerW - 138, y: 13, width: 1, height: 16)
         
         let aaText = "Aa"
         let aaFont = composerAaButton.subviews.compactMap { ($0 as? NSTextField)?.font }.first ?? NSFont.systemFont(ofSize: 11.5, weight: .semibold)
         let aaSize = (aaText as NSString).size(withAttributes: [.font: aaFont])
         let aaBtnW = ceil(aaSize.width) + 24
-        composerAaButton.frame = NSRect(x: composerW - (aaBtnW + 110), y: 8, width: aaBtnW, height: 26)
+        composerAaButton.frame = NSRect(x: composerW - (aaBtnW + 142), y: 8, width: aaBtnW, height: 26)
         
         // 3. Scrollable Timeline
         let scrollH = max(0, headerY - 114)
@@ -3264,21 +3981,41 @@ class MainWindow: NSWindow {
             }
         }
         
-        ws.onStatusChanged = { [weak self] userId, status in
+        ws.onWebSocketEvent = { event in
+            DebugLog.log("ws.onWebSocketEvent: \(event)")
+        }
+        
+        ws.onWebSocketConnected = { [weak self] in
+            DebugLog.log("ws.onWebSocketConnected callback triggered")
+            self?.refreshUserStatuses()
+        }
+        
+        ws.onMultipleStatusesReceived = { [weak self] statuses in
+            DebugLog.log("ws.onMultipleStatusesReceived: \(statuses)")
             guard let self = self else { return }
-            if let myId = self.currentUser?.id, myId == userId {
-                switch status {
-                case "online":
-                    self.selectUserStatus(0)
-                case "away":
-                    self.selectUserStatus(1)
-                case "dnd":
-                    self.selectUserStatus(2)
-                case "offline":
-                    self.selectUserStatus(3)
-                default:
-                    break
+            for (userId, status) in statuses {
+                self.userStatusById[userId] = status
+                self.updateChatWidgetUserStatus(userId: userId, status: status)
+            }
+        }
+        
+        ws.onStatusChanged = { [weak self] userId, status in
+            DebugLog.log("ws.onStatusChanged: userId=\(userId), status=\(status)")
+            guard let self = self else { return }
+            self.userStatusById[userId] = status
+            self.updateChatWidgetUserStatus(userId: userId, status: status)
+            if let myId = self.currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId, myId == userId {
+                let idx = self.indexForStatus(status)
+                self.selectedStatusIndex = idx
+                for (i, checkView) in self.statusCheckViews.enumerated() {
+                    checkView.isHidden = (i != idx)
                 }
+                self.currentUserStatus = status
+                let color = self.statusColor(for: status)
+                self.statusDotPanel.color = color
+                self.statusDotPanel.setNeedsAppearanceUpdate()
+                self.menuAvatarStatusDot?.color = color
+                self.menuAvatarStatusDot?.setNeedsAppearanceUpdate()
             }
         }
         
@@ -3334,6 +4071,11 @@ class MainWindow: NSWindow {
             }
         }
         
+        statusPollingTimer?.invalidate()
+        statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
+            self?.refreshUserStatuses()
+        }
+        
         guard ws.isLogged() else { return }
         
         Task { @MainActor [weak self] in
@@ -3344,6 +4086,21 @@ class MainWindow: NSWindow {
                 self.usersById[me.id] = me
                 self.usersByUsername[me.username.lowercased()] = me
                 self.fetchAvatarIfNeeded(for: me.id)
+                
+                if let statuses = try? await ws.fetchUserStatuses(userIds: [me.id]), let myStatus = statuses.first {
+                    self.currentUserStatus = myStatus.status
+                    self.userStatusById[me.id] = myStatus.status
+                    let idx = self.indexForStatus(myStatus.status)
+                    self.selectedStatusIndex = idx
+                    for (i, checkView) in self.statusCheckViews.enumerated() {
+                        checkView.isHidden = (i != idx)
+                    }
+                    let color = self.statusColor(for: myStatus.status)
+                    self.statusDotPanel.color = color
+                    self.statusDotPanel.setNeedsAppearanceUpdate()
+                    self.menuAvatarStatusDot?.color = color
+                    self.menuAvatarStatusDot?.setNeedsAppearanceUpdate()
+                }
                 
                 let teams = try await ws.fetchTeams()
                 self.userTeams = teams
@@ -3427,6 +4184,13 @@ class MainWindow: NSWindow {
                     fetchAvatarIfNeeded(for: u.id)
                 }
             }
+            let allUserIds = Array(Set(posts.map { $0.user_id }.filter { $0 != "system" }))
+            if !allUserIds.isEmpty,
+               let fetchedStatuses = try? await ws.fetchUserStatuses(userIds: allUserIds) {
+                for st in fetchedStatuses {
+                    self.userStatusById[st.user_id] = st.status
+                }
+            }
             applyPostsToTimeline(posts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
@@ -3460,5 +4224,37 @@ class MainWindow: NSWindow {
                 NSLog("Failed to send post: \(error.localizedDescription)")
             }
         }
+    }
+
+    @objc private func timelineBoundsDidChange(_ notification: Notification) {
+        updateTimelineHoverState()
+    }
+
+    private func updateTimelineHoverState() {
+        let mouseLoc = self.mouseLocationOutsideOfEventStream
+        let mouseInScroll = timelineScrollView.convert(mouseLoc, from: nil)
+        let isMouseInScroll = timelineScrollView.bounds.contains(mouseInScroll)
+        
+        let visibleRect = timelineScrollView.contentView.bounds
+        for subview in timelineDocView.subviews {
+            guard let panel = subview as? RoundedEdgePanel else { continue }
+            if !panel.frame.intersects(visibleRect) && !panel.isHovered {
+                continue
+            }
+            panel.updateHoverRecursively(windowMouseLocation: mouseLoc, isWindowActiveAndInScrollView: isMouseInScroll)
+        }
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        for subview in timelineDocView.subviews {
+            if let panel = subview as? RoundedEdgePanel, panel.isHovered {
+                panel.setHovered(false)
+            }
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
