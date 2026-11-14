@@ -28,13 +28,22 @@ final class ZoomManager {
     }
     
     private init() {
-        let saved = UserDefaults.standard.double(forKey: Self.userDefaultsKey)
-        if saved >= Double(Self.minZoomFactor) && saved <= Double(Self.maxZoomFactor) {
-            self.currentZoomFactor = CGFloat(saved)
-        } else {
-            self.currentZoomFactor = Self.defaultZoomFactor
+        // A user-chosen zoom (View menu / ⌘+ / ⌘-) always wins.
+        if let stored = UserDefaults.standard.object(forKey: Self.userDefaultsKey) as? NSNumber {
+            let value = CGFloat(stored.doubleValue)
+            if value >= Self.minZoomFactor && value <= Self.maxZoomFactor {
+                self.currentZoomFactor = value
+                return
+            }
         }
+        // No stored preference: defer to the OS. macOS already applies the user's
+        // display scaling, so the app-level factor stays at actual size (100%).
+        self.currentZoomFactor = Self.systemZoomFactor
     }
+
+    /// App-level zoom when the user has not chosen one. The operating system owns
+    /// display scaling; the app renders at actual size on top of it.
+    static var systemZoomFactor: CGFloat { 1.0 }
     
     func zoomIn() {
         let current = currentZoomFactor

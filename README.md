@@ -33,7 +33,8 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 
 ### 5. macOS System Integration
 - **Status Bar Item**: System menu bar icon with click-to-toggle window visibility.
-- **Dynamic UI Zoom & Scaling**: Native macOS View menu and keyboard shortcuts (`⌘+` / `⌘=` to zoom in, `⌘-` to zoom out, `⌘0` to reset to actual size) with persistent zoom levels stored in `UserDefaults`.
+- **Dynamic UI Zoom & Scaling**: Native macOS View menu and keyboard shortcuts (`⌘+` / `⌘=` to zoom in, `⌘-` to zoom out, `⌘0` to reset to actual size). A stored zoom level always wins; when none is saved the app defers to the OS display scale and renders at actual size.
+- **Window Frame**: Opens at the web client's viewport (1440×783, clamped to the screen) and remembers the last frame via `NSWindow` autosave.
 - **App Sandbox**: Secure preference storage isolated to the app container without system Keychain permission dialogs on launch.
 
 ---

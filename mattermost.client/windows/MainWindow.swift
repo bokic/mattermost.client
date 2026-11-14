@@ -251,6 +251,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         self.contentViewController = MainWindowViewController()
         self.setContentSize(NSSize(width: rect.width, height: rect.height))
         self.center()
+        // Restore the user's last window frame when one is stored; otherwise the
+        // default 1440x783 content size from AppDelegate is used.
+        self.setFrameAutosaveName("MainWindowFrame")
 
         mainPanel.color = NSColor(red: 30 / 255, green: 50 / 255, blue: 92 / 255, alpha: 1)
         mainPanel.cornerRadius = 8

@@ -97,8 +97,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showMainWindow() {
         loginWindow?.close()
         loginWindow = nil
+        // Default to the web client's viewport (1440x783), clamped to the screen.
+        // A previously saved window frame (autosave) takes precedence on restore.
+        let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
+        let defaultWidth = min(1440, visible.width)
+        let defaultHeight = min(783, max(480, visible.height - 28))
         mainWindow = MainWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            contentRect: NSRect(x: 0, y: 0, width: defaultWidth, height: defaultHeight),
             styleMask: [.miniaturizable, .closable, .resizable, .titled],
             backing: .buffered, defer: false)
         webService.connectWebSocket()
