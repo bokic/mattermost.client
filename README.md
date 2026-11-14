@@ -22,8 +22,8 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 ### 3. Right Chat Panel (`#FFFFFF`)
 - **Channel Header**: Favorite star toggle (`☆`), channel title dropdown, member count badge, and pinned posts indicator.
 - **Welcome Hero**: Channel introduction illustration, welcome title, description, and workspace invitation action.
-- **Message Timeline**: Centered date separators with avatar-attributed message rows, sender status badges, timestamps, and message bodies.
-- **Message Composer**: Full text formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*, *Emoji picker*, *Attachment*, and *Send* button).
+- **Message Timeline**: Centered date separators (*Today*, *Yesterday*, weekday, or full date) with avatar-attributed message rows, presence checks, sender status badges, timestamps, and message bodies.
+- **Message Composer**: Compact single-row composer matching the web client, with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), plus *GIF*, *Attachment*, *Emoji picker*, and *Send* controls.
 
 ### 4. Live REST API v4 & Real-Time WebSockets
 - **Team & Channel Sync**: `GET /api/v4/users/me/teams`, `GET /api/v4/users/me/teams/{team_id}/channels`, and `GET /api/v4/users/me/teams/{team_id}/channels/categories`.

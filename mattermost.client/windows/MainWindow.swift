@@ -168,6 +168,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     let channelMembersCountLabel = NSTextField(labelWithString: "1")
     let channelPinsButton = RoundedEdgePanel()
     let channelPinsIconView = NSImageView()
+    let channelSidebarButton = RoundedEdgePanel()
+    let channelSidebarIconView = NSImageView()
     let channelInfoButton = RoundedEdgePanel()
     let channelInfoIconView = NSImageView()
     
@@ -208,6 +210,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     private var composerLeftButtons: [RoundedEdgePanel] = []
     private var composerLeftSeparator = RoundedEdgePanel()
     let composerAaButton = RoundedEdgePanel()
+    let composerAaChevron = NSImageView()
+    private var isComposerToolbarVisible = false
     let composerRightSeparator = RoundedEdgePanel()
     let composerEmojiButton = RoundedEdgePanel()
     let composerGifButton = RoundedEdgePanel()
@@ -249,7 +253,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         self.center()
 
         mainPanel.color = NSColor(red: 30 / 255, green: 50 / 255, blue: 92 / 255, alpha: 1)
-        mainPanel.cornerRadius = 0
+        mainPanel.cornerRadius = 8
         sidebarTopBorder.color = NSColor(white: 1.0, alpha: 0.10)
         sidebarTopBorder.cornerRadius = 0
         
@@ -298,9 +302,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         productSwitcherPanel.cornerRadius = 4
         
         boxImage.imageScaling = .scaleProportionallyUpOrDown
-        boxImage.alphaValue = 0.56
+        boxImage.alphaValue = 0.72
         logo.imageScaling = .scaleProportionallyUpOrDown
-        logo.alphaValue = 0.64
+        logo.alphaValue = 0.94
         
         editionBadgePanel.color = NSColor(white: 1.0, alpha: 0.12)
         editionBadgePanel.cornerRadius = 3
@@ -349,8 +353,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         helpPanel.color = .clear
         helpPanel.cornerRadius = 4
-        if let helpImg = NSImage(systemSymbolName: "questionmark.circle.fill", accessibilityDescription: "Help") {
-            helpIconView.image = helpImg.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
+        if let helpImg = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Help") {
+            helpIconView.image = helpImg.withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
             helpIconView.contentTintColor = topBarTint
         }
         helpPanel.addSubview(helpIconView)
@@ -401,12 +405,12 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         avatarLabel.textColor = .white
         avatarLabel.alignment = .center
         
-        avatarPanel.color = NSColor(red: 156 / 255, green: 171 / 255, blue: 36 / 255, alpha: 1.0)
-        avatarPanel.cornerRadius = 12
+        avatarPanel.color = NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0)
+        avatarPanel.cornerRadius = 13
         avatarPanel.addSubview(avatarLabel)
         
         avatarImageView.imageScaling = .scaleProportionallyUpOrDown
-        avatarImageView.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
+        avatarImageView.frame = NSRect(x: 0, y: 0, width: 26, height: 26)
         avatarImageView.isHidden = true
         avatarPanel.addSubview(avatarImageView)
         
@@ -436,8 +440,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let hoverBg = NSColor(white: 1.0, alpha: 0.08)
         productSwitcherPanel.color = active ? hoverBg : .clear
         productSwitcherPanel.setNeedsAppearanceUpdate()
-        boxImage.alphaValue = active ? 1.0 : 0.56
-        logo.alphaValue = active ? 1.0 : 0.64
+        boxImage.alphaValue = active ? 1.0 : 0.72
+        logo.alphaValue = active ? 1.0 : 0.94
         editionBadgePanel.color = NSColor(white: 1.0, alpha: active ? 0.16 : 0.12)
         editionBadgePanel.setNeedsAppearanceUpdate()
         editionBadgeLabel.textColor = active ? .white : NSColor(white: 1.0, alpha: 0.72)
@@ -578,7 +582,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     private func statusColor(for status: String) -> NSColor {
         switch status.lowercased() {
         case "online":
-            return NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0)
+            return NSColor(red: 99 / 255, green: 182 / 255, blue: 138 / 255, alpha: 1.0)
         case "away":
             return NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
         case "dnd":
@@ -598,6 +602,22 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         case 3: return "offline"
         default: return "online"
         }
+    }
+    
+    /// Mattermost renders the "online" presence dot as a green circle with a white check mark.
+    private func updateStatusCheck(in dot: RoundedEdgePanel, status: String) {
+        dot.subviews
+            .filter { $0.identifier?.rawValue == "statusCheck" }
+            .forEach { $0.removeFromSuperview() }
+        guard status.lowercased() == "online", dot.bounds.width > 0 else { return }
+        let check = NSImageView(frame: dot.bounds.insetBy(dx: 1.5, dy: 1.5))
+        check.identifier = NSUserInterfaceItemIdentifier("statusCheck")
+        let glyphSize = max(5, dot.bounds.width * 0.64)
+        check.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: glyphSize, weight: .bold))
+        check.contentTintColor = .white
+        check.imageScaling = .scaleProportionallyUpOrDown
+        dot.addSubview(check)
     }
     
     private func indexForStatus(_ status: String) -> Int {
@@ -626,6 +646,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let color = statusColor(for: statStr)
         statusDotPanel.color = color
         statusDotPanel.setNeedsAppearanceUpdate()
+        updateStatusCheck(in: statusDotPanel, status: statStr)
         menuAvatarStatusDot?.color = color
         menuAvatarStatusDot?.setNeedsAppearanceUpdate()
         
@@ -666,6 +687,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                         if let dotPanel = subview as? RoundedEdgePanel {
                             dotPanel.color = color
                             dotPanel.setNeedsAppearanceUpdate()
+                            self.updateStatusCheck(in: dotPanel, status: status)
                             updatedCount += 1
                         }
                     }
@@ -1539,7 +1561,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         // 1. Team Header Row: "None v" button + "+" button
         teamHeaderButton.color = .clear
         teamHeaderButton.cornerRadius = 4
-        teamHeaderLabel.font = NSFont.systemFont(ofSize: 14.5, weight: .bold)
+        teamHeaderLabel.font = NSFont.systemFont(ofSize: 16, weight: .bold)
         teamHeaderLabel.textColor = .white
         teamHeaderLabel.isEditable = false
         teamHeaderLabel.isSelectable = false
@@ -1564,24 +1586,24 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         teamDropdownMenu.isHidden = true
         contentView?.addSubview(teamDropdownMenu)
         
-        teamAddButton.color = .clear
-        teamAddButton.cornerRadius = 4
+        teamAddButton.color = NSColor(white: 1.0, alpha: 0.10)
+        teamAddButton.cornerRadius = 15
         if let plusImg = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add") {
-            teamAddIconView.image = plusImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            teamAddIconView.image = plusImg.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
             teamAddIconView.contentTintColor = mutedTint
         }
         teamAddButton.addSubview(teamAddIconView)
         teamAddButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.teamAddButton.color = isHovered ? hoverBg : .clear
+            self.teamAddButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.17 : 0.10)
             self.teamAddButton.setNeedsAppearanceUpdate()
             self.teamAddIconView.contentTintColor = isHovered ? .white : mutedTint
         }
         mainPanel.addSubview(teamAddButton)
         
         // 2. Filter & Find Channel Row
-        filterChannelButton.color = .clear
-        filterChannelButton.cornerRadius = 4
+        filterChannelButton.color = NSColor(white: 1.0, alpha: 0.08)
+        filterChannelButton.cornerRadius = 6
         if let filterImg = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: "Filter") {
             filterChannelIconView.image = filterImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
             filterChannelIconView.contentTintColor = mutedTint
@@ -1589,14 +1611,14 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         filterChannelButton.addSubview(filterChannelIconView)
         filterChannelButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.filterChannelButton.color = isHovered ? hoverBg : .clear
+            self.filterChannelButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.15 : 0.08)
             self.filterChannelButton.setNeedsAppearanceUpdate()
             self.filterChannelIconView.contentTintColor = isHovered ? .white : mutedTint
         }
         mainPanel.addSubview(filterChannelButton)
         
         findChannelPanel.color = NSColor(white: 1.0, alpha: 0.08)
-        findChannelPanel.cornerRadius = 4
+        findChannelPanel.cornerRadius = 6
         if let findImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find channel") {
             findChannelIconView.image = findImg.withSymbolConfiguration(.init(pointSize: 11.5, weight: .medium))
             findChannelIconView.contentTintColor = mutedTint
@@ -2006,6 +2028,11 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 items.append(inviteMembersItem)
             }
             
+            // Mattermost hides the built-in Favorites section while it is empty.
+            if items.isEmpty && cat.type == "favorites" {
+                continue
+            }
+            
             let isCollapsed = cat.collapsed ?? false
             let categoryView = createSidebarCategory(
                 id: cat.id,
@@ -2231,7 +2258,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
         }
         if let contentView = contentView {
-            layoutLeftSidebar(topBarY: contentView.bounds.height - 40)
+            layoutLeftSidebar(topBarY: contentView.bounds.height - 44)
         }
     }
     
@@ -2284,7 +2311,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     
     private func layoutTeamHeader(topBarY: CGFloat? = nil) {
         let sidebarWidth: CGFloat = 206
-        let top = topBarY ?? (mainPanel.bounds.height > 0 ? mainPanel.bounds.height : (contentView?.bounds.height ?? 800) - 40)
+        let top = topBarY ?? (mainPanel.bounds.height > 0 ? mainPanel.bounds.height : (contentView?.bounds.height ?? 800) - 44)
         let textWidth = ceil(teamHeaderLabel.attributedStringValue.size().width)
         let maxLabelWidth = sidebarWidth - 64
         let labelWidth = max(24, min(textWidth + 4, maxLabelWidth))
@@ -2424,16 +2451,16 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         // Row 1: Team header button + "+" button
         layoutTeamHeader(topBarY: topBarY)
         
-        teamAddButton.frame = NSRect(x: sidebarWidth - 36, y: topBarY - 39, width: 26, height: 26)
-        teamAddIconView.frame = NSRect(x: 5, y: 5, width: 16, height: 16)
+        teamAddButton.frame = NSRect(x: sidebarWidth - 40, y: topBarY - 41, width: 30, height: 30)
+        teamAddIconView.frame = NSRect(x: 7, y: 7, width: 16, height: 16)
         
         // Row 2: Filter button + "Find channel" pill
-        filterChannelButton.frame = NSRect(x: 8, y: topBarY - 74, width: 26, height: 26)
-        filterChannelIconView.frame = NSRect(x: 5, y: 5, width: 16, height: 16)
+        filterChannelButton.frame = NSRect(x: 8, y: topBarY - 75, width: 28, height: 28)
+        filterChannelIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         
-        findChannelPanel.frame = NSRect(x: 36, y: topBarY - 74, width: sidebarWidth - 46, height: 26)
-        findChannelIconView.frame = NSRect(x: 8, y: 5.5, width: 15, height: 15)
-        findChannelLabel.frame = NSRect(x: 27, y: 4, width: sidebarWidth - 80, height: 18)
+        findChannelPanel.frame = NSRect(x: 42, y: topBarY - 75, width: sidebarWidth - 52, height: 28)
+        findChannelIconView.frame = NSRect(x: 8, y: 6.5, width: 15, height: 15)
+        findChannelLabel.frame = NSRect(x: 27, y: 5, width: sidebarWidth - 84, height: 18)
         
         // Row 3: Threads item
         var currentY = topBarY - 110
@@ -2582,6 +2609,21 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             self.channelPinsIconView.contentTintColor = isHovered ? darkText : mutedText
         }
         chatPanel.addSubview(channelPinsButton)
+        
+        channelSidebarButton.cornerRadius = 4
+        channelSidebarButton.color = .clear
+        if let sideImg = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Channel Sidebar") {
+            channelSidebarIconView.image = sideImg.withSymbolConfiguration(.init(pointSize: 13.5, weight: .regular))
+            channelSidebarIconView.contentTintColor = mutedText
+        }
+        channelSidebarButton.addSubview(channelSidebarIconView)
+        channelSidebarButton.onHoverChanged = { [weak self] isHovered in
+            guard let self = self else { return }
+            self.channelSidebarButton.color = isHovered ? hoverBg : .clear
+            self.channelSidebarButton.setNeedsAppearanceUpdate()
+            self.channelSidebarIconView.contentTintColor = isHovered ? darkText : mutedText
+        }
+        chatPanel.addSubview(channelSidebarButton)
         
         channelInfoButton.cornerRadius = 4
         channelInfoButton.color = .clear
@@ -2760,18 +2802,20 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let aaTextH = ceil(aaSize.height)
         aaLabel.frame = NSRect(x: 6, y: (26 - aaTextH) / 2, width: aaTextW, height: aaTextH)
         composerAaButton.addSubview(aaLabel)
-        let aaChev = NSImageView()
-        if let cImg = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Formatting") {
-            aaChev.image = cImg.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
-            aaChev.contentTintColor = mutedText
+        if let cImg = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Formatting") {
+            composerAaChevron.image = cImg.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
+            composerAaChevron.contentTintColor = mutedText
         }
-        aaChev.frame = NSRect(x: 6 + aaTextW + 3, y: (26 - 9) / 2, width: 9, height: 9)
-        composerAaButton.addSubview(aaChev)
-        composerAaButton.onHoverChanged = { [weak self, weak aaLabel, weak aaChev] isHovered in
+        composerAaChevron.frame = NSRect(x: 6 + aaTextW + 3, y: (26 - 9) / 2, width: 9, height: 9)
+        composerAaButton.addSubview(composerAaChevron)
+        composerAaButton.onHoverChanged = { [weak self, weak aaLabel] isHovered in
             self?.composerAaButton.color = isHovered ? hoverBg : .clear
             self?.composerAaButton.setNeedsAppearanceUpdate()
             aaLabel?.textColor = isHovered ? darkText : mutedText
-            aaChev?.contentTintColor = isHovered ? darkText : mutedText
+            self?.composerAaChevron.contentTintColor = isHovered ? darkText : mutedText
+        }
+        composerAaButton.onClick = { [weak self] in
+            self?.toggleComposerToolbar()
         }
         chatEntryPanel.addSubview(composerAaButton)
         
@@ -2857,6 +2901,27 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         composerHelpLabel.isSelectable = false
         chatPanel.addSubview(composerHelpLabel)
         
+        applyComposerToolbarVisibility()
+        rebuildTimelineContent(scrollToBottom: true)
+    }
+    
+    private func applyComposerToolbarVisibility() {
+        let visible = isComposerToolbarVisible
+        for btn in composerLeftButtons {
+            btn.isHidden = !visible
+        }
+        composerLeftSeparator.isHidden = !visible
+        composerGifButton.isHidden = !visible
+        let symbol = visible ? "chevron.up" : "chevron.down"
+        if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: "Formatting") {
+            composerAaChevron.image = img.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
+        }
+    }
+    
+    private func toggleComposerToolbar() {
+        isComposerToolbarVisible.toggle()
+        applyComposerToolbarVisibility()
+        layoutRightChatPanel()
         rebuildTimelineContent(scrollToBottom: true)
     }
     
@@ -2942,11 +3007,11 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     private func createDateSeparator(dateStr: String, width: CGFloat) -> NSView {
         let container = TimelineFlippedView()
         let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        let separatorText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
         
         let label = NSTextField(labelWithString: dateStr)
-        label.font = NSFont.systemFont(ofSize: 11, weight: .bold)
-        label.textColor = darkText
+        label.font = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        label.textColor = separatorText
         label.alignment = .center
         label.isEditable = false
         label.isSelectable = false
@@ -3346,7 +3411,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             avatarCircle.addSubview(sysAvatarIcon)
         } else {
             let palette: [NSColor] = [
-                NSColor(red: 156 / 255, green: 171 / 255, blue: 36 / 255, alpha: 1.0),
+                NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0),
                 NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
                 NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
                 NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
@@ -3383,6 +3448,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             usrDot.borderWidth = 1.5
             usrDot.borderColor = .white
             row.addSubview(usrDot)
+            updateStatusCheck(in: usrDot, status: stat)
         }
         
         // Author label
@@ -3663,8 +3729,10 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let chatH = chatPanel.bounds.height
         let headerH: CGFloat = 48
         let headerY = chatH - headerH
-        let scrollH = max(0, headerY - 114)
-        timelineScrollView.frame = NSRect(x: 0, y: 114, width: chatW, height: scrollH)
+        let composerH: CGFloat = isComposerToolbarVisible ? 86 : 62
+        let composerTop = 24 + composerH + 4
+        let scrollH = max(0, headerY - composerTop)
+        timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
         
         timelineDocView.subviews.forEach { $0.removeFromSuperview() }
         
@@ -3680,9 +3748,22 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         currentY += heroH + 16
         
         // 2. Posts and Date Separators
-        let dateFmt = DateFormatter()
-        dateFmt.locale = Locale(identifier: "en_US_POSIX")
-        dateFmt.dateFormat = "MMMM dd, yyyy"
+        let fullDateFmt = DateFormatter()
+        fullDateFmt.locale = Locale(identifier: "en_US_POSIX")
+        fullDateFmt.dateFormat = "MMMM d, yyyy"
+        let weekdayFmt = DateFormatter()
+        weekdayFmt.locale = Locale(identifier: "en_US_POSIX")
+        weekdayFmt.dateFormat = "EEEE"
+        let calendar = Calendar.current
+        func separatorString(for date: Date) -> String {
+            if calendar.isDateInToday(date) { return "Today" }
+            if calendar.isDateInYesterday(date) { return "Yesterday" }
+            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: Date())).day ?? 99
+            if days < 6 {
+                return weekdayFmt.string(from: date)
+            }
+            return fullDateFmt.string(from: date)
+        }
         
         let timeFmt = DateFormatter()
         timeFmt.locale = Locale(identifier: "en_US_POSIX")
@@ -3756,7 +3837,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         var lastWasSystem = false
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
-            let dateStr = dateFmt.string(from: postDate)
+            let dateStr = separatorString(for: postDate)
             let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
             if dateStr != lastDateStr {
                 lastDateStr = dateStr
@@ -3844,38 +3925,51 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         channelInfoButton.frame = NSRect(x: chatW - 42, y: headerY + 10, width: 28, height: 28)
         channelInfoIconView.frame = NSRect(x: 5, y: 5, width: 18, height: 18)
         
-        // 2. Composer at bottom
+        channelSidebarButton.frame = NSRect(x: chatW - 74, y: headerY + 10, width: 28, height: 28)
+        channelSidebarIconView.frame = NSRect(x: 5, y: 5, width: 18, height: 18)
+        
+        // 2. Composer at bottom (collapsed to a single row by default, expanded via "Aa")
         let composerW = max(chatW - 40, 200)
-        chatEntryPanel.frame = NSRect(x: 20, y: 24, width: composerW, height: 86)
-        entryView.frame = NSRect(x: 12, y: 44, width: composerW - 24, height: 32)
-        composerPlaceholderLabel.frame = NSRect(x: 16, y: 50, width: composerW - 32, height: 20)
+        let composerH: CGFloat = isComposerToolbarVisible ? 86 : 62
+        let composerTop = 24 + composerH + 4
+        chatEntryPanel.frame = NSRect(x: 20, y: 24, width: composerW, height: composerH)
+        if isComposerToolbarVisible {
+            entryView.frame = NSRect(x: 12, y: 44, width: composerW - 24, height: 32)
+            composerPlaceholderLabel.frame = NSRect(x: 16, y: 50, width: composerW - 32, height: 20)
+        } else {
+            entryView.frame = NSRect(x: 12, y: 15, width: composerW - 196, height: 32)
+            composerPlaceholderLabel.frame = NSRect(x: 16, y: 21, width: composerW - 196, height: 20)
+        }
         composerHelpLabel.frame = NSRect(x: chatW - 60, y: 6, width: 40, height: 14)
+        
+        let toolY: CGFloat = isComposerToolbarVisible ? 8 : (composerH - 26) / 2
         
         var btnX: CGFloat = 10
         for (i, btn) in composerLeftButtons.enumerated() {
             if i == 3 {
-                composerLeftSeparator.frame = NSRect(x: btnX + 3, y: 13, width: 1, height: 16)
+                composerLeftSeparator.frame = NSRect(x: btnX + 3, y: toolY + 5, width: 1, height: 16)
                 btnX += 9
             }
-            btn.frame = NSRect(x: btnX, y: 8, width: 26, height: 26)
+            btn.frame = NSRect(x: btnX, y: toolY, width: 26, height: 26)
             btnX += 28
         }
         
-        composerSendButton.frame = NSRect(x: composerW - 42, y: 8, width: 32, height: 26)
-        composerAttachButton.frame = NSRect(x: composerW - 72, y: 8, width: 26, height: 26)
-        composerGifButton.frame = NSRect(x: composerW - 104, y: 8, width: 30, height: 26)
-        composerEmojiButton.frame = NSRect(x: composerW - 132, y: 8, width: 26, height: 26)
-        composerRightSeparator.frame = NSRect(x: composerW - 138, y: 13, width: 1, height: 16)
+        composerSendButton.frame = NSRect(x: composerW - 42, y: toolY, width: 32, height: 26)
+        composerEmojiButton.frame = NSRect(x: composerW - 72, y: toolY, width: 26, height: 26)
+        composerAttachButton.frame = NSRect(x: composerW - 100, y: toolY, width: 26, height: 26)
+        composerRightSeparator.frame = NSRect(x: composerW - 108, y: toolY + 5, width: 1, height: 16)
         
         let aaText = "Aa"
         let aaFont = composerAaButton.subviews.compactMap { ($0 as? NSTextField)?.font }.first ?? NSFont.systemFont(ofSize: 11.5, weight: .semibold)
         let aaSize = (aaText as NSString).size(withAttributes: [.font: aaFont])
         let aaBtnW = ceil(aaSize.width) + 24
-        composerAaButton.frame = NSRect(x: composerW - (aaBtnW + 142), y: 8, width: aaBtnW, height: 26)
+        let aaX = composerW - (aaBtnW + 112)
+        composerAaButton.frame = NSRect(x: aaX, y: toolY, width: aaBtnW, height: 26)
+        composerGifButton.frame = NSRect(x: aaX - 34, y: toolY, width: 30, height: 26)
         
         // 3. Scrollable Timeline
-        let scrollH = max(0, headerY - 114)
-        timelineScrollView.frame = NSRect(x: 0, y: 114, width: chatW, height: scrollH)
+        let scrollH = max(0, headerY - composerTop)
+        timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
         let wasNearBottom = (timelineScrollView.contentView.bounds.maxY >= (timelineDocView.frame.height - 40))
         if abs(chatW - lastTimelineWidth) > 1 {
             lastTimelineWidth = chatW
@@ -3903,7 +3997,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     
     func updateViews() {
         let size = contentView!.bounds.size
-        let topBarHeight: CGFloat = 40
+        let topBarHeight: CGFloat = 44
         let topBarY = size.height - topBarHeight
         
         mainPanel.frame = NSRect(x: 0, y: 0, width: size.width, height: topBarY)
@@ -3952,9 +4046,10 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         // Right: Mentions (@), Saved Posts, Settings, User Avatar + Status Dot
         avatarButtonPanel.frame = NSRect(x: size.width - 41, y: topBarY + 5, width: 30, height: 30)
-        avatarPanel.frame = NSRect(x: 3, y: 3, width: 24, height: 24)
-        avatarLabel.frame = NSRect(x: 0, y: 4, width: 24, height: 16)
-        statusDotPanel.frame = NSRect(x: 20, y: 1, width: 9, height: 9)
+        avatarPanel.frame = NSRect(x: 2, y: 2, width: 26, height: 26)
+        avatarLabel.frame = NSRect(x: 0, y: 5, width: 26, height: 16)
+        statusDotPanel.frame = NSRect(x: 19, y: 1, width: 9, height: 9)
+        updateStatusCheck(in: statusDotPanel, status: currentUserStatus)
         statusMenu.frame = NSRect(x: size.width - 259, y: topBarY - 356, width: 248, height: 354)
         dndSubMenu.frame = NSRect(x: statusMenu.frame.minX - 210, y: statusMenu.frame.minY - 50, width: 212, height: 232)
         
@@ -4014,6 +4109,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 let color = self.statusColor(for: status)
                 self.statusDotPanel.color = color
                 self.statusDotPanel.setNeedsAppearanceUpdate()
+                self.updateStatusCheck(in: self.statusDotPanel, status: status)
                 self.menuAvatarStatusDot?.color = color
                 self.menuAvatarStatusDot?.setNeedsAppearanceUpdate()
             }
@@ -4098,6 +4194,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                     let color = self.statusColor(for: myStatus.status)
                     self.statusDotPanel.color = color
                     self.statusDotPanel.setNeedsAppearanceUpdate()
+                    self.updateStatusCheck(in: self.statusDotPanel, status: myStatus.status)
                     self.menuAvatarStatusDot?.color = color
                     self.menuAvatarStatusDot?.setNeedsAppearanceUpdate()
                 }
