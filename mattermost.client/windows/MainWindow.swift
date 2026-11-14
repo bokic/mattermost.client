@@ -48,13 +48,38 @@ private class TimelineContainerView: NSView {
     }
 }
 
+/// Composer editor that draws its own placeholder so the placeholder never
+/// intercepts clicks meant for the text view.
+final class ComposerTextView: NSTextView {
+    var placeholderString: String = "" {
+        didSet { needsDisplay = true }
+    }
+    var placeholderColor: NSColor = NSColor(red: 153 / 255, green: 153 / 255, blue: 153 / 255, alpha: 1.0) {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, !placeholderString.isEmpty, let font = font else { return }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: placeholderColor
+        ]
+        let origin = NSPoint(
+            x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0),
+            y: textContainerInset.height
+        )
+        placeholderString.draw(at: origin, withAttributes: attributes)
+    }
+}
+
 class MainWindow: NSWindow, NSTextViewDelegate {
     let mainPanel = RoundedEdgePanel()
     let chatPanel = RoundedEdgePanel()
     let chatEntryPanel = OutlinePanel()
     let mainTreeDelegate = MainWindowDelegate()
     let treeView = NSOutlineView()
-    let entryView = NSTextView()
+    let entryView = ComposerTextView()
     
     let boxImage = NSImageView(image: NSImage(named: NSImage.Name("E82F"))!)
     let logo = NSImageView(image: NSImage(named: NSImage.Name("Mattermost Logo"))!)
@@ -231,6 +256,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     private var userAvatarFetchTasks: [String: Task<NSImage?, Never>] = [:]
     private var userStatusById: [String: String] = [:]
     private var currentUserStatus: String = "online"
+    private var composerSendIconView: NSImageView?
+    private var composerSendEnabled = false
+    private var lastTypingSentAt: Date?
     private var menuAvatarStatusDot: RoundedEdgePanel?
     private var statusPollingTimer: Timer?
     private var sysAuthorLabelRef: NSTextField?
@@ -260,10 +288,20 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         sidebarTopBorder.color = NSColor(white: 1.0, alpha: 0.10)
         sidebarTopBorder.cornerRadius = 0
         
-        entryView.backgroundColor = .white
-        entryView.isEditable = false
-        entryView.isSelectable = false
-        entryView.isHidden = true
+        entryView.backgroundColor = .clear
+        entryView.drawsBackground = false
+        entryView.isEditable = true
+        entryView.isSelectable = true
+        entryView.isRichText = false
+        entryView.allowsUndo = true
+        entryView.isHidden = false
+        entryView.font = MMFont.font(ofSize: 14)
+        entryView.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        entryView.insertionPointColor = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        entryView.textContainerInset = NSSize(width: 0, height: 13)
+        entryView.textContainer?.lineFragmentPadding = 0
+        entryView.delegate = self
+        entryView.placeholderString = "Write to Town Square"
         
         chatEntryPanel.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
         chatEntryPanel.cornerRadius = 4
@@ -1344,6 +1382,10 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 self?.setDndSubMenuOpen(false)
             }
         }
+        logoutRow.onClick = { [weak self] in
+            self?.setStatusMenuOpen(false)
+            (NSApp.delegate as? AppDelegate)?.logout()
+        }
         statusMenu.addSubview(logoutRow)
         
         contentView?.addSubview(statusMenu)
@@ -1957,6 +1999,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                     channelTitleLabel.stringValue = newTitle
                     heroTitleLabel.stringValue = newTitle
                     composerPlaceholderLabel.stringValue = "Write to \(newTitle)"
+                    self.entryView.placeholderString = self.composerPlaceholderLabel.stringValue
                     layoutRightChatPanel()
                     rebuildTimelineContent(scrollToBottom: false)
                 }
@@ -2251,6 +2294,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 self.channelTitleLabel.stringValue = title
                 self.heroTitleLabel.stringValue = title
                 self.composerPlaceholderLabel.stringValue = "Write to \(title)"
+                self.entryView.placeholderString = self.composerPlaceholderLabel.stringValue
                 if self.contentView != nil {
                     self.layoutRightChatPanel()
                 }
@@ -2772,11 +2816,13 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
         
         // 4. Message Composer (Non-editable placeholder + Formatting Toolbar + Help link)
+        // The editor draws its own placeholder; keep the label only as the
+        // canonical string source and never put it in the hit-test path.
         composerPlaceholderLabel.font = MMFont.font(ofSize: 14)
         composerPlaceholderLabel.textColor = NSColor(red: 153 / 255, green: 153 / 255, blue: 153 / 255, alpha: 1.0)
         composerPlaceholderLabel.isEditable = false
         composerPlaceholderLabel.isSelectable = false
-        chatEntryPanel.addSubview(composerPlaceholderLabel)
+        composerPlaceholderLabel.isHidden = true
         
         composerLeftButtons.removeAll()
         let leftSymbols: [String] = [
@@ -2915,9 +2961,20 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
         sendIcon.frame = NSRect(x: 15, y: 7, width: 18, height: 18)
         composerSendButton.addSubview(sendIcon)
+        composerSendIconView = sendIcon
         composerSendButton.onHoverChanged = { [weak self] isHovered in
-            self?.composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: isHovered ? 0.12 : 0.08)
-            self?.composerSendButton.setNeedsAppearanceUpdate()
+            guard let self = self else { return }
+            if self.composerSendEnabled {
+                self.composerSendButton.color = isHovered
+                    ? NSColor(red: 22 / 255, green: 70 / 255, blue: 176 / 255, alpha: 1.0)
+                    : NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+            } else {
+                self.composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            }
+            self.composerSendButton.setNeedsAppearanceUpdate()
+        }
+        composerSendButton.onClick = { [weak self] in
+            self?.sendComposerMessage()
         }
         chatEntryPanel.addSubview(composerSendButton)
         
@@ -2929,6 +2986,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         chatPanel.addSubview(composerHelpLabel)
         
         applyComposerToolbarVisibility()
+        updateComposerSendState()
         rebuildTimelineContent(scrollToBottom: true)
     }
     
@@ -3989,11 +4047,11 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let composerBottom: CGFloat = 24
         chatEntryPanel.frame = NSRect(x: 24, y: composerBottom, width: composerW, height: composerH)
         if isComposerToolbarVisible {
+            entryView.textContainerInset = NSSize(width: 0, height: 4)
             entryView.frame = NSRect(x: 14, y: 40, width: composerW - 28, height: 36)
-            composerPlaceholderLabel.frame = NSRect(x: 16, y: 48, width: composerW - 32, height: 20)
         } else {
-            entryView.frame = NSRect(x: 14, y: (composerH - 22) / 2, width: composerW - 234, height: 22)
-            composerPlaceholderLabel.frame = NSRect(x: 16, y: (composerH - 20) / 2, width: composerW - 234, height: 20)
+            entryView.textContainerInset = NSSize(width: 0, height: 13)
+            entryView.frame = NSRect(x: 14, y: 0, width: composerW - 234, height: composerH)
         }
         composerHelpLabel.frame = NSRect(x: chatW - 24 - 60, y: 3, width: 60, height: 18)
         composerHelpLabel.alignment = .right
@@ -4319,6 +4377,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         channelTitleLabel.stringValue = resolvedTitle
         heroTitleLabel.stringValue = resolvedTitle
         composerPlaceholderLabel.stringValue = "Write to \(resolvedTitle)"
+        entryView.placeholderString = composerPlaceholderLabel.stringValue
         if ch.type == "D" {
             heroDescriptionLabel.stringValue = "This is the start of your direct message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
         } else {
@@ -4377,19 +4436,99 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
     }
     
+    /// Enables/disables the send button as the editor content changes.
+    private func updateComposerSendState() {
+        let hasText = !entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasText != composerSendEnabled else { return }
+        composerSendEnabled = hasText
+        if hasText {
+            composerSendButton.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+            composerSendIconView?.contentTintColor = .white
+        } else {
+            composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            composerSendIconView?.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.32)
+        }
+        composerSendButton.setNeedsAppearanceUpdate()
+    }
+    
+    /// Sends the composer contents, clearing the editor only once the post is
+    /// accepted so a failure does not lose the user's text.
+    private func sendComposerMessage() {
+        let message = entryView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, !activeChannelId.isEmpty else { return }
+        let channelId = activeChannelId
+        
+        entryView.string = ""
+        entryView.needsDisplay = true
+        updateComposerSendState()
+        composerHelpLabel.stringValue = "Sending…"
+        
+        Task { @MainActor [weak self] in
+            guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            do {
+                let post = try await ws.createPost(channelId: channelId, message: message)
+                if self.activeChannelId == channelId {
+                    self.currentChannelPosts.append(post)
+                    self.rebuildTimelineContent(scrollToBottom: true)
+                }
+                self.composerHelpLabel.stringValue = "Help"
+            } catch {
+                self.composerHelpLabel.stringValue = "Message failed to send"
+                if self.entryView.string.isEmpty {
+                    self.entryView.string = message
+                    self.updateComposerSendState()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                    self?.composerHelpLabel.stringValue = "Help"
+                }
+                NSLog("Failed to send post: \(error.localizedDescription)")
+            }
+        }
+    }
+    
     func sendActiveChannelPost(message: String) {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !activeChannelId.isEmpty else { return }
         let channelId = activeChannelId
-        Task { @MainActor in
-            guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
             do {
-                _ = try await ws.createPost(channelId: channelId, message: trimmed)
-                await self.fetchAndRenderPosts(channelId: channelId)
+                let post = try await ws.createPost(channelId: channelId, message: trimmed)
+                if self.activeChannelId == channelId {
+                    self.currentChannelPosts.append(post)
+                    self.rebuildTimelineContent(scrollToBottom: true)
+                }
             } catch {
                 NSLog("Failed to send post: \(error.localizedDescription)")
             }
         }
+    }
+    
+    private func sendTypingIfNeeded() {
+        guard !entryView.string.isEmpty, !activeChannelId.isEmpty else { return }
+        if let last = lastTypingSentAt, Date().timeIntervalSince(last) < 1.5 { return }
+        lastTypingSentAt = Date()
+        (NSApp.delegate as? AppDelegate)?.webService.sendUserTyping(channelId: activeChannelId)
+    }
+    
+    // MARK: - NSTextViewDelegate (composer)
+    
+    func textDidChange(_ notification: Notification) {
+        guard (notification.object as? NSTextView) === entryView else { return }
+        entryView.needsDisplay = true
+        updateComposerSendState()
+        sendTypingIfNeeded()
+    }
+    
+    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard textView === entryView else { return false }
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            // Shift+Return inserts a newline; Return sends.
+            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { return false }
+            sendComposerMessage()
+            return true
+        }
+        return false
     }
 
     @objc private func timelineBoundsDidChange(_ notification: Notification) {

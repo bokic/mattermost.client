@@ -160,6 +160,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         webService.connectWebSocket()
     }
     
+    /// Clears stored credentials and returns to the login screen.
+    func logout() {
+        webService.disconnectWebSocket()
+        KeychainHelper.delete(forKey: "token")
+        KeychainHelper.delete(forKey: "password")
+        UserDefaults.standard.removeObject(forKey: "username")
+        UserDefaults.standard.removeObject(forKey: "currentUserId")
+        mainWindow?.close()
+        mainWindow = nil
+        showLoginWindow()
+    }
+    
     func showLoginWindow() {
         mainWindow?.close()
         mainWindow = nil
