@@ -73,7 +73,7 @@ final class ComposerTextView: NSTextView {
     }
 }
 
-class MainWindow: NSWindow, NSTextViewDelegate {
+class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let mainPanel = RoundedEdgePanel()
     let chatPanel = RoundedEdgePanel()
     let chatEntryPanel = OutlinePanel()
@@ -189,6 +189,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     let channelStarIconView = NSImageView()
     private var isChannelFavorited = false
     private var favoriteChannelIds: Set<String> = []
+    private var channelFilterQuery: String = ""
     let channelTitleButton = RoundedEdgePanel()
     let channelTitleLabel = NSTextField(labelWithString: "Town Square")
     let channelHeaderBotBadge = RoundedEdgePanel()
@@ -1916,8 +1917,14 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
         findChannelLabel.font = MMFont.font(ofSize: 12)
         findChannelLabel.textColor = mutedTint
-        findChannelLabel.isEditable = false
-        findChannelLabel.isSelectable = false
+        findChannelLabel.placeholderString = "Find channel"
+        findChannelLabel.isEditable = true
+        findChannelLabel.isSelectable = true
+        findChannelLabel.isBezeled = false
+        findChannelLabel.drawsBackground = false
+        findChannelLabel.focusRingType = .none
+        findChannelLabel.cell?.usesSingleLineMode = true
+        findChannelLabel.delegate = self
         findChannelPanel.addSubview(findChannelIconView)
         findChannelPanel.addSubview(findChannelLabel)
         findChannelPanel.onHoverChanged = { [weak self] isHovered in
@@ -2760,18 +2767,35 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         findChannelIconView.frame = NSRect(x: 2, y: 5, width: 18, height: 18)
         findChannelLabel.frame = NSRect(x: 29, y: 4, width: 165, height: 20)
         
+        let query = channelFilterQuery.lowercased()
+        func matches(_ title: String) -> Bool {
+            query.isEmpty || title.lowercased().contains(query)
+        }
+        
         // Row 3: Threads item
         var currentY = topBarY - 126
         if let threads = threadsSidebarItem {
-            threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
-            threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
-            threads.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
-            threads.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 64, height: 20)
-            currentY -= 32
+            if matches(threads.label.stringValue) {
+                threads.row.isHidden = false
+                threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
+                threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+                threads.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+                threads.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 64, height: 20)
+                currentY -= 32
+            } else {
+                threads.row.isHidden = true
+            }
         }
         
         // Categories & items
         for category in sidebarCategories {
+            let visibleItems = category.items.filter { matches($0.label.stringValue) }
+            if !query.isEmpty && visibleItems.isEmpty {
+                category.headerRow.isHidden = true
+                category.items.forEach { $0.row.isHidden = true }
+                continue
+            }
+            category.headerRow.isHidden = false
             category.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
             category.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
             category.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
@@ -2779,7 +2803,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             currentY -= 32
             
             for item in category.items {
-                if category.isCollapsed && item.id != selectedSidebarItemId {
+                if !matches(item.label.stringValue) {
+                    item.row.isHidden = true
+                } else if category.isCollapsed && item.id != selectedSidebarItemId {
                     item.row.isHidden = true
                 } else {
                     item.row.isHidden = false
@@ -4744,6 +4770,12 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 NSLog("Failed to send post: \(error.localizedDescription)")
             }
         }
+    }
+    
+    func controlTextDidChange(_ notification: Notification) {
+        guard (notification.object as? NSTextField) === findChannelLabel else { return }
+        channelFilterQuery = findChannelLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        layoutLeftSidebar(topBarY: mainPanel.bounds.height)
     }
     
     private func sendTypingIfNeeded() {

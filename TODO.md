@@ -51,7 +51,9 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 - [ ] **Sidebar actions are decorative** — `M`
   - Where: `Add Channels` and `Invite Members` rows are `isSelectable: false` (no-op onClick);
-    the team `+`, `Find channel` pill and filter button have no `onClick` at all.
+    the team `+` and filter button have no `onClick` at all.
+  - Progress: the `Find channel` pill is now an editable field that filters sidebar rows live.
+  - Remaining: channel browser/join, invite dialog, team creation, filter options popover.
   - Done when: channel browser/join, invite dialog, team creation and channel filtering work.
 
 - [ ] **Composer action buttons are mock** — `S`
