@@ -189,6 +189,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let channelStarIconView = NSImageView()
     private var isChannelFavorited = false
     private var favoriteChannelIds: Set<String> = []
+    private var favoritesCategory: SidebarCategoryView?
+    private var isFavoritesCollapsed = false
     private var channelFilterQuery: String = ""
     let channelTitleButton = RoundedEdgePanel()
     let channelTitleLabel = NSTextField(labelWithString: "Town Square")
@@ -929,6 +931,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                     .compactMap { $0["name"] }
                 self.favoriteChannelIds = Set(favorites)
                 self.refreshFavoriteState()
+                self.rebuildFavoritesCategory()
             }
         }
     }
@@ -959,11 +962,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             favoriteChannelIds.remove(channelId)
         }
         refreshFavoriteState()
+        rebuildFavoritesCategory()
         
         let preference: [[String: String]] = [[
             "user_id": userId,
             "category": "favorite_channel",
-            "name": channelId
+            "name": channelId,
+            "value": ""
         ]]
         Task {
             do {
@@ -976,6 +981,61 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 NSLog("Failed to update favorite for \(channelId): \(error.localizedDescription)")
             }
         }
+    }
+    
+    // MARK: - Favorites branch
+    
+    /// Mirrors the web client: favorited channels move into a dedicated
+    /// "Favorites" group at the top of the sidebar and are removed from their
+    /// original category until unfavorited.
+    private func rebuildFavoritesCategory() {
+        if let old = favoritesCategory {
+            old.headerRow.removeFromSuperview()
+            old.items.forEach { $0.row.removeFromSuperview() }
+            favoritesCategory = nil
+        }
+        
+        let channels = favoriteChannelIds
+            .compactMap { channelsById[$0] }
+            .sorted { channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1)) == .orderedAscending }
+        
+        guard !channels.isEmpty else {
+            layoutLeftSidebar(topBarY: mainPanel.bounds.height)
+            return
+        }
+        
+        let items = channels.map { ch -> SidebarItemView in
+            let symbol: String
+            switch ch.type {
+            case "P": symbol = "lock.fill"
+            case "D": symbol = "person.crop.circle"
+            default: symbol = "globe"
+            }
+            return createSidebarItem(
+                id: ch.id,
+                symbolName: symbol,
+                title: channelDisplayName(for: ch),
+                isSelectable: true,
+                isBotBadge: false,
+                showsCloseOnHover: false
+            )
+        }
+        
+        let category = createSidebarCategory(
+            id: "favorites",
+            title: "FAVORITES",
+            showsAddButton: false,
+            items: items,
+            isCollapsed: isFavoritesCollapsed
+        )
+        category.headerRow.onClick = { [weak self] in
+            guard let self = self else { return }
+            self.isFavoritesCollapsed.toggle()
+            self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
+        }
+        favoritesCategory = category
+        updateSidebarSelectionAppearance()
+        layoutLeftSidebar(topBarY: mainPanel.bounds.height)
     }
     
     private func updateSearchTabsAppearance() {
@@ -2384,6 +2444,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
         }
         
+        rebuildFavoritesCategory()
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         updateSidebarSelectionAppearance()
         fetchAvatarForUsernameIfNeeded("system-bot")
@@ -2565,7 +2626,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
     
     private func updateSidebarSelectionAppearance() {
-        let allItems: [SidebarItemView] = (threadsSidebarItem.map { [$0] } ?? []) + sidebarCategories.flatMap { $0.items }
+        let allItems: [SidebarItemView] = (threadsSidebarItem.map { [$0] } ?? [])
+            + (favoritesCategory?.items ?? [])
+            + sidebarCategories.flatMap { $0.items }
         // Web: selected and hovered rows both use 8% white, labels are 14pt regular.
         let selectedBg = NSColor(white: 1.0, alpha: 0.08)
         let hoverBg = NSColor(white: 1.0, alpha: 0.08)
@@ -2788,9 +2851,44 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
         }
         
-        // Categories & items
-        for category in sidebarCategories {
-            let visibleItems = category.items.filter { matches($0.label.stringValue) }
+        // Favorites branch (channels marked with the star)
+        if let favorites = favoritesCategory {
+            let visibleFavorites = favorites.items.filter { matches($0.label.stringValue) }
+            if !visibleFavorites.isEmpty || query.isEmpty {
+                favorites.headerRow.isHidden = false
+                favorites.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
+                favorites.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
+                let chevron = isFavoritesCollapsed ? "chevron.right" : "chevron.down"
+                if let img = NSImage(systemSymbolName: chevron, accessibilityDescription: "Favorites") {
+                    favorites.chevronView.image = img.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
+                }
+                favorites.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
+                currentY -= 32
+                for item in favorites.items {
+                    if !matches(item.label.stringValue) || isFavoritesCollapsed {
+                        item.row.isHidden = true
+                        continue
+                    }
+                    item.row.isHidden = false
+                    item.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
+                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+                    item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+                    item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
+                    currentY -= 32
+                }
+                currentY -= 8
+            } else {
+                favorites.headerRow.isHidden = true
+                favorites.items.forEach { $0.row.isHidden = true }
+            }
+        }
+        
+        // Categories & items (the server's own favorites group is replaced by
+        // the locally derived FAVORITES branch above)
+        for category in sidebarCategories where !category.id.lowercased().contains("favorites") {
+            let visibleItems = category.items.filter {
+                matches($0.label.stringValue) && !favoriteChannelIds.contains($0.id)
+            }
             if !query.isEmpty && visibleItems.isEmpty {
                 category.headerRow.isHidden = true
                 category.items.forEach { $0.row.isHidden = true }
@@ -2804,7 +2902,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             currentY -= 32
             
             for item in category.items {
-                if !matches(item.label.stringValue) {
+                if !matches(item.label.stringValue) || favoriteChannelIds.contains(item.id) {
                     item.row.isHidden = true
                 } else if category.isCollapsed && item.id != selectedSidebarItemId {
                     item.row.isHidden = true

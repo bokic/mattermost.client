@@ -575,17 +575,34 @@ final class WebService: NSObject {
     }
     
     func deleteUserPreferences(userId: String, preferences: [[String: String]]) async throws {
-        guard let url = buildURL(path: "/api/v4/users/\(userId)/preferences") else {
+        // Newer servers expose POST /preferences/delete; older ones accept a
+        // DELETE against /preferences with the same body.
+        guard let url = buildURL(path: "/api/v4/users/\(userId)/preferences/delete") else {
             throw WebServiceError.invalidHostname
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
+        request.httpMethod = "POST"
         request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: preferences)
         let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse else {
             throw WebServiceError.invalidResponse
+        }
+        if (200...299).contains(http.statusCode) { return }
+        
+        guard let legacyURL = buildURL(path: "/api/v4/users/\(userId)/preferences") else {
+            throw WebServiceError.invalidResponse
+        }
+        var legacy = URLRequest(url: legacyURL)
+        legacy.httpMethod = "DELETE"
+        legacy.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        legacy.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        legacy.httpBody = request.httpBody
+        let (_, legacyResponse) = try await URLSession.shared.data(for: legacy)
+        guard let legacyHTTP = legacyResponse as? HTTPURLResponse,
+              (200...299).contains(legacyHTTP.statusCode) else {
+            throw WebServiceError.httpStatus(code: http.statusCode, message: nil)
         }
     }
     
