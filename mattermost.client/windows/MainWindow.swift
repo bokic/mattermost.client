@@ -262,9 +262,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         entryView.isSelectable = false
         entryView.isHidden = true
         
-        chatEntryPanel.color = NSColor(red: 209 / 255, green: 213 / 255, blue: 219 / 255, alpha: 1.0)
-        chatEntryPanel.cornerRadius = 6
-        chatEntryPanel.borderWidth = 1
+        chatEntryPanel.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        chatEntryPanel.cornerRadius = 4
+        chatEntryPanel.borderWidth = 2
         chatPanel.addSubview(chatEntryPanel)
         chatEntryPanel.addSubview(entryView)
         
@@ -294,7 +294,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     }
     
     private func setupTopGlobalBar() {
-        let topBarTint = NSColor(white: 1.0, alpha: 0.64)
+        // Web client: header icons/text sit at 56% white, the search field at 64%.
+        let topBarTint = NSColor(white: 1.0, alpha: 0.56)
+        let searchTint = NSColor(white: 1.0, alpha: 0.64)
         let hoverBg = NSColor(white: 1.0, alpha: 0.08)
         
         // Left: Product switcher container (grid icon + Mattermost logo + TEAM EDITION badge)
@@ -306,10 +308,10 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         logo.imageScaling = .scaleProportionallyUpOrDown
         logo.alphaValue = 0.94
         
-        editionBadgePanel.color = NSColor(white: 1.0, alpha: 0.12)
-        editionBadgePanel.cornerRadius = 3
-        editionBadgeLabel.font = NSFont.systemFont(ofSize: 7.5, weight: .bold)
-        editionBadgeLabel.textColor = NSColor(white: 1.0, alpha: 0.72)
+        editionBadgePanel.color = NSColor(white: 1.0, alpha: 0.08)
+        editionBadgePanel.cornerRadius = 4
+        editionBadgeLabel.font = MMFont.font(ofSize: 10, weight: .semibold)
+        editionBadgeLabel.textColor = NSColor(white: 1.0, alpha: 0.75)
         editionBadgeLabel.alignment = .center
         editionBadgeLabel.isEditable = false
         editionBadgeLabel.isSelectable = false
@@ -327,24 +329,24 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         contentView?.addSubview(productSwitcherPanel)
         
         // Center: Search bar (non-editable trigger, no caret) + Help (?) button
-        searchPanel.color = NSColor(white: 1.0, alpha: 0.10)
+        searchPanel.color = NSColor(white: 1.0, alpha: 0.08)
         searchPanel.cornerRadius = 4
         if let searchImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search") {
             searchIconView.image = searchImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
-            searchIconView.contentTintColor = topBarTint
+            searchIconView.contentTintColor = searchTint
         }
-        searchLabel.font = NSFont.systemFont(ofSize: 12)
-        searchLabel.textColor = topBarTint
+        searchLabel.font = MMFont.font(ofSize: 12, weight: .medium)
+        searchLabel.textColor = searchTint
         searchLabel.isEditable = false
         searchLabel.isSelectable = false
         searchPanel.addSubview(searchIconView)
         searchPanel.addSubview(searchLabel)
         searchPanel.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.searchPanel.color = NSColor(white: 1.0, alpha: isHovered ? 0.16 : 0.10)
+            self.searchPanel.color = NSColor(white: 1.0, alpha: isHovered ? 0.12 : 0.08)
             self.searchPanel.setNeedsAppearanceUpdate()
-            self.searchIconView.contentTintColor = isHovered ? .white : topBarTint
-            self.searchLabel.textColor = isHovered ? .white : topBarTint
+            self.searchIconView.contentTintColor = isHovered ? .white : searchTint
+            self.searchLabel.textColor = isHovered ? .white : searchTint
         }
         searchPanel.onClick = { [weak self] in
             self?.toggleSearchPopover()
@@ -354,7 +356,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         helpPanel.color = .clear
         helpPanel.cornerRadius = 4
         if let helpImg = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Help") {
-            helpIconView.image = helpImg.withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+            helpIconView.image = helpImg.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
             helpIconView.contentTintColor = topBarTint
         }
         helpPanel.addSubview(helpIconView)
@@ -397,30 +399,30 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         // User avatar circle + online status indicator dot
         avatarButtonPanel.color = .clear
-        avatarButtonPanel.cornerRadius = 15
+        avatarButtonPanel.cornerRadius = 4
         // The status badge intentionally overhangs the avatar's bottom-right corner,
         // so let it render outside the rounded hover container.
         avatarButtonPanel.clipContentToBounds = false
         
         let initial = (UserDefaults.standard.string(forKey: "username")?.first).map { String($0).uppercased() } ?? "B"
         avatarLabel.stringValue = initial
-        avatarLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        avatarLabel.font = MMFont.font(ofSize: 10, weight: .semibold)
         avatarLabel.textColor = .white
         avatarLabel.alignment = .center
         
         avatarPanel.color = NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0)
-        avatarPanel.cornerRadius = 13
+        avatarPanel.cornerRadius = 12
         avatarPanel.addSubview(avatarLabel)
         
         avatarImageView.imageScaling = .scaleProportionallyUpOrDown
-        avatarImageView.frame = NSRect(x: 0, y: 0, width: 26, height: 26)
+        avatarImageView.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
         avatarImageView.isHidden = true
         avatarPanel.addSubview(avatarImageView)
         
         statusDotPanel.color = statusColor(for: currentUserStatus)
-        statusDotPanel.cornerRadius = 8.5
-        statusDotPanel.borderWidth = 2
-        statusDotPanel.borderColor = NSColor(red: 25 / 255, green: 42 / 255, blue: 77 / 255, alpha: 1.0)
+        statusDotPanel.cornerRadius = 8
+        statusDotPanel.borderWidth = 1.35
+        statusDotPanel.borderColor = NSColor(red: 22 / 255, green: 37 / 255, blue: 69 / 255, alpha: 1.0)
         
         avatarButtonPanel.addSubview(avatarPanel)
         avatarButtonPanel.addSubview(statusDotPanel)
@@ -759,7 +761,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         searchPopoverPanel.isHidden = true
         
         // Row 1: Messages & Files tabs + Close (X) button
-        let tabFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        let tabFont = MMFont.font(ofSize: 11, weight: .semibold)
         let tabH: CGFloat = 22
         
         messagesTabLabel.font = tabFont
@@ -841,7 +843,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         innerSearchIcon.frame = NSRect(x: 10, y: 8, width: 16, height: 16)
         searchInputBox.addSubview(innerSearchIcon)
         
-        searchPopoverInputLabel.font = NSFont.systemFont(ofSize: 13)
+        searchPopoverInputLabel.font = MMFont.font(ofSize: 13)
         searchPopoverInputLabel.textColor = placeholderColor
         searchPopoverInputLabel.isEditable = false
         searchPopoverInputLabel.isSelectable = false
@@ -859,7 +861,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         searchPopoverPanel.addSubview(bulbIcon)
         
         let filterHintLabel = NSTextField(labelWithString: "Filter your search with:")
-        filterHintLabel.font = NSFont.systemFont(ofSize: 11)
+        filterHintLabel.font = MMFont.font(ofSize: 11)
         filterHintLabel.textColor = mutedText
         filterHintLabel.isEditable = false
         filterHintLabel.isSelectable = false
@@ -870,7 +872,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         searchPopoverPanel.addSubview(filterHintLabel)
         
         let filterTitles = ["From:", "In:", "On:", "Before:", "After:"]
-        let pillFont = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        let pillFont = MMFont.font(ofSize: 10, weight: .semibold)
         var pillX = filterHintLabel.frame.maxX + 8
         for title in filterTitles {
             let pill = RoundedEdgePanel()
@@ -949,7 +951,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             symbolName: "safari.fill",
             iconTint: brandBlue,
             title: "Channels",
-            font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            font: MMFont.font(ofSize: 13, weight: .semibold),
             textColor: darkText,
             hoverBg: rowHoverBg,
             showsCheckmark: true,
@@ -980,7 +982,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 symbolName: item.symbol,
                 iconTint: mutedIcon,
                 title: item.title,
-                font: NSFont.systemFont(ofSize: 13, weight: .regular),
+                font: MMFont.font(ofSize: 13, weight: .regular),
                 textColor: darkText,
                 hoverBg: rowHoverBg,
                 showsCheckmark: false,
@@ -1002,12 +1004,12 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         footerBadgePanel.cornerRadius = 3
         
         let footerBadgeLabel = NSTextField(labelWithString: "TEAM EDITION")
-        footerBadgeLabel.font = NSFont.systemFont(ofSize: 8, weight: .bold)
+        footerBadgeLabel.font = MMFont.font(ofSize: 8, weight: .bold)
         footerBadgeLabel.textColor = NSColor(red: 75 / 255, green: 85 / 255, blue: 99 / 255, alpha: 1.0)
         footerBadgeLabel.alignment = .center
         
         let footerBadgeText = footerBadgeLabel.stringValue.isEmpty ? "TEAM EDITION" : footerBadgeLabel.stringValue
-        let footerFont = footerBadgeLabel.font ?? NSFont.systemFont(ofSize: 8, weight: .bold)
+        let footerFont = footerBadgeLabel.font ?? MMFont.font(ofSize: 8, weight: .bold)
         let footerSize = (footerBadgeText as NSString).size(withAttributes: [.font: footerFont])
         let footerPadH: CGFloat = 8
         let footerPadV: CGFloat = 3
@@ -1024,14 +1026,14 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let footerText = NSMutableAttributedString(
             string: "This is the free ",
             attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
+                .font: MMFont.font(ofSize: 11),
                 .foregroundColor: mutedIcon
             ]
         )
         footerText.append(NSAttributedString(
             string: "unsupported",
             attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
+                .font: MMFont.font(ofSize: 11),
                 .foregroundColor: brandBlue,
                 .underlineStyle: NSUnderlineStyle.single.rawValue
             ]
@@ -1039,7 +1041,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         footerText.append(NSAttributedString(
             string: " edition of\nMattermost.",
             attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
+                .font: MMFont.font(ofSize: 11),
                 .foregroundColor: mutedIcon
             ]
         ))
@@ -1085,7 +1087,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 symbolName: item.symbol,
                 iconTint: mutedIcon,
                 title: item.title,
-                font: NSFont.systemFont(ofSize: 13, weight: .regular),
+                font: MMFont.font(ofSize: 13, weight: .regular),
                 textColor: darkText,
                 hoverBg: rowHoverBg,
                 showsCheckmark: false,
@@ -1131,7 +1133,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let initial = cleanUsername.first.map { String($0).uppercased() } ?? "B"
         
         let headerAvatarLabel = NSTextField(labelWithString: initial)
-        headerAvatarLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        headerAvatarLabel.font = MMFont.font(ofSize: 13, weight: .semibold)
         headerAvatarLabel.textColor = .white
         headerAvatarLabel.alignment = .center
         headerAvatarLabel.frame = NSRect(x: 0, y: 5, width: 28, height: 18)
@@ -1148,7 +1150,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         menuAvatarStatusDot = menuDot
         
         let usernameLabel = NSTextField(labelWithString: "@\(cleanUsername)")
-        usernameLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        usernameLabel.font = MMFont.font(ofSize: 13, weight: .semibold)
         usernameLabel.textColor = darkText
         usernameLabel.frame = NSRect(x: 54, y: 16, width: menuWidth - 70, height: 18)
         headerRow.addSubview(usernameLabel)
@@ -1172,7 +1174,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             symbolName: "face.smiling",
             iconTint: mutedIcon,
             title: "Set custom status",
-            font: NSFont.systemFont(ofSize: 13, weight: .regular),
+            font: MMFont.font(ofSize: 13, weight: .regular),
             textColor: darkText,
             hoverBg: rowHoverBg,
             showsCheckmark: false,
@@ -1223,7 +1225,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             row.addSubview(iconView)
             
             let titleLabel = NSTextField(labelWithString: cfg.title)
-            titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+            titleLabel.font = MMFont.font(ofSize: 13, weight: .regular)
             titleLabel.textColor = darkText
             let titleY: CGFloat = cfg.subtitle != nil ? 21 : (cfg.height - 18) / 2
             titleLabel.frame = NSRect(x: 42, y: titleY, width: menuWidth - 80, height: 18)
@@ -1231,7 +1233,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             
             if let subtitle = cfg.subtitle {
                 let subLabel = NSTextField(labelWithString: subtitle)
-                subLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+                subLabel.font = MMFont.font(ofSize: 11, weight: .regular)
                 subLabel.textColor = mutedIcon
                 subLabel.frame = NSRect(x: 42, y: 6, width: menuWidth - 80, height: 14)
                 row.addSubview(subLabel)
@@ -1297,7 +1299,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             symbolName: "person",
             iconTint: mutedIcon,
             title: "Profile",
-            font: NSFont.systemFont(ofSize: 13, weight: .regular),
+            font: MMFont.font(ofSize: 13, weight: .regular),
             textColor: darkText,
             hoverBg: rowHoverBg,
             showsCheckmark: false,
@@ -1326,7 +1328,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             symbolName: "rectangle.portrait.and.arrow.right",
             iconTint: mutedIcon,
             title: "Log out",
-            font: NSFont.systemFont(ofSize: 13, weight: .regular),
+            font: MMFont.font(ofSize: 13, weight: .regular),
             textColor: darkText,
             hoverBg: rowHoverBg,
             showsCheckmark: false,
@@ -1369,7 +1371,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         // Header: "Clear after:"
         let headerLabel = NSTextField(labelWithString: "Clear after:")
-        headerLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        headerLabel.font = MMFont.font(ofSize: 11.5, weight: .semibold)
         headerLabel.textColor = mutedText
         headerLabel.frame = NSRect(x: 20, y: 201, width: subWidth - 36, height: 18)
         dndSubMenu.addSubview(headerLabel)
@@ -1398,14 +1400,14 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             row.color = .clear
             
             let titleLabel = NSTextField(labelWithString: item.title)
-            titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+            titleLabel.font = MMFont.font(ofSize: 13, weight: .regular)
             titleLabel.textColor = darkText
             titleLabel.frame = NSRect(x: 20, y: (item.height - 18) / 2, width: item.rightText != nil ? 90 : (subWidth - 36), height: 18)
             row.addSubview(titleLabel)
             
             if let rightText = item.rightText {
                 let rightLabel = NSTextField(labelWithString: rightText)
-                rightLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+                rightLabel.font = MMFont.font(ofSize: 12, weight: .regular)
                 rightLabel.textColor = mutedText
                 rightLabel.alignment = .right
                 rightLabel.frame = NSRect(x: 100, y: (item.height - 16) / 2, width: subWidth - 116, height: 16)
@@ -1576,7 +1578,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         // 1. Team Header Row: "None v" button + "+" button
         teamHeaderButton.color = .clear
         teamHeaderButton.cornerRadius = 4
-        teamHeaderLabel.font = NSFont.systemFont(ofSize: 16, weight: .bold)
+        teamHeaderLabel.font = MMFont.font(ofSize: 16, weight: .semibold)
         teamHeaderLabel.textColor = .white
         teamHeaderLabel.isEditable = false
         teamHeaderLabel.isSelectable = false
@@ -1601,16 +1603,16 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         teamDropdownMenu.isHidden = true
         contentView?.addSubview(teamDropdownMenu)
         
-        teamAddButton.color = NSColor(white: 1.0, alpha: 0.10)
-        teamAddButton.cornerRadius = 15
+        teamAddButton.color = NSColor(white: 1.0, alpha: 0.12)
+        teamAddButton.cornerRadius = 16
         if let plusImg = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add") {
-            teamAddIconView.image = plusImg.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
+            teamAddIconView.image = plusImg.withSymbolConfiguration(.init(pointSize: 15, weight: .medium))
             teamAddIconView.contentTintColor = mutedTint
         }
         teamAddButton.addSubview(teamAddIconView)
         teamAddButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.teamAddButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.17 : 0.10)
+            self.teamAddButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.18 : 0.12)
             self.teamAddButton.setNeedsAppearanceUpdate()
             self.teamAddIconView.contentTintColor = isHovered ? .white : mutedTint
         }
@@ -1618,9 +1620,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         // 2. Filter & Find Channel Row
         filterChannelButton.color = NSColor(white: 1.0, alpha: 0.08)
-        filterChannelButton.cornerRadius = 6
+        filterChannelButton.cornerRadius = 4
         if let filterImg = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: "Filter") {
-            filterChannelIconView.image = filterImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+            filterChannelIconView.image = filterImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
             filterChannelIconView.contentTintColor = mutedTint
         }
         filterChannelButton.addSubview(filterChannelIconView)
@@ -1633,12 +1635,12 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         mainPanel.addSubview(filterChannelButton)
         
         findChannelPanel.color = NSColor(white: 1.0, alpha: 0.08)
-        findChannelPanel.cornerRadius = 6
+        findChannelPanel.cornerRadius = 4
         if let findImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find channel") {
-            findChannelIconView.image = findImg.withSymbolConfiguration(.init(pointSize: 11.5, weight: .medium))
+            findChannelIconView.image = findImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
             findChannelIconView.contentTintColor = mutedTint
         }
-        findChannelLabel.font = NSFont.systemFont(ofSize: 12)
+        findChannelLabel.font = MMFont.font(ofSize: 12)
         findChannelLabel.textColor = mutedTint
         findChannelLabel.isEditable = false
         findChannelLabel.isSelectable = false
@@ -2119,13 +2121,13 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let chevronView = NSImageView()
         let chevSymbol = isCollapsed ? "chevron.right" : "chevron.down"
         if let chevImg = NSImage(systemSymbolName: chevSymbol, accessibilityDescription: title) {
-            chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+            chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
             chevronView.contentTintColor = mutedTint
         }
         headerRow.addSubview(chevronView)
         
         let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = NSFont.systemFont(ofSize: 10, weight: .bold)
+        titleLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
         titleLabel.textColor = mutedTint
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
@@ -2190,8 +2192,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         row.color = .clear
         
         let leftBar = RoundedEdgePanel()
-        leftBar.cornerRadius = 1.5
-        leftBar.color = .white
+        leftBar.cornerRadius = 2
+        leftBar.color = NSColor(red: 93 / 255, green: 137 / 255, blue: 234 / 255, alpha: 1.0)
         leftBar.isHidden = true
         row.addSubview(leftBar)
         
@@ -2199,27 +2201,28 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         if let custom = customImage {
             iconView.image = custom
             iconView.imageScaling = .scaleProportionallyUpOrDown
-            iconView.frame = NSRect(x: 16, y: 5, width: 18, height: 18)
+            iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
             row.addSubview(iconView)
         } else if isBotBadge {
             if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: title) {
                 iconView.image = img.withSymbolConfiguration(.init(pointSize: 9.5, weight: .semibold))
                 iconView.contentTintColor = NSColor(white: 1.0, alpha: 0.85)
             }
-            iconView.frame = NSRect(x: 16, y: 5, width: 18, height: 18)
+            iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
             row.addSubview(iconView)
         } else {
             if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: title) {
-                iconView.image = img.withSymbolConfiguration(.init(pointSize: 12.5, weight: .medium))
+                iconView.image = img.withSymbolConfiguration(.init(pointSize: 13.5, weight: .regular))
             }
-            iconView.frame = NSRect(x: 16, y: 6, width: 16, height: 16)
+            iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
             row.addSubview(iconView)
         }
         
         let label = NSTextField(labelWithString: title)
         label.isEditable = false
         label.isSelectable = false
-        label.frame = NSRect(x: 38, y: 5, width: 140, height: 18)
+        label.font = MMFont.font(ofSize: 14, weight: .regular)
+        label.frame = NSRect(x: 49, y: 6, width: 140, height: 20)
         row.addSubview(label)
         
         var closeView: NSImageView? = nil
@@ -2273,15 +2276,16 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
         }
         if let contentView = contentView {
-            layoutLeftSidebar(topBarY: contentView.bounds.height - 44)
+            layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         }
     }
     
     private func updateSidebarSelectionAppearance() {
         let allItems: [SidebarItemView] = (threadsSidebarItem.map { [$0] } ?? []) + sidebarCategories.flatMap { $0.items }
-        let selectedBg = NSColor(white: 1.0, alpha: 0.12)
+        // Web: selected and hovered rows both use 8% white, labels are 14pt regular.
+        let selectedBg = NSColor(white: 1.0, alpha: 0.08)
         let hoverBg = NSColor(white: 1.0, alpha: 0.08)
-        let defaultText = NSColor(white: 1.0, alpha: 0.68)
+        let defaultText = NSColor(white: 1.0, alpha: 0.64)
         let defaultIcon = NSColor(white: 1.0, alpha: 0.64)
         
         for item in allItems {
@@ -2290,8 +2294,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             
             if isSelected {
                 item.row.color = selectedBg
-                item.leftBar.isHidden = false
-                item.label.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
+                item.label.font = MMFont.font(ofSize: 14, weight: .regular)
                 item.label.textColor = .white
                 if !item.isBotBadge {
                     item.iconView.contentTintColor = .white
@@ -2300,8 +2303,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 }
             } else if isHovered {
                 item.row.color = hoverBg
-                item.leftBar.isHidden = true
-                item.label.font = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+                item.label.font = MMFont.font(ofSize: 14, weight: .regular)
                 item.label.textColor = .white
                 if !item.isBotBadge {
                     item.iconView.contentTintColor = .white
@@ -2310,8 +2312,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 }
             } else {
                 item.row.color = .clear
-                item.leftBar.isHidden = true
-                item.label.font = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+                item.label.font = MMFont.font(ofSize: 14, weight: .regular)
                 item.label.textColor = defaultText
                 if !item.isBotBadge {
                     item.iconView.contentTintColor = defaultIcon
@@ -2319,22 +2320,25 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                     item.iconView.contentTintColor = nil
                 }
             }
+            item.leftBar.isHidden = !isSelected
+            item.leftBar.color = NSColor(red: 93 / 255, green: 137 / 255, blue: 234 / 255, alpha: 1.0)
+            item.leftBar.setNeedsAppearanceUpdate()
             item.row.setNeedsAppearanceUpdate()
             item.hoverCloseView?.isHidden = !isHovered
         }
     }
     
     private func layoutTeamHeader(topBarY: CGFloat? = nil) {
-        let sidebarWidth: CGFloat = 206
         let top = topBarY ?? (mainPanel.bounds.height > 0 ? mainPanel.bounds.height : (contentView?.bounds.height ?? 800) - 44)
         let textWidth = ceil(teamHeaderLabel.attributedStringValue.size().width)
-        let maxLabelWidth = sidebarWidth - 64
+        let maxLabelWidth: CGFloat = 202
         let labelWidth = max(24, min(textWidth + 4, maxLabelWidth))
-        let buttonWidth = labelWidth + 8 + 4 + 10 + 8
+        // Web: 6pt leading padding, 2pt between label and chevron, 12pt chevron, 5pt trailing.
+        let buttonWidth = 6 + labelWidth + 2 + 12 + 5
         
-        teamHeaderButton.frame = NSRect(x: 8, y: top - 40, width: buttonWidth, height: 28)
-        teamHeaderLabel.frame = NSRect(x: 8, y: 5, width: labelWidth, height: 18)
-        teamHeaderChevron.frame = NSRect(x: 8 + labelWidth + 4, y: 9, width: 10, height: 10)
+        teamHeaderButton.frame = NSRect(x: 17, y: top - 43.5, width: buttonWidth, height: 32)
+        teamHeaderLabel.frame = NSRect(x: 6, y: (32 - 22) / 2, width: labelWidth, height: 22)
+        teamHeaderChevron.frame = NSRect(x: 6 + labelWidth + 2, y: (32 - 12) / 2, width: 12, height: 12)
         
         rebuildTeamMenu()
     }
@@ -2361,7 +2365,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         if teamsToDisplay.isEmpty {
             let emptyLabel = NSTextField(labelWithString: "No teams available")
-            emptyLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+            emptyLabel.font = MMFont.font(ofSize: 13, weight: .regular)
             emptyLabel.textColor = NSColor(white: 0.5, alpha: 1.0)
             emptyLabel.frame = NSRect(x: 14, y: 10, width: menuWidth - 28, height: 20)
             teamDropdownMenu.addSubview(emptyLabel)
@@ -2377,7 +2381,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             
             let isActive = team.id == activeTeam?.id
             let label = NSTextField(labelWithString: team.display_name.isEmpty ? team.name : team.display_name)
-            label.font = NSFont.systemFont(ofSize: 13.5, weight: isActive ? .bold : .medium)
+            label.font = MMFont.font(ofSize: 13.5, weight: isActive ? .bold : .medium)
             label.textColor = NSColor(white: 0.15, alpha: 1.0)
             label.isEditable = false
             label.isSelectable = false
@@ -2461,52 +2465,57 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     }
     
     private func layoutLeftSidebar(topBarY: CGFloat) {
-        let sidebarWidth: CGFloat = 206
+        // Matches the web client at >=1201px: 264pt sidebar starting 5pt from the
+        // window edge, 32pt rows, 19/16pt horizontal padding.
+        let sidebarX: CGFloat = 1
+        let sidebarWidth: CGFloat = 264
         
         // Row 1: Team header button + "+" button
         layoutTeamHeader(topBarY: topBarY)
         
-        teamAddButton.frame = NSRect(x: sidebarWidth - 40, y: topBarY - 41, width: 30, height: 30)
-        teamAddIconView.frame = NSRect(x: 7, y: 7, width: 16, height: 16)
+        teamAddButton.frame = NSRect(x: sidebarX + 216, y: topBarY - 43.5, width: 32, height: 32)
+        teamAddIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
         
         // Row 2: Filter button + "Find channel" pill
-        filterChannelButton.frame = NSRect(x: 8, y: topBarY - 75, width: 28, height: 28)
-        filterChannelIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
+        filterChannelButton.frame = NSRect(x: sidebarX + 16, y: topBarY - 83, width: 28, height: 28)
+        filterChannelIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
         
-        findChannelPanel.frame = NSRect(x: 42, y: topBarY - 75, width: sidebarWidth - 52, height: 28)
-        findChannelIconView.frame = NSRect(x: 8, y: 6.5, width: 15, height: 15)
-        findChannelLabel.frame = NSRect(x: 27, y: 5, width: sidebarWidth - 84, height: 18)
+        findChannelPanel.frame = NSRect(x: sidebarX + 48, y: topBarY - 83, width: 200, height: 28)
+        findChannelIconView.frame = NSRect(x: 2, y: 5, width: 18, height: 18)
+        findChannelLabel.frame = NSRect(x: 29, y: 4, width: 165, height: 20)
         
         // Row 3: Threads item
-        var currentY = topBarY - 110
+        var currentY = topBarY - 126
         if let threads = threadsSidebarItem {
-            threads.row.frame = NSRect(x: 0, y: currentY, width: sidebarWidth, height: 28)
-            threads.leftBar.frame = NSRect(x: 0, y: 0, width: 3, height: 28)
-            threads.label.frame = NSRect(x: 38, y: 5, width: sidebarWidth - 48, height: 18)
-            currentY -= 36
+            threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
+            threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+            threads.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+            threads.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 64, height: 20)
+            currentY -= 32
         }
         
         // Categories & items
         for category in sidebarCategories {
-            category.headerRow.frame = NSRect(x: 0, y: currentY, width: sidebarWidth, height: 26)
-            category.chevronView.frame = NSRect(x: 10, y: 8, width: 10, height: 10)
-            category.titleLabel.frame = NSRect(x: 24, y: 6, width: sidebarWidth - 56, height: 14)
-            category.addButton?.frame = NSRect(x: sidebarWidth - 30, y: 3, width: 20, height: 20)
-            currentY -= 28
+            category.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
+            category.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
+            category.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
+            category.addButton?.frame = NSRect(x: sidebarWidth - 32, y: 6, width: 20, height: 20)
+            currentY -= 32
             
             for item in category.items {
                 if category.isCollapsed && item.id != selectedSidebarItemId {
                     item.row.isHidden = true
                 } else {
                     item.row.isHidden = false
-                    item.row.frame = NSRect(x: 0, y: currentY, width: sidebarWidth, height: 28)
-                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 3, height: 28)
-                    item.label.frame = NSRect(x: 38, y: 5, width: sidebarWidth - 64, height: 18)
-                    item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 24, y: 8, width: 12, height: 12)
-                    currentY -= 28
+                    item.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
+                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+                    item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+                    item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
+                    item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 10, width: 12, height: 12)
+                    currentY -= 32
                 }
             }
-            currentY -= 10
+            currentY -= 8
         }
     }
     
@@ -2559,7 +2568,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         channelTitleButton.cornerRadius = 4
         channelTitleButton.color = .clear
-        channelTitleLabel.font = NSFont.systemFont(ofSize: 14, weight: .bold)
+        channelTitleLabel.font = MMFont.font(ofSize: 14, weight: .semibold)
         channelTitleLabel.textColor = darkText
         channelTitleLabel.isEditable = false
         channelTitleLabel.isSelectable = false
@@ -2567,7 +2576,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         channelHeaderBotBadge.cornerRadius = 4
         channelHeaderBotBadge.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
-        channelHeaderBotBadgeLabel.font = NSFont.systemFont(ofSize: 9.5, weight: .bold)
+        channelHeaderBotBadgeLabel.font = MMFont.font(ofSize: 9.5, weight: .bold)
         channelHeaderBotBadgeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
         channelHeaderBotBadgeLabel.alignment = .center
         channelHeaderBotBadgeLabel.isEditable = false
@@ -2592,10 +2601,10 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         channelMembersButton.cornerRadius = 4
         channelMembersButton.color = .clear
         if let personImg = NSImage(systemSymbolName: "person", accessibilityDescription: "Members") {
-            channelMembersIconView.image = personImg.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+            channelMembersIconView.image = personImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
             channelMembersIconView.contentTintColor = mutedText
         }
-        channelMembersCountLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        channelMembersCountLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
         channelMembersCountLabel.textColor = mutedText
         channelMembersCountLabel.isEditable = false
         channelMembersCountLabel.isSelectable = false
@@ -2692,7 +2701,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
         timelineHeroContainer.addSubview(heroBlueBubble)
         
-        heroTitleLabel.font = NSFont.systemFont(ofSize: 22, weight: .bold)
+        heroTitleLabel.font = MMFont.font(ofSize: 22, weight: .bold)
         heroTitleLabel.textColor = darkText
         heroTitleLabel.alignment = .center
         heroTitleLabel.isEditable = false
@@ -2701,7 +2710,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         heroBotBadge.cornerRadius = 4
         heroBotBadge.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
-        heroBotBadgeLabel.font = NSFont.systemFont(ofSize: 10, weight: .bold)
+        heroBotBadgeLabel.font = MMFont.font(ofSize: 10, weight: .bold)
         heroBotBadgeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
         heroBotBadgeLabel.alignment = .center
         heroBotBadgeLabel.isEditable = false
@@ -2710,7 +2719,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         heroBotBadge.isHidden = true
         timelineHeroContainer.addSubview(heroBotBadge)
         
-        heroDescriptionLabel.font = NSFont.systemFont(ofSize: 12)
+        heroDescriptionLabel.font = MMFont.font(ofSize: 12)
         heroDescriptionLabel.textColor = mutedText
         heroDescriptionLabel.alignment = .center
         heroDescriptionLabel.maximumNumberOfLines = 2
@@ -2727,7 +2736,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         heroInviteIconView.frame = NSRect(x: 14, y: 8, width: 16, height: 16)
         heroInviteButton.addSubview(heroInviteIconView)
         
-        heroInviteLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        heroInviteLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
         heroInviteLabel.textColor = .white
         heroInviteLabel.isEditable = false
         heroInviteLabel.isSelectable = false
@@ -2760,8 +2769,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
         
         // 4. Message Composer (Non-editable placeholder + Formatting Toolbar + Help link)
-        composerPlaceholderLabel.font = NSFont.systemFont(ofSize: 13)
-        composerPlaceholderLabel.textColor = lightPlaceholder
+        composerPlaceholderLabel.font = MMFont.font(ofSize: 14)
+        composerPlaceholderLabel.textColor = NSColor(red: 153 / 255, green: 153 / 255, blue: 153 / 255, alpha: 1.0)
         composerPlaceholderLabel.isEditable = false
         composerPlaceholderLabel.isSelectable = false
         chatEntryPanel.addSubview(composerPlaceholderLabel)
@@ -2788,7 +2797,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 icon.image = img.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
                 icon.contentTintColor = mutedText
             }
-            icon.frame = NSRect(x: 5, y: 5, width: 16, height: 16)
+            icon.frame = NSRect(x: 8, y: 8, width: 16, height: 16)
             btn.addSubview(icon)
             btn.onHoverChanged = { [weak btn, weak icon] isHovered in
                 btn?.color = isHovered ? hoverBg : .clear
@@ -2807,7 +2816,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         composerAaButton.cornerRadius = 4
         composerAaButton.color = .clear
         let aaLabel = NSTextField(labelWithString: "Aa")
-        let aaFont = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        let aaFont = MMFont.font(ofSize: 14, weight: .semibold)
         aaLabel.font = aaFont
         aaLabel.textColor = mutedText
         aaLabel.isEditable = false
@@ -2815,13 +2824,13 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let aaSize = ("Aa" as NSString).size(withAttributes: [.font: aaFont])
         let aaTextW = ceil(aaSize.width) + 2
         let aaTextH = ceil(aaSize.height)
-        aaLabel.frame = NSRect(x: 6, y: (26 - aaTextH) / 2, width: aaTextW, height: aaTextH)
+        aaLabel.frame = NSRect(x: 6, y: (32 - aaTextH) / 2, width: aaTextW, height: aaTextH)
         composerAaButton.addSubview(aaLabel)
         if let cImg = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Formatting") {
             composerAaChevron.image = cImg.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
             composerAaChevron.contentTintColor = mutedText
         }
-        composerAaChevron.frame = NSRect(x: 6 + aaTextW + 3, y: (26 - 9) / 2, width: 9, height: 9)
+        composerAaChevron.frame = NSRect(x: 6 + aaTextW + 3, y: (32 - 9) / 2, width: 9, height: 9)
         composerAaButton.addSubview(composerAaChevron)
         composerAaButton.onHoverChanged = { [weak self, weak aaLabel] isHovered in
             self?.composerAaButton.color = isHovered ? hoverBg : .clear
@@ -2843,10 +2852,10 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             btn.color = .clear
             let icon = NSImageView()
             if let img = NSImage(systemSymbolName: sym, accessibilityDescription: sym) {
-                icon.image = img.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+                icon.image = img.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
                 icon.contentTintColor = mutedText
             }
-            icon.frame = NSRect(x: 5, y: 5, width: 16, height: 16)
+            icon.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
             btn.addSubview(icon)
             btn.onHoverChanged = { [weak btn, weak icon] isHovered in
                 btn?.color = isHovered ? hoverBg : .clear
@@ -2861,7 +2870,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         composerGifButton.cornerRadius = 4
         composerGifButton.color = .clear
         let gifLabel = NSTextField(labelWithString: "GIF")
-        let gifFont = NSFont.systemFont(ofSize: 11, weight: .bold)
+        let gifFont = MMFont.font(ofSize: 11, weight: .bold)
         gifLabel.font = gifFont
         gifLabel.textColor = mutedText
         gifLabel.isEditable = false
@@ -2895,22 +2904,22 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         setupRightIconBtn(composerAttachButton, "paperclip")
         
         composerSendButton.cornerRadius = 4
-        composerSendButton.color = hoverBg
+        composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
         let sendIcon = NSImageView()
-        if let sImg = NSImage(systemSymbolName: "paperplane", accessibilityDescription: "Send") {
-            sendIcon.image = sImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
-            sendIcon.contentTintColor = lightPlaceholder
+        if let sImg = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send") {
+            sendIcon.image = sImg.withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+            sendIcon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.32)
         }
-        sendIcon.frame = NSRect(x: 8, y: 5, width: 16, height: 16)
+        sendIcon.frame = NSRect(x: 15, y: 7, width: 18, height: 18)
         composerSendButton.addSubview(sendIcon)
         composerSendButton.onHoverChanged = { [weak self] isHovered in
-            self?.composerSendButton.color = isHovered ? dividerColor : hoverBg
+            self?.composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: isHovered ? 0.12 : 0.08)
             self?.composerSendButton.setNeedsAppearanceUpdate()
         }
         chatEntryPanel.addSubview(composerSendButton)
         
-        composerHelpLabel.font = NSFont.systemFont(ofSize: 10.5)
-        composerHelpLabel.textColor = mutedText
+        composerHelpLabel.font = MMFont.font(ofSize: 12)
+        composerHelpLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
         composerHelpLabel.alignment = .right
         composerHelpLabel.isEditable = false
         composerHelpLabel.isSelectable = false
@@ -2975,7 +2984,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             heroBlueBubble.frame = NSRect(x: heroMidX - 2, y: 140, width: 40, height: 26)
         }
         
-        let titleFont = NSFont.systemFont(ofSize: 22, weight: .bold)
+        let titleFont = MMFont.font(ofSize: 22, weight: .bold)
         heroTitleLabel.font = titleFont
         let titleStr = heroTitleLabel.stringValue
         let titleSize = (titleStr as NSString).size(withAttributes: [.font: titleFont])
@@ -3004,7 +3013,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         heroInviteButton.isHidden = isDM
         if !isDM {
             let inviteText = heroInviteLabel.stringValue.isEmpty ? "Invite others to the workspace" : heroInviteLabel.stringValue
-            let inviteFont = heroInviteLabel.font ?? NSFont.systemFont(ofSize: 12, weight: .semibold)
+            let inviteFont = heroInviteLabel.font ?? MMFont.font(ofSize: 12, weight: .semibold)
             let inviteSize = (inviteText as NSString).size(withAttributes: [.font: inviteFont])
             let inviteTextW = ceil(inviteSize.width) + 4
             let inviteTextH = ceil(inviteSize.height)
@@ -3021,39 +3030,41 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     
     private func createDateSeparator(dateStr: String, width: CGFloat) -> NSView {
         let container = TimelineFlippedView()
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        let separatorText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        
+        let dividerColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        let separatorText = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+
+        // Web: 1pt rule behind a white 26pt pill, 13pt bold label, 13pt horizontal padding.
+        let font = MMFont.font(ofSize: 13, weight: .bold)
+        let textSize = (dateStr as NSString).size(withAttributes: [.font: font])
+        let textW = ceil(textSize.width)
+        let textH = ceil(textSize.height)
+        let pillH: CGFloat = 26
+        let pillW = textW + 26
+        let centerX = width / 2
+        let pillX = centerX - pillW / 2
+
+        let line = RoundedEdgePanel()
+        line.cornerRadius = 0
+        line.color = dividerColor
+        line.frame = NSRect(x: 20, y: 16, width: max(0, width - 40), height: 1)
+
+        let pill = RoundedEdgePanel()
+        pill.color = .white
+        pill.cornerRadius = pillH / 2
+        pill.frame = NSRect(x: pillX, y: 4, width: pillW, height: pillH)
+
         let label = NSTextField(labelWithString: dateStr)
-        label.font = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        label.font = font
         label.textColor = separatorText
         label.alignment = .center
         label.isEditable = false
         label.isSelectable = false
-        
-        let font = label.font ?? NSFont.systemFont(ofSize: 11, weight: .bold)
-        let textSize = (dateStr as NSString).size(withAttributes: [.font: font])
-        let textW = ceil(textSize.width) + 20
-        let textH = ceil(textSize.height)
-        let centerX = width / 2
-        let labelX = centerX - textW / 2
-        
-        let leftLine = RoundedEdgePanel()
-        leftLine.cornerRadius = 0
-        leftLine.color = dividerColor
-        leftLine.frame = NSRect(x: 20, y: 11, width: max(0, labelX - 28), height: 1)
-        
-        label.frame = NSRect(x: labelX, y: 4, width: textW, height: max(16, textH + 2))
-        
-        let rightLine = RoundedEdgePanel()
-        rightLine.cornerRadius = 0
-        rightLine.color = dividerColor
-        rightLine.frame = NSRect(x: labelX + textW + 8, y: 11, width: max(0, width - (labelX + textW + 28)), height: 1)
-        
-        container.addSubview(leftLine)
-        container.addSubview(label)
-        container.addSubview(rightLine)
-        container.frame = NSRect(x: 0, y: 0, width: width, height: 24)
+        label.frame = NSRect(x: 0, y: (pillH - textH) / 2, width: pillW, height: textH)
+        pill.addSubview(label)
+
+        container.addSubview(line)
+        container.addSubview(pill)
+        container.frame = NSRect(x: 0, y: 0, width: width, height: 34)
         return container
     }
     
@@ -3065,7 +3076,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep1)
             NSColor(red: 0.1, green: 0.5, blue: 0.9, alpha: 1.0).setFill()
             NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-            let str = NSAttributedString(string: "GIPHY", attributes: [.font: NSFont.boldSystemFont(ofSize: 20), .foregroundColor: NSColor.white])
+            let str = NSAttributedString(string: "GIPHY", attributes: [.font: MMFont.bold(20), .foregroundColor: NSColor.white])
             str.draw(at: NSPoint(x: (140 - str.size().width) / 2, y: (100 - str.size().height) / 2))
             NSGraphicsContext.restoreGraphicsState()
         }
@@ -3076,7 +3087,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep2)
             NSColor(red: 0.9, green: 0.2, blue: 0.5, alpha: 1.0).setFill()
             NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-            let str2 = NSAttributedString(string: "GIPHY", attributes: [.font: NSFont.boldSystemFont(ofSize: 22), .foregroundColor: NSColor.white])
+            let str2 = NSAttributedString(string: "GIPHY", attributes: [.font: MMFont.bold(22), .foregroundColor: NSColor.white])
             str2.draw(at: NSPoint(x: (140 - str2.size().width) / 2, y: (100 - str2.size().height) / 2))
             NSGraphicsContext.restoreGraphicsState()
         }
@@ -3238,7 +3249,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     }
 
     private func appendEditedIndicator(to attributedString: NSMutableAttributedString, font: NSFont, editDate: Date?) {
-        let editFont = NSFont.systemFont(ofSize: max(10, font.pointSize - 2))
+        let editFont = MMFont.font(ofSize: max(10, font.pointSize - 2))
         let editColor = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
         
         let space = NSAttributedString(string: "  ", attributes: [
@@ -3293,12 +3304,13 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let isEdited = (post.edit_at != nil && post.edit_at! > 0)
         let editDate = isEdited ? Date(timeIntervalSince1970: TimeInterval(post.edit_at!) / 1000.0) : nil
 
-        let bodyFont = NSFont.systemFont(ofSize: 13)
-        let bodyMaxW = max(100, width - 58 - 30)
+        let bodyFont = MMFont.font(ofSize: 14)
+        let bodyMaxW = max(100, width - 79 - 8)
         
         let formattedBody: NSAttributedString
         if hasBodyText {
-            let mutable = NSMutableAttributedString(attributedString: formattedMessage(bodyText, font: bodyFont, color: isSystem ? mutedText : darkText))
+            let bodyColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+            let mutable = NSMutableAttributedString(attributedString: formattedMessage(bodyText, font: bodyFont, color: bodyColor))
             if isEdited {
                 appendEditedIndicator(to: mutable, font: bodyFont, editDate: editDate)
             }
@@ -3329,7 +3341,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
 
         if isConsecutive {
             let hoverTimeLabel = NSTextField(labelWithString: timeStr)
-            let hoverTimeFont = NSFont.systemFont(ofSize: 9.5)
+            let hoverTimeFont = MMFont.font(ofSize: 12.6)
             hoverTimeLabel.font = hoverTimeFont
             hoverTimeLabel.textColor = lightPlaceholder
             hoverTimeLabel.isEditable = false
@@ -3341,7 +3353,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
 
             var contentY: CGFloat = 2
             if hasDisplayableText {
-                let bodyView = NSTextView(frame: NSRect(x: 58, y: contentY, width: bodyMaxW, height: bodyH))
+                let bodyView = NSTextView(frame: NSRect(x: 79, y: contentY, width: bodyMaxW, height: bodyH))
                 bodyView.isEditable = false
                 bodyView.isSelectable = true
                 bodyView.drawsBackground = false
@@ -3363,7 +3375,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
 
             for gifURL in gifURLs {
                 let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
-                giphyView.frame.origin = CGPoint(x: 58, y: contentY)
+                giphyView.frame.origin = CGPoint(x: 79, y: contentY)
                 row.addSubview(giphyView)
                 contentY += gifH + 6
             }
@@ -3396,24 +3408,48 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                          (userObj?.roles?.lowercased().contains("bot") ?? false) ||
                          (userObj?.is_bot ?? false))
 
+        // Post header/body metrics mirror the web client:
+        // 16pt top padding, 32pt avatar at 37pt, text column at 79pt, 14pt bottom padding.
+        let topPad: CGFloat = 16
+        let bottomPad: CGFloat = 14
+        let headerH: CGFloat = 20
+        let avatarSize: CGFloat = 32
+        let contentX: CGFloat = 79
+
+        // GIF attachments are created first so the row height is known before layout.
+        var gifViews: [(NSView, CGFloat)] = []
+        for gifURL in gifURLs {
+            let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
+            gifViews.append((giphyView, gifH))
+        }
+
+        var stackHeight: CGFloat = 0
+        if hasDisplayableText { stackHeight += bodyH + 3 }
+        for (_, gifH) in gifViews { stackHeight += gifH + 6 }
+
+        let totalRowH = topPad + headerH + stackHeight + bottomPad
+        row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
+        // Rows use a flipped (top-down) coordinate system.
+        let headerTopY = topPad
+
         // Avatar circle
         let avatarCircle = RoundedEdgePanel()
-        avatarCircle.frame = NSRect(x: 20, y: 8, width: 28, height: 28)
-        avatarCircle.cornerRadius = 14
-        
+        avatarCircle.cornerRadius = avatarSize / 2
+        avatarCircle.frame = NSRect(x: 37, y: topPad, width: avatarSize, height: avatarSize)
+
         let cachedAvatar = userAvatarsById[post.user_id] ?? (isBotUser ? userAvatarsById["system-bot"] : nil)
         if !post.user_id.isEmpty {
             fetchAvatarIfNeeded(for: post.user_id)
         } else if isBotUser {
             fetchAvatarForUsernameIfNeeded("system-bot")
         }
-        
+
         if let userAvatar = cachedAvatar {
             avatarCircle.color = .clear
             let avatarImgView = NSImageView()
             avatarImgView.image = userAvatar
             avatarImgView.imageScaling = .scaleProportionallyUpOrDown
-            avatarImgView.frame = NSRect(x: 0, y: 0, width: 28, height: 28)
+            avatarImgView.frame = NSRect(x: 0, y: 0, width: avatarSize, height: avatarSize)
             avatarCircle.addSubview(avatarImgView)
         } else if isSystem {
             avatarCircle.color = .white
@@ -3422,7 +3458,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 sysAvatarIcon.image = compass
                 sysAvatarIcon.contentTintColor = darkText
             }
-            sysAvatarIcon.frame = NSRect(x: 3, y: 3, width: 22, height: 22)
+            sysAvatarIcon.frame = NSRect(x: 3, y: 3, width: avatarSize - 6, height: avatarSize - 6)
             avatarCircle.addSubview(sysAvatarIcon)
         } else {
             let palette: [NSColor] = [
@@ -3435,58 +3471,42 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             ]
             let hashVal = abs(authorName.hashValue)
             avatarCircle.color = palette[hashVal % palette.count]
-            
+
             let initial = authorName.first.map { String($0).uppercased() } ?? "U"
             let initialLabel = NSTextField(labelWithString: initial)
-            initialLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+            initialLabel.font = MMFont.font(ofSize: 14, weight: .semibold)
             initialLabel.textColor = .white
             initialLabel.alignment = .center
             initialLabel.isEditable = false
             initialLabel.isSelectable = false
-            initialLabel.frame = NSRect(x: 0, y: 5, width: 28, height: 18)
+            initialLabel.frame = NSRect(x: 0, y: (avatarSize - 20) / 2, width: avatarSize, height: 20)
             avatarCircle.addSubview(initialLabel)
         }
         row.addSubview(avatarCircle)
-        
+
         let isCurrentUser = (post.user_id == currentUser?.id) || (!authorName.isEmpty && authorName == currentUser?.username) || (post.user_id == "usr" || post.user_id == "sample_usr")
-        if !isSystem && !isBotUser {
-            let usrDot = RoundedEdgePanel()
-            if isCurrentUser {
-                usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_currentUser")
-            } else {
-                usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_\(post.user_id)")
-            }
-            usrDot.frame = NSRect(x: 38, y: 26, width: 10, height: 10)
-            usrDot.cornerRadius = 5
-            let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "online")
-            usrDot.color = statusColor(for: stat)
-            usrDot.borderWidth = 1.5
-            usrDot.borderColor = .white
-            row.addSubview(usrDot)
-            updateStatusCheck(in: usrDot, status: stat)
-        }
-        
+
         // Author label
         let authorLabel = NSTextField(labelWithString: authorName)
-        let authorFont = NSFont.systemFont(ofSize: 13, weight: .bold)
+        let authorFont = MMFont.font(ofSize: 14, weight: .semibold)
         authorLabel.font = authorFont
         authorLabel.textColor = darkText
         authorLabel.isEditable = false
         authorLabel.isSelectable = false
         let authorSize = (authorName as NSString).size(withAttributes: [.font: authorFont])
         let authorW = ceil(authorSize.width) + 4
-        let authorH = max(17, ceil(authorSize.height))
-        authorLabel.frame = NSRect(x: 58, y: 8, width: authorW, height: authorH)
+        let authorH = max(20, ceil(authorSize.height))
+        authorLabel.frame = NSRect(x: contentX, y: headerTopY + (headerH - authorH) / 2, width: authorW, height: authorH)
         row.addSubview(authorLabel)
-        
-        var headerRightX = authorLabel.frame.maxX + 8
+
+        var headerRightX = contentX + authorW + 8
         if isBotUser {
             let botBadge = createBotBadge()
-            botBadge.frame = NSRect(x: authorLabel.frame.maxX + 4, y: 9, width: 32, height: 16)
+            botBadge.frame = NSRect(x: contentX + authorW + 4, y: headerTopY + (headerH - 16) / 2, width: 32, height: 16)
             row.addSubview(botBadge)
             headerRightX = botBadge.frame.maxX + 8
         }
-        
+
         // Status prompt pill if current user
         if isCurrentUser && !isSystem {
             let statusPromptPill = RoundedEdgePanel()
@@ -3498,7 +3518,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 statusPromptIcon.contentTintColor = mutedText
             }
             let statusPromptLabel = NSTextField(labelWithString: "Update your status")
-            statusPromptLabel.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+            statusPromptLabel.font = MMFont.font(ofSize: 10, weight: .medium)
             statusPromptLabel.textColor = mutedText
             statusPromptLabel.isEditable = false
             statusPromptLabel.isSelectable = false
@@ -3510,7 +3530,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             let iconSpacing: CGFloat = 4
             let pillW = pillPadH + iconSize + iconSpacing + promptTextW + pillPadH
             let pillH = max(18, promptTextH + 4)
-            statusPromptPill.frame = NSRect(x: headerRightX, y: 7, width: pillW, height: pillH)
+            statusPromptPill.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - pillH) / 2, width: pillW, height: pillH)
             statusPromptIcon.frame = NSRect(x: pillPadH, y: (pillH - iconSize) / 2, width: iconSize, height: iconSize)
             statusPromptLabel.frame = NSRect(x: pillPadH + iconSize + iconSpacing, y: (pillH - promptTextH) / 2, width: promptTextW, height: promptTextH)
             statusPromptPill.addSubview(statusPromptIcon)
@@ -3525,22 +3545,24 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             row.addSubview(statusPromptPill)
             headerRightX = statusPromptPill.frame.maxX + 8
         }
-        
+
         // Timestamp label
         let timeLabel = NSTextField(labelWithString: timeStr)
-        let timeFont = NSFont.systemFont(ofSize: 10.5)
+        let timeFont = MMFont.font(ofSize: 12.6)
         timeLabel.font = timeFont
-        timeLabel.textColor = lightPlaceholder
+        timeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
         timeLabel.isEditable = false
         timeLabel.isSelectable = false
         let timeSize = (timeStr as NSString).size(withAttributes: [.font: timeFont])
         let timeW = ceil(timeSize.width) + 4
-        timeLabel.frame = NSRect(x: headerRightX, y: 10, width: timeW, height: max(15, ceil(timeSize.height)))
+        let timeH = max(17, ceil(timeSize.height))
+        timeLabel.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - timeH) / 2, width: timeW, height: timeH)
         row.addSubview(timeLabel)
-        
-        var contentY: CGFloat = 28
+
+        // Body + GIFs stacked below the header.
+        var stackTop = headerTopY + headerH
         if hasDisplayableText {
-            let bodyView = NSTextView(frame: NSRect(x: 58, y: contentY, width: bodyMaxW, height: bodyH))
+            let bodyView = NSTextView(frame: NSRect(x: contentX, y: stackTop, width: bodyMaxW, height: bodyH))
             bodyView.isEditable = false
             bodyView.isSelectable = true
             bodyView.drawsBackground = false
@@ -3551,24 +3573,38 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             bodyView.isVerticallyResizable = false
             bodyView.delegate = self
             bodyView.linkTextAttributes = [
-                .foregroundColor: NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+                .foregroundColor: NSColor(red: 56 / 255, green: 111 / 255, blue: 229 / 255, alpha: 1.0),
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
                 .cursor: NSCursor.pointingHand
             ]
             bodyView.textStorage?.setAttributedString(formattedBody)
             row.addSubview(bodyView)
-            contentY += bodyH + 6
+            stackTop += bodyH + 3
         }
 
-        for gifURL in gifURLs {
-            let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
-            giphyView.frame.origin = CGPoint(x: 58, y: contentY)
+        for (giphyView, gifH) in gifViews {
+            giphyView.frame.origin = CGPoint(x: contentX, y: stackTop)
             row.addSubview(giphyView)
-            contentY += gifH + 6
+            stackTop += gifH + 6
         }
 
-        let totalRowH = max(48, contentY + 2)
-        row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
+        if !isSystem && !isBotUser {
+            let usrDot = RoundedEdgePanel()
+            if isCurrentUser {
+                usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_currentUser")
+            } else {
+                usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_\(post.user_id)")
+            }
+            let dotSize: CGFloat = 12
+            let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "online")
+            usrDot.frame = NSRect(x: 57, y: topPad + avatarSize - dotSize, width: dotSize, height: dotSize)
+            usrDot.cornerRadius = dotSize / 2
+            usrDot.color = statusColor(for: stat)
+            usrDot.borderWidth = 1.5
+            usrDot.borderColor = .white
+            row.addSubview(usrDot)
+            updateStatusCheck(in: usrDot, status: stat)
+        }
 
         row.onHoverChanged = { [weak row] isHovered in
             row?.color = isHovered ? msgHoverBg : .clear
@@ -3729,7 +3765,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         badge.cornerRadius = 4
         badge.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
         let label = NSTextField(labelWithString: "BOT")
-        label.font = NSFont.systemFont(ofSize: 9.5, weight: .bold)
+        label.font = MMFont.font(ofSize: 9.5, weight: .bold)
         label.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
         label.alignment = .center
         label.isEditable = false
@@ -3891,20 +3927,20 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     private func layoutRightChatPanel() {
         let chatW = chatPanel.bounds.width
         let chatH = chatPanel.bounds.height
-        let headerH: CGFloat = 48
+        let headerH: CGFloat = 56
         let headerY = chatH - headerH
         
         chatTimelineContainer.frame = NSRect(x: 0, y: 0, width: chatW, height: headerY)
         
-        // 1. Channel Header Bar
-        channelHeaderBorder.frame = NSRect(x: 0, y: headerY, width: chatW, height: 1)
-        channelStarButton.frame = NSRect(x: 16, y: headerY + 12, width: 24, height: 24)
+        // 1. Channel Header Bar (web: 56pt tall, 12pt padding, 12pt top corners)
+        channelHeaderBorder.isHidden = true
+        channelStarButton.frame = NSRect(x: 14, y: headerY + 16, width: 24, height: 24)
         channelStarIconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
         
         let isBot = isCurrentChannelBot()
         channelHeaderBotBadge.isHidden = !isBot
         
-        let titleFont = channelTitleLabel.font ?? NSFont.systemFont(ofSize: 14, weight: .bold)
+        let titleFont = channelTitleLabel.font ?? MMFont.font(ofSize: 14, weight: .bold)
         let titleStr = channelTitleLabel.stringValue.isEmpty ? "Town Square" : channelTitleLabel.stringValue
         let titleSize = (titleStr as NSString).size(withAttributes: [.font: titleFont])
         let titleTextW = min(max(ceil(titleSize.width) + 4, 40), max(chatW - 240, 100))
@@ -3913,76 +3949,79 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let botBadgeW: CGFloat = isBot ? 32 : 0
         let botBadgeSpacing: CGFloat = isBot ? 6 : 0
         let titleBtnW = titleTextW + botBadgeSpacing + botBadgeW + 28
-        let titleBtnH: CGFloat = max(28, titleTextH + 8)
-        channelTitleButton.frame = NSRect(x: 42, y: headerY + (headerH - titleBtnH) / 2, width: titleBtnW, height: titleBtnH)
-        channelTitleLabel.frame = NSRect(x: 8, y: (titleBtnH - titleTextH) / 2, width: titleTextW, height: titleTextH)
+        let titleBtnH: CGFloat = 24
+        channelTitleButton.frame = NSRect(x: 40, y: headerY + (headerH - titleBtnH) / 2, width: titleBtnW, height: titleBtnH)
+        channelTitleLabel.frame = NSRect(x: 4, y: (titleBtnH - titleTextH) / 2, width: titleTextW, height: titleTextH)
         if isBot {
-            channelHeaderBotBadge.frame = NSRect(x: 8 + titleTextW + 4, y: (titleBtnH - 16) / 2, width: 32, height: 16)
+            channelHeaderBotBadge.frame = NSRect(x: 4 + titleTextW + 4, y: (titleBtnH - 16) / 2, width: 32, height: 16)
             channelHeaderBotBadgeLabel.frame = NSRect(x: 0, y: 1, width: 32, height: 14)
         }
-        channelTitleChevron.frame = NSRect(x: 8 + titleTextW + 4 + (isBot ? (botBadgeW + botBadgeSpacing) : 0), y: (titleBtnH - 10) / 2, width: 10, height: 10)
+        channelTitleChevron.frame = NSRect(x: 4 + titleTextW + 4 + (isBot ? (botBadgeW + botBadgeSpacing) : 0), y: (titleBtnH - 10) / 2, width: 10, height: 10)
         
-        let membersX = channelTitleButton.frame.maxX + 8
-        let countFont = channelMembersCountLabel.font ?? NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        let membersX = channelTitleButton.frame.maxX + 2
+        let countFont = channelMembersCountLabel.font ?? MMFont.font(ofSize: 12, weight: .semibold)
         let countStr = channelMembersCountLabel.stringValue.isEmpty ? "1" : channelMembersCountLabel.stringValue
         let countSize = (countStr as NSString).size(withAttributes: [.font: countFont])
         let countTextW = ceil(countSize.width) + 4
         let countTextH = ceil(countSize.height)
-        let countBtnW = 6 + 13 + 4 + countTextW + 6
+        let countBtnW = 6 + 12 + 4 + countTextW + 6
         let countBtnH: CGFloat = 24
         channelMembersButton.frame = NSRect(x: membersX, y: headerY + (headerH - countBtnH) / 2, width: max(34, countBtnW), height: countBtnH)
-        channelMembersIconView.frame = NSRect(x: 6, y: (countBtnH - 13) / 2, width: 13, height: 13)
-        channelMembersCountLabel.frame = NSRect(x: 23, y: (countBtnH - countTextH) / 2, width: countTextW, height: countTextH)
+        channelMembersIconView.frame = NSRect(x: 6, y: (countBtnH - 12) / 2, width: 12, height: 12)
+        channelMembersCountLabel.frame = NSRect(x: 22, y: (countBtnH - countTextH) / 2, width: countTextW, height: countTextH)
         
-        channelPinsButton.frame = NSRect(x: channelMembersButton.frame.maxX + 8, y: headerY + 12, width: 24, height: 24)
+        channelPinsButton.frame = NSRect(x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: 24, height: 24)
         channelPinsIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
         
-        channelInfoButton.frame = NSRect(x: chatW - 42, y: headerY + 10, width: 28, height: 28)
-        channelInfoIconView.frame = NSRect(x: 5, y: 5, width: 18, height: 18)
+        // Web: 32pt icon buttons at the trailing edge, 4pt apart, 12pt from the right.
+        channelInfoButton.frame = NSRect(x: chatW - 44, y: headerY + 12, width: 32, height: 32)
+        channelInfoIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
         
-        channelSidebarButton.frame = NSRect(x: chatW - 74, y: headerY + 10, width: 28, height: 28)
-        channelSidebarIconView.frame = NSRect(x: 5, y: 5, width: 18, height: 18)
+        channelSidebarButton.frame = NSRect(x: chatW - 80, y: headerY + 12, width: 32, height: 32)
+        channelSidebarIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
         
-        // 2. Composer at bottom (collapsed to a single row by default, expanded via "Aa")
-        let composerW = max(chatW - 40, 200)
-        let composerH: CGFloat = isComposerToolbarVisible ? 86 : 62
-        let composerTop = 24 + composerH + 4
-        chatEntryPanel.frame = NSRect(x: 20, y: 24, width: composerW, height: composerH)
+        // 2. Composer at bottom (web: 2pt border, 4pt radius, 50pt editor + 24pt footer)
+        let composerW = max(chatW - 48, 200)
+        let composerH: CGFloat = isComposerToolbarVisible ? 90 : 50
+        let composerBottom: CGFloat = 24
+        chatEntryPanel.frame = NSRect(x: 24, y: composerBottom, width: composerW, height: composerH)
         if isComposerToolbarVisible {
-            entryView.frame = NSRect(x: 12, y: 44, width: composerW - 24, height: 32)
-            composerPlaceholderLabel.frame = NSRect(x: 16, y: 50, width: composerW - 32, height: 20)
+            entryView.frame = NSRect(x: 14, y: 40, width: composerW - 28, height: 36)
+            composerPlaceholderLabel.frame = NSRect(x: 16, y: 48, width: composerW - 32, height: 20)
         } else {
-            entryView.frame = NSRect(x: 12, y: 15, width: composerW - 196, height: 32)
-            composerPlaceholderLabel.frame = NSRect(x: 16, y: 21, width: composerW - 196, height: 20)
+            entryView.frame = NSRect(x: 14, y: (composerH - 22) / 2, width: composerW - 234, height: 22)
+            composerPlaceholderLabel.frame = NSRect(x: 16, y: (composerH - 20) / 2, width: composerW - 234, height: 20)
         }
-        composerHelpLabel.frame = NSRect(x: chatW - 60, y: 6, width: 40, height: 14)
+        composerHelpLabel.frame = NSRect(x: chatW - 24 - 60, y: 3, width: 60, height: 18)
+        composerHelpLabel.alignment = .right
         
-        let toolY: CGFloat = isComposerToolbarVisible ? 8 : (composerH - 26) / 2
+        let toolY: CGFloat = isComposerToolbarVisible ? 8 : (composerH - 32) / 2
         
-        var btnX: CGFloat = 10
+        var btnX: CGFloat = 8
         for (i, btn) in composerLeftButtons.enumerated() {
             if i == 3 {
-                composerLeftSeparator.frame = NSRect(x: btnX + 3, y: toolY + 5, width: 1, height: 16)
+                composerLeftSeparator.frame = NSRect(x: btnX + 3, y: toolY + 4, width: 1, height: 24)
                 btnX += 9
             }
-            btn.frame = NSRect(x: btnX, y: toolY, width: 26, height: 26)
-            btnX += 28
+            btn.frame = NSRect(x: btnX, y: toolY, width: 32, height: 32)
+            btnX += 34
         }
         
-        composerSendButton.frame = NSRect(x: composerW - 42, y: toolY, width: 32, height: 26)
-        composerEmojiButton.frame = NSRect(x: composerW - 72, y: toolY, width: 26, height: 26)
-        composerAttachButton.frame = NSRect(x: composerW - 100, y: toolY, width: 26, height: 26)
-        composerRightSeparator.frame = NSRect(x: composerW - 108, y: toolY + 5, width: 1, height: 16)
+        composerSendButton.frame = NSRect(x: composerW - 9 - 48, y: toolY, width: 48, height: 32)
+        composerEmojiButton.frame = NSRect(x: composerSendButton.frame.minX - 4 - 32, y: toolY, width: 32, height: 32)
+        composerAttachButton.frame = NSRect(x: composerEmojiButton.frame.minX - 4 - 32, y: toolY, width: 32, height: 32)
+        composerRightSeparator.frame = NSRect(x: composerAttachButton.frame.minX - 6, y: toolY + 4, width: 1, height: 24)
         
         let aaText = "Aa"
-        let aaFont = composerAaButton.subviews.compactMap { ($0 as? NSTextField)?.font }.first ?? NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        let aaFont = composerAaButton.subviews.compactMap { ($0 as? NSTextField)?.font }.first ?? MMFont.font(ofSize: 14, weight: .semibold)
         let aaSize = (aaText as NSString).size(withAttributes: [.font: aaFont])
-        let aaBtnW = ceil(aaSize.width) + 24
-        let aaX = composerW - (aaBtnW + 112)
-        composerAaButton.frame = NSRect(x: aaX, y: toolY, width: aaBtnW, height: 26)
-        composerGifButton.frame = NSRect(x: aaX - 34, y: toolY, width: 30, height: 26)
+        let aaBtnW = max(44, ceil(aaSize.width) + 26)
+        let aaX = composerRightSeparator.frame.minX - 4 - aaBtnW
+        composerAaButton.frame = NSRect(x: aaX, y: toolY, width: aaBtnW, height: 32)
+        composerGifButton.frame = NSRect(x: aaX - 36, y: toolY, width: 32, height: 32)
         
         // 3. Scrollable Timeline
+        let composerTop = composerBottom + composerH
         let scrollH = max(0, headerY - composerTop)
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
         let wasNearBottom = (timelineScrollView.contentView.bounds.maxY >= (timelineDocView.frame.height - 40))
@@ -4015,67 +4054,78 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let topBarHeight: CGFloat = 44
         let topBarY = size.height - topBarHeight
         
-        mainPanel.frame = NSRect(x: 0, y: 0, width: size.width, height: topBarY)
-        sidebarTopBorder.frame = NSRect(x: 0, y: topBarY - 1, width: 206, height: 1)
-        chatPanel.frame = NSRect(x: 206, y: 0, width: size.width - 206, height: topBarY)
+        let gutter: CGFloat = 4
+        // Web: sidebar occupies 264pt starting 5pt from the window edge, then the
+        // white channel card starts at 269pt; both share a 4pt gutter.
+        let chatPanelX: CGFloat = 269
+        mainPanel.frame = NSRect(x: gutter, y: gutter, width: size.width - gutter * 2, height: topBarY - gutter)
+        mainPanel.cornerRadius = 12
+        sidebarTopBorder.frame = NSRect(x: 0, y: mainPanel.bounds.height - 1, width: size.width - gutter * 2, height: 1)
+        sidebarTopBorder.isHidden = true
+        chatPanel.frame = NSRect(x: chatPanelX, y: gutter, width: size.width - chatPanelX - gutter, height: topBarY - gutter)
+        chatPanel.cornerRadius = 12
         
-        treeView.frame = NSRect(x: 0, y: 0, width: 206, height: topBarY - 1)
-        layoutLeftSidebar(topBarY: topBarY)
+        treeView.frame = NSRect(x: 0, y: 0, width: 264, height: mainPanel.bounds.height)
+        layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         layoutRightChatPanel()
 
         // Left: Product switcher container (grid icon, Mattermost logo, TEAM EDITION badge)
         let badgeText = editionBadgeLabel.stringValue.isEmpty ? "TEAM EDITION" : editionBadgeLabel.stringValue
-        let badgeFont = editionBadgeLabel.font ?? NSFont.systemFont(ofSize: 7.5, weight: .bold)
+        let badgeFont = editionBadgeLabel.font ?? MMFont.font(ofSize: 10, weight: .semibold)
         let badgeSize = (badgeText as NSString).size(withAttributes: [.font: badgeFont])
-        let badgePadH: CGFloat = 7
+        let badgePadH: CGFloat = 6
         let badgeW = ceil(badgeSize.width) + (badgePadH * 2)
-        let badgeH: CGFloat = 16
-        let labelH: CGFloat = 13
+        let badgeH: CGFloat = 20
+        let labelH: CGFloat = 14
         
-        boxImage.frame = NSRect(x: 6, y: 5, width: 18, height: 18)
-        logo.frame = NSRect(x: 28, y: 6.5, width: 92, height: 15)
+        // Web: logo icon 20x20 at 5,3; wordmark 116x20 at 33,3 inside a 26pt tall button.
+        boxImage.frame = NSRect(x: 5, y: 3, width: 20, height: 20)
+        logo.frame = NSRect(x: 33, y: 3, width: 116, height: 20)
         
-        let badgeX = logo.frame.maxX + 6
-        let badgeY = (28 - badgeH) / 2
+        let badgeX = logo.frame.maxX + 12
+        let badgeY: CGFloat = 3
         editionBadgePanel.frame = NSRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
         editionBadgeLabel.frame = NSRect(x: 0, y: (badgeH - labelH) / 2, width: badgeW, height: labelH)
         
-        let switcherW = badgeX + badgeW + 8
-        productSwitcherPanel.frame = NSRect(x: 8, y: topBarY + 6, width: switcherW, height: 28)
-        productSwitcherMenu.frame = NSRect(x: 12, y: topBarY - 302, width: 220, height: 300)
+        let switcherW = badgeX + badgeW + 3
+        productSwitcherPanel.frame = NSRect(x: 4, y: topBarY + 9, width: switcherW, height: 26)
+        productSwitcherMenu.frame = NSRect(x: 8, y: topBarY - 302, width: 220, height: 300)
         
         // Center: Search bar + Help (?) button + Search Popover
-        let searchWidth = min(max(size.width * 0.34, 240), 440)
+        // Web caps the search field at 432pt and centers it in the header.
+        let rightClusterW: CGFloat = 152
+        let searchWidth = max(180, min(min(432, size.width * 0.30), size.width - switcherW - rightClusterW - 24))
         let minSearchX: CGFloat = productSwitcherPanel.frame.maxX + 12
         let idealSearchX = (size.width - searchWidth) / 2
         let searchX = max(minSearchX, idealSearchX)
-        searchPanel.frame = NSRect(x: searchX, y: topBarY + 7, width: searchWidth, height: 26)
-        searchIconView.frame = NSRect(x: 8, y: 5, width: 16, height: 16)
-        searchLabel.frame = NSRect(x: 28, y: 4, width: searchWidth - 36, height: 18)
+        searchPanel.frame = NSRect(x: searchX, y: topBarY + 8, width: searchWidth, height: 28)
+        searchIconView.frame = NSRect(x: 4, y: 5, width: 18, height: 18)
+        searchLabel.frame = NSRect(x: 29, y: 4, width: searchWidth - 37, height: 20)
         
-        helpPanel.frame = NSRect(x: searchX + searchWidth + 4, y: topBarY + 6, width: 28, height: 28)
-        helpIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
+        helpPanel.frame = NSRect(x: searchX + searchWidth + 8, y: topBarY + 8, width: 28, height: 28)
+        helpIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         helpMenu.frame = NSRect(x: helpPanel.frame.minX, y: topBarY - 178, width: 204, height: 176)
         
         searchPopoverPanel.frame = NSRect(x: searchX, y: topBarY - 124, width: 400, height: 122)
         
-        // Right: Mentions (@), Saved Posts, Settings, User Avatar + Status Dot
-        avatarButtonPanel.frame = NSRect(x: size.width - 41, y: topBarY + 5, width: 30, height: 30)
-        avatarPanel.frame = NSRect(x: 2, y: 2, width: 26, height: 26)
-        avatarLabel.frame = NSRect(x: 0, y: 5, width: 26, height: 16)
-        statusDotPanel.frame = NSRect(x: 17, y: -2, width: 17, height: 17)
+        // Right: Mentions (@), Saved Posts, Settings, User Avatar + Status Dot.
+        // Web: 28pt buttons with 8pt gaps ending 4pt from the window edge, 40x32 avatar button.
+        avatarButtonPanel.frame = NSRect(x: size.width - 44, y: topBarY + 6, width: 40, height: 32)
+        avatarPanel.frame = NSRect(x: 8, y: 4, width: 24, height: 24)
+        avatarLabel.frame = NSRect(x: 0, y: 5, width: 24, height: 14)
+        statusDotPanel.frame = NSRect(x: 21, y: 1, width: 16, height: 16)
         updateStatusCheck(in: statusDotPanel, status: currentUserStatus)
         statusMenu.frame = NSRect(x: size.width - 259, y: topBarY - 356, width: 248, height: 354)
         dndSubMenu.frame = NSRect(x: statusMenu.frame.minX - 210, y: statusMenu.frame.minY - 50, width: 212, height: 232)
         
-        settingsPanel.frame = NSRect(x: size.width - 74, y: topBarY + 6, width: 28, height: 28)
-        settingsIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
+        settingsPanel.frame = NSRect(x: size.width - 80, y: topBarY + 8, width: 28, height: 28)
+        settingsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         
-        savedPostsPanel.frame = NSRect(x: size.width - 106, y: topBarY + 6, width: 28, height: 28)
-        savedPostsIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
+        savedPostsPanel.frame = NSRect(x: size.width - 116, y: topBarY + 8, width: 28, height: 28)
+        savedPostsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         
-        mentionsPanel.frame = NSRect(x: size.width - 138, y: topBarY + 6, width: 28, height: 28)
-        mentionsIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
+        mentionsPanel.frame = NSRect(x: size.width - 152, y: topBarY + 8, width: 28, height: 28)
+        mentionsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
     }
     
     // MARK: - Live REST API & WebSocket Integration

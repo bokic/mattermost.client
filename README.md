@@ -15,15 +15,16 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 
 ### 2. Left Channel Sidebar (`#1E325C`)
 - **Team Header**: Dropdown team selector header (*None ⌄*) with quick-create (`+`) action.
-- **Sidebar Navigation**: Channel filter button, rounded `Find channel` search pill, and `Threads` row.
+- **Sidebar Navigation**: 264 pt sidebar laid out to the web client's metrics — 32 pt rows, 19 pt leading padding, filter button plus `Find channel` pill, and `Threads` row.
 - **Collapsible Categories**: Custom categories (e.g. `MOJ_CAT`), `CHANNELS`, and `DIRECT MESSAGES`.
-- **Active Channel Highlight**: Left accent bar, translucent background highlight, and bold channel title.
+- **Active Channel Highlight**: Blue 4 pt accent pill (`#5D89EA`) at the row's leading edge over an 8% white highlight, matching the web client.
 
 ### 3. Right Chat Panel (`#FFFFFF`)
 - **Channel Header**: Favorite star toggle (`☆`), channel title dropdown, member count badge, and pinned posts indicator.
 - **Welcome Hero**: Channel introduction illustration, welcome title, description, and workspace invitation action.
-- **Message Timeline**: Centered date separators (*Today*, *Yesterday*, weekday, or full date) with avatar-attributed message rows, presence checks, sender status badges, timestamps, and message bodies.
-- **Message Composer**: Compact single-row composer matching the web client, with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), plus *GIF*, *Attachment*, *Emoji picker*, and *Send* controls.
+- **Message Timeline**: White date-separator pills (13 pt bold over a 1 pt rule) for *Today*, *Yesterday*, weekday, or full date, with 32 pt avatars, 14 pt semibold authors, and 12.6 pt timestamps measured from the web DOM.
+- **Message Composer**: Single-row composer matching the web client (2 pt translucent border, 4 pt radius, 50 pt editor plus a 24 pt `Help` footer), with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), plus *GIF*, *Attachment*, *Emoji picker*, and a 48×32 *Send* button.
+- **Typography**: Bundles Open Sans (SIL OFL 1.1, see `mattermost.client/OpenSans-OFL.txt`) and registers it at launch so text metrics match the web client instead of falling back to the system font.
 
 ### 4. Live REST API v4 & Real-Time WebSockets
 - **Team & Channel Sync**: `GET /api/v4/users/me/teams`, `GET /api/v4/users/me/teams/{team_id}/channels`, and `GET /api/v4/users/me/teams/{team_id}/channels/categories`.

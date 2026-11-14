@@ -9,6 +9,7 @@ import Cocoa
 
 
 let app = NSApplication.shared
+MMFont.registerBundledFonts()
 let delegate = AppDelegate()
 app.delegate = delegate
 
