@@ -18,6 +18,10 @@ class RoundedEdgePanel: NSView {
 
     var borderWidth: CGFloat = 0
 
+    /// Overrides subview clipping. When nil, shadows are allowed to draw outside the bounds
+    /// while everything else is clipped to the rounded rectangle.
+    var clipContentToBounds: Bool?
+
     // Optional shadow support
     var shadowColor: NSColor?
 
@@ -125,7 +129,7 @@ class RoundedEdgePanel: NSView {
         let hasShadow = (shadowColor != nil && shadowOpacity > 0 && shadowRadius > 0)
         baseLayer.backgroundColor = color.cgColor
         baseLayer.cornerRadius = cornerRadius
-        baseLayer.masksToBounds = !hasShadow // allow shadow to render outside bounds when active
+        baseLayer.masksToBounds = clipContentToBounds ?? !hasShadow // allow shadow to render outside bounds when active
 
         if let borderColor = borderColor, borderWidth > 0 {
             baseLayer.borderColor = borderColor.cgColor

@@ -398,6 +398,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         // User avatar circle + online status indicator dot
         avatarButtonPanel.color = .clear
         avatarButtonPanel.cornerRadius = 15
+        // The status badge intentionally overhangs the avatar's bottom-right corner,
+        // so let it render outside the rounded hover container.
+        avatarButtonPanel.clipContentToBounds = false
         
         let initial = (UserDefaults.standard.string(forKey: "username")?.first).map { String($0).uppercased() } ?? "B"
         avatarLabel.stringValue = initial
@@ -414,9 +417,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         avatarImageView.isHidden = true
         avatarPanel.addSubview(avatarImageView)
         
-        statusDotPanel.color = NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0)
-        statusDotPanel.cornerRadius = 4.5
-        statusDotPanel.borderWidth = 1.5
+        statusDotPanel.color = statusColor(for: currentUserStatus)
+        statusDotPanel.cornerRadius = 8.5
+        statusDotPanel.borderWidth = 2
         statusDotPanel.borderColor = NSColor(red: 25 / 255, green: 42 / 255, blue: 77 / 255, alpha: 1.0)
         
         avatarButtonPanel.addSubview(avatarPanel)
@@ -604,20 +607,32 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         }
     }
     
-    /// Mattermost renders the "online" presence dot as a green circle with a white check mark.
+    /// Draws the Mattermost presence glyph inside a status dot:
+    /// online = check, away = clock, do-not-disturb = minus, offline = no glyph.
     private func updateStatusCheck(in dot: RoundedEdgePanel, status: String) {
         dot.subviews
             .filter { $0.identifier?.rawValue == "statusCheck" }
             .forEach { $0.removeFromSuperview() }
-        guard status.lowercased() == "online", dot.bounds.width > 0 else { return }
-        let check = NSImageView(frame: dot.bounds.insetBy(dx: 1.5, dy: 1.5))
-        check.identifier = NSUserInterfaceItemIdentifier("statusCheck")
-        let glyphSize = max(5, dot.bounds.width * 0.64)
-        check.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: glyphSize, weight: .bold))
-        check.contentTintColor = .white
-        check.imageScaling = .scaleProportionallyUpOrDown
-        dot.addSubview(check)
+        guard dot.bounds.width > 0 else { return }
+        
+        let symbolName: String?
+        switch status.lowercased() {
+        case "online": symbolName = "checkmark"
+        case "away": symbolName = "clock"
+        case "dnd": symbolName = "minus"
+        default: symbolName = nil
+        }
+        guard let symbolName = symbolName,
+              let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else { return }
+        
+        let inset = max(2, dot.bounds.width * 0.16)
+        let glyph = NSImageView(frame: dot.bounds.insetBy(dx: inset, dy: inset))
+        glyph.identifier = NSUserInterfaceItemIdentifier("statusCheck")
+        let glyphSize = max(5, dot.bounds.width * 0.58)
+        glyph.image = image.withSymbolConfiguration(.init(pointSize: glyphSize, weight: .bold))
+        glyph.contentTintColor = .white
+        glyph.imageScaling = .scaleProportionallyUpOrDown
+        dot.addSubview(glyph)
     }
     
     private func indexForStatus(_ status: String) -> Int {
@@ -4048,7 +4063,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         avatarButtonPanel.frame = NSRect(x: size.width - 41, y: topBarY + 5, width: 30, height: 30)
         avatarPanel.frame = NSRect(x: 2, y: 2, width: 26, height: 26)
         avatarLabel.frame = NSRect(x: 0, y: 5, width: 26, height: 16)
-        statusDotPanel.frame = NSRect(x: 19, y: 1, width: 9, height: 9)
+        statusDotPanel.frame = NSRect(x: 17, y: -2, width: 17, height: 17)
         updateStatusCheck(in: statusDotPanel, status: currentUserStatus)
         statusMenu.frame = NSRect(x: size.width - 259, y: topBarY - 356, width: 248, height: 354)
         dndSubMenu.frame = NSRect(x: statusMenu.frame.minX - 210, y: statusMenu.frame.minY - 50, width: 212, height: 232)
