@@ -35,6 +35,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Status Bar Item**: System menu bar icon with click-to-toggle window visibility.
 - **Dynamic UI Zoom & Scaling**: Native macOS View menu and keyboard shortcuts (`⌘+` / `⌘=` to zoom in, `⌘-` to zoom out, `⌘0` to reset to actual size), plus trackpad pinch-to-zoom and `⌘`+scroll wheel. A stored zoom level always wins; when none is saved the app defers to the OS display scale and renders at actual size. A transient HUD shows the current percentage for two seconds after each change.
 - **Window Frame**: Opens at the web client's viewport (1440×783, clamped to the screen) and remembers the last frame via `NSWindow` autosave.
+- **Unread Badges & Notifications**: Incoming messages for channels you are not looking at bump a blue dot on the menu-bar icon, set the Dock badge, and post a native macOS notification; opening the channel (or returning to the app) clears them.
 - **App Sandbox**: Secure preference storage isolated to the app container without system Keychain permission dialogs on launch.
 
 ---

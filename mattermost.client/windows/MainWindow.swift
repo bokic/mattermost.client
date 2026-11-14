@@ -338,6 +338,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResize), name: NSWindow.didResizeNotification, object: self)
         NotificationCenter.default.addObserver(self, selector: #selector(zoomDidChangeNotification), name: .zoomFactorDidChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
         bindWebServiceAndLoadData()
     }
     
@@ -4462,9 +4463,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         ws.onPostReceived = { [weak self] post, _ in
             guard let self = self else { return }
-            guard post.channel_id == self.activeChannelId else { return }
             Task { @MainActor [weak self] in
-                await self?.fetchAndRenderPosts(channelId: post.channel_id)
+                guard let self = self else { return }
+                if post.channel_id == self.activeChannelId {
+                    await self.fetchAndRenderPosts(channelId: post.channel_id)
+                }
+                self.handleIncomingPost(post)
             }
         }
         
@@ -4640,6 +4644,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
         refreshFavoriteState()
+        (NSApp.delegate as? AppDelegate)?.markChannelRead(ch.id)
         let resolvedTitle = channelDisplayName(for: ch)
         channelTitleLabel.stringValue = resolvedTitle
         heroTitleLabel.stringValue = resolvedTitle
@@ -4702,6 +4707,58 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         Task { @MainActor [weak self] in
             await self?.fetchAndRenderPosts(channelId: post.channel_id)
         }
+    }
+    
+    // MARK: - Unread handling
+    
+    @MainActor
+    private func handleIncomingPost(_ post: MMPost) {
+        let isSystemMessage = post.type?.hasPrefix("system_") ?? false
+        let ws = (NSApp.delegate as? AppDelegate)?.webService
+        let myUserId = currentUser?.id ?? ws?.currentUserId ?? ""
+        let isMine = !myUserId.isEmpty && post.user_id == myUserId
+        guard !isSystemMessage, !isMine else { return }
+        
+        let isVisible = NSApp.isActive && isKeyWindow && post.channel_id == activeChannelId
+        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+        if isVisible {
+            appDelegate.markChannelRead(post.channel_id)
+            return
+        }
+        
+        let channel = channelsById[post.channel_id]
+        let channelName = channel.map { channelDisplayName(for: $0) } ?? ""
+        let author = usersById[post.user_id]?.username ?? "New message"
+        appDelegate.noteIncomingMessage(
+            channelId: post.channel_id,
+            channelName: channelName,
+            author: author,
+            body: notificationExcerpt(from: post.message)
+        )
+    }
+    
+    private func notificationExcerpt(from message: String) -> String {
+        var text = message
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: ">", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.count > 160 {
+            text = String(text.prefix(160)) + "…"
+        }
+        return text.isEmpty ? "New message" : text
+    }
+    
+    /// Opens a channel (used by notification taps).
+    func openChannel(withId channelId: String) {
+        guard let channel = channelsById[channelId] else { return }
+        selectedSidebarItemId = channel.id
+        updateSidebarSelectionAppearance()
+        loadChannelPosts(forSidebarItemId: channel.id)
+    }
+    
+    @objc private func appDidBecomeActive() {
+        guard !activeChannelId.isEmpty else { return }
+        (NSApp.delegate as? AppDelegate)?.markChannelRead(activeChannelId)
     }
     
     /// Enables/disables the send button as the editor content changes.

@@ -91,11 +91,13 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Done when: scrolling to the top loads older pages without jumping, and the timeline keeps scroll
     position.
 
-- [ ] **No read state, unread badges, mentions or notifications** — `L`
-  - Where: no `POST /channels/{id}/view`, no unread counters, no dock badge, no notification banners
-    or sounds; the web "New Messages" divider is absent.
-  - Done when: switching channels marks them read, sidebar rows show unread/mention counts, the dock
-    badge reflects mentions, and a local notification fires for mentions/DMs when unfocused.
+- [ ] **No read state, per-channel unread counts or mentions** — `L`
+  - Progress: menu-bar dot, Dock badge and native notifications now fire for messages in channels you
+    are not looking at, and clear when the channel is opened or the app is activated.
+  - Remaining: `POST /channels/{id}/view`, per-channel/sidebar unread counters, mention counts,
+    sidebar highlighting, and the "New Messages" divider.
+  - Done when: switching channels marks them read, sidebar rows show unread/mention counts, and the
+    dock badge reflects mentions.
 
 - [ ] **Post model cannot represent attachments, reactions, pinned posts, edits or deletes** — `M`
   - Where: `MMPost` (`webservice.swift:118`) only decodes `message` + ids; no `metadata.files`,

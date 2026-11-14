@@ -1,7 +1,8 @@
 import Cocoa
 import os
+import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     var mainWindow: MainWindow!
     var loginWindow: LoginWindow!
     var statusBarItem: NSStatusItem!
@@ -11,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var zoomGestureStartFactor: CGFloat?
     private var zoomGestureMagnification: CGFloat = 0
     private var zoomGestureMonitor: Any?
+    private var unreadCounts: [String: Int] = [:]
+    private var notificationIds: [String: [String]] = [:]
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         DebugLog.log("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
@@ -18,10 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installZoomGestureMonitor()
         
         let statusBar = NSStatusBar.system
-        statusBarItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
+        statusBarItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         let icon = NSImage(named: NSImage.Name("MenuIcon16"))
         icon?.isTemplate = true
         statusBarItem.button?.image = icon
+        statusBarItem.button?.imagePosition = .imageLeft
+        configureNotifications()
         statusBarItem.button?.target = self
         statusBarItem.button?.action = #selector(AppDelegate.statusBarButtonClicked(_:))
         statusBarItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -143,6 +148,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let logger = Logger()
         
         logger.info("called websocketConnected(\(isConnected))")
+    }
+    
+    // MARK: - Unread badges & notifications
+    
+    private func configureNotifications() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                NSLog("Notification authorization failed: \(error.localizedDescription)")
+            } else if !granted {
+                NSLog("Notification authorization was denied")
+            }
+        }
+    }
+    
+    /// Records an unread message for a channel, updates the menu-bar/dock badges
+    /// and posts a macOS notification.
+    func noteIncomingMessage(channelId: String, channelName: String, author: String, body: String) {
+        guard !channelId.isEmpty else { return }
+        unreadCounts[channelId, default: 0] += 1
+        updateUnreadIndicators()
+        postNotification(channelId: channelId, channelName: channelName, author: author, body: body)
+    }
+    
+    /// Clears the unread state (and delivered notifications) for one channel.
+    func markChannelRead(_ channelId: String) {
+        guard unreadCounts.removeValue(forKey: channelId) != nil else { return }
+        if let ids = notificationIds.removeValue(forKey: channelId), !ids.isEmpty {
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+        }
+        updateUnreadIndicators()
+    }
+    
+    var totalUnreadCount: Int {
+        unreadCounts.values.reduce(0, +)
+    }
+    
+    private func updateUnreadIndicators() {
+        let total = totalUnreadCount
+        if total > 0 {
+            statusBarItem.button?.attributedTitle = NSAttributedString(
+                string: " •",
+                attributes: [
+                    .foregroundColor: NSColor.systemBlue,
+                    .font: NSFont.systemFont(ofSize: 14, weight: .bold)
+                ]
+            )
+            statusBarItem.button?.toolTip = "\(total) unread message\(total == 1 ? "" : "s")"
+            NSApp.dockTile.badgeLabel = total > 99 ? "99+" : "\(total)"
+        } else {
+            statusBarItem.button?.attributedTitle = NSAttributedString(string: "")
+            statusBarItem.button?.toolTip = "Mattermost"
+            NSApp.dockTile.badgeLabel = ""
+        }
+    }
+    
+    private func postNotification(channelId: String, channelName: String, author: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = channelName.isEmpty ? "Mattermost" : channelName
+        content.subtitle = author
+        content.body = body
+        content.sound = .default
+        content.threadIdentifier = channelId
+        content.userInfo = ["channelId": channelId]
+        
+        let identifier = UUID().uuidString
+        notificationIds[channelId, default: []].append(identifier)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                NSLog("Failed to post notification: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .list])
+    }
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let channelId = response.notification.request.content.userInfo["channelId"] as? String {
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+                self.mainWindow?.openChannel(withId: channelId)
+            }
+        }
+        completionHandler()
     }
     
     func showMainWindow() {
