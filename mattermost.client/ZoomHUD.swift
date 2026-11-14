@@ -36,19 +36,19 @@ final class ZoomHUD {
         // The window scales its content view by dividing its bounds by the zoom
         // factor, so counter-scale the HUD to keep it the same visual size.
         let counterScale = content.bounds.width / max(content.frame.width, 1)
-        let width = 104 * counterScale
-        let height = 56 * counterScale
+        let width = 96 * counterScale
+        let height = 30 * counterScale
 
         panel.frame = NSRect(
             x: (content.bounds.width - width) / 2,
-            y: content.bounds.height - height - 20 * counterScale,
+            y: content.bounds.height - height - 14 * counterScale,
             width: width,
             height: height
         )
-        panel.cornerRadius = 10 * counterScale
+        panel.cornerRadius = 8 * counterScale
         panel.setNeedsAppearanceUpdate()
 
-        label.font = MMFont.font(ofSize: 20 * counterScale, weight: .semibold)
+        label.font = MMFont.font(ofSize: 15 * counterScale, weight: .semibold)
         label.frame = panel.bounds
         label.stringValue = "\(Int((factor * 100).rounded()))%"
 
