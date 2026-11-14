@@ -24,7 +24,7 @@ class MainWindowDelegate: NSObject, NSOutlineViewDelegate {
     
 }
 
-private class TimelineFlippedView: NSView {
+class TimelineFlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
@@ -116,6 +116,11 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     // Search popover panel
     let searchPopoverPanel = RoundedEdgePanel()
     let searchPopoverInputLabel = NSTextField(labelWithString: "Search messages")
+    let searchResultsPanel = RoundedEdgePanel()
+    let searchResultsScroll = NSScrollView()
+    let searchResultsDoc = TimelineFlippedView()
+    let searchResultsTitle = NSTextField(labelWithString: "Search results")
+    let searchResultsCloseButton = RoundedEdgePanel()
     let messagesTabPanel = RoundedEdgePanel()
     let messagesTabLabel = NSTextField(labelWithString: "Messages")
     let filesTabPanel = RoundedEdgePanel()
@@ -477,6 +482,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         setupProductSwitcherMenu()
         setupSearchPopover()
+        setupSearchResultsPanel()
         setupHelpMenu()
         setupStatusMenu()
     }
@@ -539,6 +545,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         guard isSearchPopoverOpen != open else { return }
         isSearchPopoverOpen = open
         searchPopoverPanel.isHidden = !open
+        if open {
+            makeFirstResponder(searchPopoverInputLabel)
+        }
     }
     
     private func toggleHelpMenu() {
@@ -757,6 +766,152 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         DebugLog.log("updateChatWidgetUserStatus: userId=\(userId), status=\(status), updatedDotsCount=\(updatedCount)")
     }
     
+    // MARK: - Search results
+    
+    private func setupSearchResultsPanel() {
+        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        searchResultsPanel.color = .white
+        searchResultsPanel.cornerRadius = 10
+        searchResultsPanel.borderWidth = 1
+        searchResultsPanel.borderColor = dividerColor
+        searchResultsPanel.shadowColor = .black
+        searchResultsPanel.shadowOpacity = 0.18
+        searchResultsPanel.shadowRadius = 16
+        searchResultsPanel.shadowOffset = CGSize(width: 0, height: -6)
+        searchResultsPanel.isHidden = true
+        
+        searchResultsTitle.font = MMFont.font(ofSize: 13, weight: .semibold)
+        searchResultsTitle.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        searchResultsTitle.isEditable = false
+        searchResultsTitle.isSelectable = false
+        searchResultsPanel.addSubview(searchResultsTitle)
+        
+        searchResultsCloseButton.cornerRadius = 4
+        searchResultsCloseButton.color = .clear
+        let closeIcon = NSImageView()
+        if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close search") {
+            closeIcon.image = img.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+            closeIcon.contentTintColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        }
+        closeIcon.frame = NSRect(x: 5, y: 5, width: 12, height: 12)
+        searchResultsCloseButton.addSubview(closeIcon)
+        searchResultsCloseButton.onClick = { [weak self] in
+            self?.closeSearchResults()
+        }
+        searchResultsPanel.addSubview(searchResultsCloseButton)
+        
+        searchResultsScroll.drawsBackground = false
+        searchResultsScroll.hasVerticalScroller = true
+        searchResultsScroll.autohidesScrollers = true
+        searchResultsScroll.documentView = searchResultsDoc
+        searchResultsPanel.addSubview(searchResultsScroll)
+        
+        contentView?.addSubview(searchResultsPanel)
+    }
+    
+    @objc private func performSearchFromPopover() {
+        let terms = searchPopoverInputLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !terms.isEmpty, let team = activeTeam else { return }
+        setSearchPopoverOpen(false)
+        searchResultsTitle.stringValue = "Searching…"
+        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+        searchResultsDoc.frame = NSRect(x: 0, y: 0, width: searchResultsPanel.bounds.width, height: 1)
+        searchResultsPanel.isHidden = false
+        
+        Task { @MainActor [weak self] in
+            guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            do {
+                let list = try await ws.searchPosts(teamId: team.id, terms: terms)
+                let posts = list.order.compactMap { list.posts[$0] }
+                let missingUserIds = Array(Set(posts.map { $0.user_id }).subtracting(self.usersById.keys))
+                if !missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(missingUserIds) {
+                    for user in users {
+                        self.usersById[user.id] = user
+                    }
+                }
+                self.presentSearchResults(posts, terms: terms)
+            } catch {
+                self.presentSearchResults([], terms: terms)
+            }
+        }
+    }
+    
+    private func presentSearchResults(_ posts: [MMPost], terms: String) {
+        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+        searchResultsTitle.stringValue = posts.isEmpty
+            ? "No results for “\(terms)”"
+            : "\(posts.count) result\(posts.count == 1 ? "" : "s") for “\(terms)”"
+        
+        let width = searchResultsPanel.bounds.width
+        let rowHeight: CGFloat = 54
+        let inset: CGFloat = 8
+        var y: CGFloat = 0
+        for post in posts.prefix(50) {
+            let row = makeSearchResultRow(post, width: width - inset * 2)
+            row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: rowHeight - 4)
+            searchResultsDoc.addSubview(row)
+            y += rowHeight
+        }
+        searchResultsDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+        searchResultsScroll.frame = NSRect(x: 0, y: 0, width: width, height: max(0, searchResultsPanel.bounds.height - 44))
+    }
+    
+    private func makeSearchResultRow(_ post: MMPost, width: CGFloat) -> RoundedEdgePanel {
+        let row = RoundedEdgePanel()
+        row.color = .clear
+        row.cornerRadius = 6
+        
+        let author = usersById[post.user_id]?.username ?? "Unknown"
+        let channelName = channelsById[post.channel_id].map { channelDisplayName(for: $0) } ?? ""
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+        let meta = [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · ")
+        
+        let metaLabel = NSTextField(labelWithString: meta)
+        metaLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+        metaLabel.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        metaLabel.isEditable = false
+        metaLabel.isSelectable = false
+        metaLabel.lineBreakMode = .byTruncatingTail
+        metaLabel.frame = NSRect(x: 12, y: 6, width: width - 24, height: 16)
+        row.addSubview(metaLabel)
+        
+        let snippetText = post.message.replacingOccurrences(of: "\n", with: " ")
+        let snippet = NSTextField(labelWithString: snippetText)
+        snippet.font = MMFont.font(ofSize: 13)
+        snippet.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.9)
+        snippet.isEditable = false
+        snippet.isSelectable = false
+        snippet.lineBreakMode = .byTruncatingTail
+        snippet.frame = NSRect(x: 12, y: 26, width: width - 24, height: 18)
+        row.addSubview(snippet)
+        
+        row.onHoverChanged = { [weak row] isHovered in
+            row?.color = isHovered
+                ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                : .clear
+            row?.setNeedsAppearanceUpdate()
+        }
+        row.onClick = { [weak self] in
+            self?.openSearchResult(post)
+        }
+        return row
+    }
+    
+    private func openSearchResult(_ post: MMPost) {
+        closeSearchResults()
+        guard let channel = channelsById[post.channel_id] else { return }
+        selectedSidebarItemId = channel.id
+        updateSidebarSelectionAppearance()
+        loadChannelPosts(forSidebarItemId: channel.id)
+    }
+    
+    private func closeSearchResults() {
+        searchResultsPanel.isHidden = true
+        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+    }
+    
     private func updateSearchTabsAppearance() {
         let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
         let activeTabBg = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.12)
@@ -768,13 +923,13 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             messagesTabLabel.textColor = mutedText
             filesTabPanel.color = activeTabBg
             filesTabLabel.textColor = brandBlue
-            searchPopoverInputLabel.stringValue = "Search files"
+            searchPopoverInputLabel.placeholderString = "Search files"
         } else {
             messagesTabPanel.color = activeTabBg
             messagesTabLabel.textColor = brandBlue
             filesTabPanel.color = filesTabPanel.isHovered ? hoverTabBg : .clear
             filesTabLabel.textColor = mutedText
-            searchPopoverInputLabel.stringValue = "Search messages"
+            searchPopoverInputLabel.placeholderString = "Search messages"
         }
         messagesTabPanel.setNeedsAppearanceUpdate()
         filesTabPanel.setNeedsAppearanceUpdate()
@@ -885,9 +1040,16 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         searchInputBox.addSubview(innerSearchIcon)
         
         searchPopoverInputLabel.font = MMFont.font(ofSize: 13)
-        searchPopoverInputLabel.textColor = placeholderColor
-        searchPopoverInputLabel.isEditable = false
-        searchPopoverInputLabel.isSelectable = false
+        searchPopoverInputLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        searchPopoverInputLabel.placeholderString = "Search messages"
+        searchPopoverInputLabel.isEditable = true
+        searchPopoverInputLabel.isSelectable = true
+        searchPopoverInputLabel.isBezeled = false
+        searchPopoverInputLabel.drawsBackground = false
+        searchPopoverInputLabel.focusRingType = .none
+        searchPopoverInputLabel.cell?.usesSingleLineMode = true
+        searchPopoverInputLabel.target = self
+        searchPopoverInputLabel.action = #selector(performSearchFromPopover)
         searchPopoverInputLabel.frame = NSRect(x: 32, y: 7, width: popoverWidth - 72, height: 18)
         searchInputBox.addSubview(searchPopoverInputLabel)
         searchPopoverPanel.addSubview(searchInputBox)
@@ -1560,6 +1722,9 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 }
                 if isSearchPopoverOpen && !searchPopoverPanel.frame.contains(point) && !searchPanel.frame.contains(point) {
                     setSearchPopoverOpen(false)
+                }
+                if !searchResultsPanel.isHidden && !searchResultsPanel.frame.contains(point) && !searchPanel.frame.contains(point) {
+                    closeSearchResults()
                 }
                 if isHelpMenuOpen && !helpMenu.frame.contains(point) && !helpPanel.frame.contains(point) {
                     setHelpMenuOpen(false)
@@ -4188,6 +4353,21 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         
         mentionsPanel.frame = NSRect(x: size.width - 152, y: topBarY + 8, width: 28, height: 28)
         mentionsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
+        
+        // Search results float below the search field.
+        let resultsWidth = min(560, max(360, size.width - chatPanel.frame.minX - 48))
+        let resultsHeight = min(430, max(200, topBarY - 130))
+        searchResultsPanel.frame = NSRect(
+            x: chatPanel.frame.minX + 24,
+            y: topBarY - resultsHeight - 68,
+            width: resultsWidth,
+            height: resultsHeight
+        )
+        searchResultsTitle.frame = NSRect(x: 16, y: resultsHeight - 34, width: resultsWidth - 60, height: 20)
+        searchResultsCloseButton.frame = NSRect(x: resultsWidth - 36, y: resultsHeight - 38, width: 24, height: 24)
+        if !searchResultsPanel.isHidden {
+            searchResultsScroll.frame = NSRect(x: 0, y: 0, width: resultsWidth, height: resultsHeight - 44)
+        }
     }
     
     // MARK: - Live REST API & WebSocket Integration
@@ -4384,6 +4564,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             heroDescriptionLabel.stringValue = "Welcome to \(resolvedTitle). Post messages here that you want everyone to see. Everyone\nautomatically becomes a member of this channel when they join the team."
         }
         layoutRightChatPanel()
+        closeSearchResults()
         currentChannelPosts = []
         rebuildTimelineContent(scrollToBottom: false)
         Task { @MainActor [weak self] in

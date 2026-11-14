@@ -130,6 +130,12 @@ struct MMPost: Codable {
     let type: String?
 }
 
+struct MMChannelMember: Decodable {
+    let user_id: String
+    let channel_id: String
+    let roles: String?
+}
+
 struct MMPostList: Codable {
     let order: [String]
     let posts: [String: MMPost]
@@ -548,6 +554,61 @@ final class WebService: NSObject {
     
     func fetchSidebarCategories(teamId: String) async throws -> MMSidebarCategoriesResponse {
         return try await performAuthenticatedRequest(path: "/api/v4/users/me/teams/\(teamId)/channels/categories")
+    }
+    
+    func searchPosts(teamId: String, terms: String, page: Int = 0, perPage: Int = 50) async throws -> MMPostList {
+        let body: [String: Any] = [
+            "terms": terms,
+            "is_or_search": false,
+            "page": page,
+            "per_page": perPage
+        ]
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/posts/search",
+            method: "POST",
+            body: body
+        )
+    }
+    
+    func fetchUserPreferences(userId: String) async throws -> [[String: String]] {
+        return try await performAuthenticatedRequest(path: "/api/v4/users/\(userId)/preferences")
+    }
+    
+    func saveUserPreferences(userId: String, preferences: [[String: String]]) async throws {
+        let _: [[String: String]] = try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/preferences",
+            method: "PUT",
+            body: preferences
+        )
+    }
+    
+    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMChannelMember] {
+        // Decoded loosely because member objects carry many optional fields.
+        guard let url = buildURL(path: "/api/v4/channels/\(channelId)/members", queryItems: [
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "per_page", value: String(perPage))
+        ]) else { throw WebServiceError.invalidHostname }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.invalidResponse
+        }
+        let decoder = JSONDecoder()
+        return try decoder.decode([MMChannelMember].self, from: data)
+    }
+    
+    func fetchPinnedPosts(channelId: String) async throws -> MMPostList {
+        return try await performAuthenticatedRequest(path: "/api/v4/channels/\(channelId)/pinned")
+    }
+    
+    func joinChannel(channelId: String, userId: String) async throws {
+        let _: MMChannelMember = try await performAuthenticatedRequest(
+            path: "/api/v4/channels/\(channelId)/members",
+            method: "POST",
+            body: ["user_id": userId]
+        )
     }
     
     func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> MMPostList {
