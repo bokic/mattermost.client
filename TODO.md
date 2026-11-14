@@ -74,13 +74,15 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ## P1 — Correctness & reliability
 
-- [ ] **Channel-switch race** — `S`
+- [x] **Channel-switch race** — `S`  
+  _Done: `fetchAndRenderPosts` re-checks `activeChannelId` before applying results._
   - Where: `fetchAndRenderPosts(channelId:)` awaits REST + user + status calls, then
     `applyPostsToTimeline` (≈4362) writes `currentChannelPosts` without re-checking
     `activeChannelId == channelId`. A slow response for a previous channel can overwrite the open one.
   - Done when: results are discarded unless the channel is still active.
 
-- [ ] **Every incoming message triggers a full channel refetch** — `S`
+- [x] **Every incoming message triggers a full channel refetch** — `S`  
+  _Done: WebSocket posts are inserted directly with id-dedupe and lazy author hydration._
   - Where: `ws.onPostReceived` (≈4150) calls `fetchAndRenderPosts`; `appendRealtimePost` (≈4373) is
     dead code.
   - Done when: the `posted` event is inserted directly (with dedupe against REST results) or batched.
@@ -109,7 +111,8 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     re-evaluated after wake.
   - Done when: custom status editor works and expired DND reverts automatically.
 
-- [ ] **Sample posts are injected when logged out** — `S`
+- [x] **Sample posts are injected when logged out** — `S`  
+  _Done: demo content only renders with an explicit `--demo` flag._
   - Where: `rebuildTimelineContent` (≈3827) fabricates "sarah.connor" posts when not logged in.
   - Done when: demo content is behind an explicit `--demo` flag or removed.
 
@@ -118,10 +121,11 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     syntax styling, inline images, `@mentions`, `#channel` links, emoji shortcodes, or tables.
   - Done when: these render like the web client and links open in the default browser.
 
-- [ ] **WebSocket reconnect is a fixed 3 s retry** — `S`
+- [ ] **WebSocket reconnect is a fixed 3 s retry** — `S`  
+  _Progress: exponential backoff with jitter (1→30 s), reset on connect, and immediate reconnect on `NSWorkspace.didWakeNotification`. Still missing a visible connection state._
   - Where: `webservice.swift` — `scheduleReconnect` uses a constant interval, there is no exponential
     backoff, no jitter, no UI connection state, and no `NSWorkspace.didWakeNotification` handling.
-  - Done when: backoff + jitter, visible "reconnecting" state, and immediate retry after wake.
+  - Done when: a visible "reconnecting" state exists in the UI.
 
 - [ ] **Typing is receive-only; date/time handling is static** — `S`
   - Where: `sendUserTyping` is never called; dates use `en_US_POSIX` and a fixed `h:mm a` format.

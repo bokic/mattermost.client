@@ -676,6 +676,7 @@ final class WebService: NSObject {
     private var wsSequence: Int = 1
     private var pingTimer: Timer?
     private var reconnectTimer: Timer?
+    private var reconnectAttempts = 0
     
     // Callbacks for WebSocket events
     var onWebSocketMessage: ((String) -> Void)?
@@ -746,12 +747,26 @@ final class WebService: NSObject {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         
+        // Exponential backoff with jitter: 1s, 2s, 4s … capped at 30s.
+        let delay = min(30.0, pow(2.0, Double(reconnectAttempts))) + Double.random(in: 0...1)
+        reconnectAttempts += 1
+        DebugLog.log("WS RECONNECT in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempts))")
+        
         DispatchQueue.main.async { [weak self] in
-            self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
                 self?.reconnectTimer = nil
                 self?.connectWebSocket()
             }
         }
+    }
+    
+    /// Reconnects immediately when the machine wakes or the network returns.
+    func reconnectIfNeeded() {
+        guard isLogged() else { return }
+        if let task = webSocketTask, task.state == .running { return }
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
+        connectWebSocket()
     }
     
     func sendWebSocketMessage(action: String, data: [String: Any]) {
@@ -953,6 +968,7 @@ final class WebService: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if didConnect {
+                self.reconnectAttempts = 0
                 self.onWebSocketConnected?()
                 self.requestStatuses()
             }

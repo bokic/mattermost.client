@@ -4188,10 +4188,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private func rebuildTimelineContent(scrollToBottom: Bool = false) {
         let chatW = chatPanel.bounds.width
         let chatH = chatPanel.bounds.height
-        let headerH: CGFloat = 48
+        // Keep in sync with layoutRightChatPanel(): 56pt header, 50/90pt composer.
+        let headerH: CGFloat = 56
         let headerY = chatH - headerH
-        let composerH: CGFloat = isComposerToolbarVisible ? 86 : 62
-        let composerTop = 24 + composerH + 4
+        let composerH: CGFloat = isComposerToolbarVisible ? 90 : 50
+        let composerTop = 24 + composerH
         let scrollH = max(0, headerY - composerTop)
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
         
@@ -4231,7 +4232,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         timeFmt.dateFormat = "h:mm a"
         
         var postsToRender = currentChannelPosts
-        if postsToRender.isEmpty && !((NSApp.delegate as? AppDelegate)?.webService.isLogged() ?? false) {
+        if postsToRender.isEmpty && !((NSApp.delegate as? AppDelegate)?.webService.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
             if userStatusById["sarah"] == nil {
                 userStatusById["sarah"] = "away"
@@ -4564,7 +4565,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 if post.channel_id == self.activeChannelId {
-                    await self.fetchAndRenderPosts(channelId: post.channel_id)
+                    self.appendRealtimePost(post)
                 }
                 self.handleIncomingPost(post)
             }
@@ -4787,6 +4788,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                     self.userStatusById[st.user_id] = st.status
                 }
             }
+            // Discard results for a channel that is no longer open.
+            guard self.activeChannelId == channelId else { return }
             applyPostsToTimeline(posts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
@@ -4799,11 +4802,27 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         rebuildTimelineContent(scrollToBottom: true)
     }
     
+    /// Inserts a WebSocket post directly instead of refetching the channel.
     @MainActor
-    private func appendRealtimePost(_ post: MMPost, senderName: String?) {
+    private func appendRealtimePost(_ post: MMPost) {
         guard post.channel_id == activeChannelId else { return }
+        guard !currentChannelPosts.contains(where: { $0.id == post.id }) else { return }
+        
+        currentChannelPosts.append(post)
+        currentChannelPosts.sort { $0.create_at < $1.create_at }
+        fetchAvatarIfNeeded(for: post.user_id)
+        rebuildTimelineContent(scrollToBottom: true)
+        
+        guard usersById[post.user_id] == nil,
+              let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
         Task { @MainActor [weak self] in
-            await self?.fetchAndRenderPosts(channelId: post.channel_id)
+            guard let self = self else { return }
+            guard let users = try? await ws.fetchUsersByIds([post.user_id]),
+                  let user = users.first else { return }
+            self.usersById[user.id] = user
+            self.usersByUsername[user.username.lowercased()] = user
+            self.fetchAvatarIfNeeded(for: user.id)
+            self.rebuildTimelineContent(scrollToBottom: true)
         }
     }
     
