@@ -188,6 +188,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     let channelStarButton = RoundedEdgePanel()
     let channelStarIconView = NSImageView()
     private var isChannelFavorited = false
+    private var favoriteChannelIds: Set<String> = []
     let channelTitleButton = RoundedEdgePanel()
     let channelTitleLabel = NSTextField(labelWithString: "Town Square")
     let channelHeaderBotBadge = RoundedEdgePanel()
@@ -910,6 +911,69 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     private func closeSearchResults() {
         searchResultsPanel.isHidden = true
         searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+    }
+    
+    // MARK: - Channel favorites
+    
+    private func loadFavoriteChannels() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            if let preferences = try? await ws.fetchUserPreferences(userId: userId) {
+                let favorites = preferences
+                    .filter { $0["category"] == "favorite_channel" }
+                    .compactMap { $0["name"] }
+                self.favoriteChannelIds = Set(favorites)
+                self.refreshFavoriteState()
+            }
+        }
+    }
+    
+    private func refreshFavoriteState() {
+        guard !activeChannelId.isEmpty else { return }
+        isChannelFavorited = favoriteChannelIds.contains(activeChannelId)
+        let symbol = isChannelFavorited ? "star.fill" : "star"
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Favorite") {
+            channelStarIconView.image = image.withSymbolConfiguration(.init(pointSize: 12.5, weight: .medium))
+        }
+        let starGold = NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
+        let muted = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        let dark = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        channelStarIconView.contentTintColor = isChannelFavorited
+            ? starGold
+            : (channelStarButton.isHovered ? dark : muted)
+    }
+    
+    private func setChannelFavorite(_ favorite: Bool, channelId: String) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        
+        if favorite {
+            favoriteChannelIds.insert(channelId)
+        } else {
+            favoriteChannelIds.remove(channelId)
+        }
+        refreshFavoriteState()
+        
+        let preference: [[String: String]] = [[
+            "user_id": userId,
+            "category": "favorite_channel",
+            "name": channelId
+        ]]
+        Task {
+            do {
+                if favorite {
+                    try await ws.saveUserPreferences(userId: userId, preferences: preference)
+                } else {
+                    try await ws.deleteUserPreferences(userId: userId, preferences: preference)
+                }
+            } catch {
+                NSLog("Failed to update favorite for \(channelId): \(error.localizedDescription)")
+            }
+        }
     }
     
     private func updateSearchTabsAppearance() {
@@ -2768,13 +2832,8 @@ class MainWindow: NSWindow, NSTextViewDelegate {
             }
         }
         channelStarButton.onClick = { [weak self] in
-            guard let self = self else { return }
-            self.isChannelFavorited.toggle()
-            let symbol = self.isChannelFavorited ? "star.fill" : "star"
-            if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: "Favorite") {
-                self.channelStarIconView.image = img.withSymbolConfiguration(.init(pointSize: 12.5, weight: .medium))
-            }
-            self.channelStarIconView.contentTintColor = self.isChannelFavorited ? starGold : (self.channelStarButton.isHovered ? darkText : mutedText)
+            guard let self = self, !self.activeChannelId.isEmpty else { return }
+            self.setChannelFavorite(!self.isChannelFavorited, channelId: self.activeChannelId)
         }
         chatPanel.addSubview(channelStarButton)
         
@@ -4489,6 +4548,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
                 self.usersById[me.id] = me
                 self.usersByUsername[me.username.lowercased()] = me
                 self.fetchAvatarIfNeeded(for: me.id)
+                self.loadFavoriteChannels()
                 
                 if let statuses = try? await ws.fetchUserStatuses(userIds: [me.id]), let myStatus = statuses.first {
                     self.currentUserStatus = myStatus.status
@@ -4553,6 +4613,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
         let normalized = itemId.lowercased()
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
+        refreshFavoriteState()
         let resolvedTitle = channelDisplayName(for: ch)
         channelTitleLabel.stringValue = resolvedTitle
         heroTitleLabel.stringValue = resolvedTitle

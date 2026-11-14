@@ -574,6 +574,21 @@ final class WebService: NSObject {
         return try await performAuthenticatedRequest(path: "/api/v4/users/\(userId)/preferences")
     }
     
+    func deleteUserPreferences(userId: String, preferences: [[String: String]]) async throws {
+        guard let url = buildURL(path: "/api/v4/users/\(userId)/preferences") else {
+            throw WebServiceError.invalidHostname
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: preferences)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.invalidResponse
+        }
+    }
+    
     func saveUserPreferences(userId: String, preferences: [[String: String]]) async throws {
         let _: [[String: String]] = try await performAuthenticatedRequest(
             path: "/api/v4/users/\(userId)/preferences",
