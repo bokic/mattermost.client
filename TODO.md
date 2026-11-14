@@ -31,11 +31,13 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Done when: `GET /api/v4/teams/{team}/posts/search` is wired, results render, tabs actually filter
     (`from:` / `in:` / `on:` hints work), and `Esc` closes.
 
-- [ ] **Threads and the right-hand panel are inert** — `M`
-  - Where: sidebar `Threads` row sets `selectedSidebarItemId = "threads"`, then `loadChannelPosts`
-    (≈4314) fails its `channelsById` lookup and returns; `channelSidebarButton` has no action.
-  - Done when: Threads opens a real RHS list (`GET /users/me/teams/{team}/threads`), and the header
-    icon toggles members/pins/files panels.
+- [x] **Threads and the right-hand panel are inert** — `M`
+  - Done: a 320 pt right-hand panel with Threads (`GET /users/{id}/teams/{team}/threads`), Members
+    (channel members + user hydration) and Pinned Posts (`/channels/{id}/pinned`). The sidebar
+    Threads row opens it, the member chip opens Members, the pins icon opens Pinned, and the header
+    panel button toggles Threads; rows open the channel and the panel refreshes on channel switch.
+  - Remaining: a Files tab in the RHS and true thread-reply rendering (root + replies) inside the
+    panel instead of a flat list.
 
 - [ ] **Top-right `@`, bookmark and gear do nothing** — `M`
   - Where: `configureIconButton` (≈1548) only wires hover state; no `onClick` is ever assigned to

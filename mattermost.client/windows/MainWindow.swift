@@ -103,6 +103,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let settingsPanel = RoundedEdgePanel()
     let settingsIconView = NSImageView()
     
+    // Right-hand side panel (threads / members / pinned posts)
+    let rightPanel = RoundedEdgePanel()
+    let rightPanelTitle = NSTextField(labelWithString: "Threads")
+    let rightPanelCloseButton = RoundedEdgePanel()
+    let rightPanelScroll = NSScrollView()
+    let rightPanelDoc = TimelineFlippedView()
+    private enum RightPanelMode { case threads, members, pinned }
+    private var rightPanelMode: RightPanelMode = .threads
+    private var isRightPanelVisible = false
+    private var threadItems: [MMThread] = []
+    
     let avatarButtonPanel = RoundedEdgePanel()
     let avatarPanel = RoundedEdgePanel()
     let avatarImageView = NSImageView()
@@ -2586,6 +2597,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         }
         row.onClick = { [weak self] in
             guard let self = self else { return }
+            if id == "threads" {
+                self.showRightPanel(mode: .threads)
+                return
+            }
             if isSelectable {
                 self.selectedSidebarItemId = id
                 self.updateSidebarSelectionAppearance()
@@ -3013,6 +3028,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.channelMembersIconView.contentTintColor = isHovered ? darkText : mutedText
             self.channelMembersCountLabel.textColor = isHovered ? darkText : mutedText
         }
+        channelMembersButton.onClick = { [weak self] in
+            self?.toggleRightPanel(mode: .members)
+        }
         chatPanel.addSubview(channelMembersButton)
         
         channelPinsButton.cornerRadius = 4
@@ -3028,6 +3046,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.channelPinsButton.setNeedsAppearanceUpdate()
             self.channelPinsIconView.contentTintColor = isHovered ? darkText : mutedText
         }
+        channelPinsButton.onClick = { [weak self] in
+            self?.toggleRightPanel(mode: .pinned)
+        }
         chatPanel.addSubview(channelPinsButton)
         
         channelSidebarButton.cornerRadius = 4
@@ -3042,6 +3063,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.channelSidebarButton.color = isHovered ? hoverBg : .clear
             self.channelSidebarButton.setNeedsAppearanceUpdate()
             self.channelSidebarIconView.contentTintColor = isHovered ? darkText : mutedText
+        }
+        channelSidebarButton.onClick = { [weak self] in
+            self?.toggleRightPanel(mode: .threads)
         }
         chatPanel.addSubview(channelSidebarButton)
         
@@ -3336,7 +3360,291 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         applyComposerToolbarVisibility()
         updateComposerSendState()
+        setupRightPanel()
         rebuildTimelineContent(scrollToBottom: true)
+    }
+    
+    // MARK: - Right-hand side panel
+    
+    private func setupRightPanel() {
+        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        rightPanel.color = .white
+        rightPanel.cornerRadius = 0
+        rightPanel.borderWidth = 1
+        rightPanel.borderColor = dividerColor
+        rightPanel.isHidden = true
+        
+        rightPanelTitle.font = MMFont.font(ofSize: 14, weight: .semibold)
+        rightPanelTitle.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        rightPanelTitle.isEditable = false
+        rightPanelTitle.isSelectable = false
+        rightPanel.addSubview(rightPanelTitle)
+        
+        rightPanelCloseButton.cornerRadius = 4
+        rightPanelCloseButton.color = .clear
+        let closeIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close panel") {
+            closeIcon.image = image.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+            closeIcon.contentTintColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        }
+        closeIcon.frame = NSRect(x: 5, y: 5, width: 12, height: 12)
+        rightPanelCloseButton.addSubview(closeIcon)
+        rightPanelCloseButton.onClick = { [weak self] in
+            self?.closeRightPanel()
+        }
+        rightPanel.addSubview(rightPanelCloseButton)
+        
+        rightPanelScroll.drawsBackground = false
+        rightPanelScroll.hasVerticalScroller = true
+        rightPanelScroll.autohidesScrollers = true
+        rightPanelScroll.documentView = rightPanelDoc
+        rightPanel.addSubview(rightPanelScroll)
+        
+        chatPanel.addSubview(rightPanel)
+    }
+    
+    private func showRightPanel(mode: RightPanelMode) {
+        rightPanelMode = mode
+        isRightPanelVisible = true
+        rightPanel.isHidden = false
+        layoutRightChatPanel()
+        
+        switch mode {
+        case .threads:
+            rightPanelTitle.stringValue = "Threads"
+            loadThreads()
+        case .members:
+            rightPanelTitle.stringValue = "Members"
+            loadChannelMembers()
+        case .pinned:
+            rightPanelTitle.stringValue = "Pinned Posts"
+            loadPinnedPosts()
+        }
+    }
+    
+    private func toggleRightPanel(mode: RightPanelMode) {
+        if isRightPanelVisible && rightPanelMode == mode {
+            closeRightPanel()
+        } else {
+            showRightPanel(mode: mode)
+        }
+    }
+    
+    private func closeRightPanel() {
+        isRightPanelVisible = false
+        rightPanel.isHidden = true
+    }
+    
+    private func reloadRightPanelIfNeeded() {
+        guard isRightPanelVisible else { return }
+        switch rightPanelMode {
+        case .threads: loadThreads()
+        case .members: loadChannelMembers()
+        case .pinned: loadPinnedPosts()
+        }
+    }
+    
+    private func loadThreads() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else {
+            renderRightPanel(empty: "Sign in to see your threads", rows: [])
+            return
+        }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else {
+            renderRightPanel(empty: "Sign in to see your threads", rows: [])
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let threads = try? await ws.fetchThreads(userId: userId, teamId: team.id) else {
+                self.renderRightPanel(empty: "Could not load threads", rows: [])
+                return
+            }
+            self.threadItems = threads
+            let authorIds = threads.compactMap { $0.post?.user_id }
+            self.hydrateUsers(authorIds) {
+                let rows = threads.compactMap { thread -> RightPanelRow? in
+                    guard let post = thread.post else { return nil }
+                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
+                    let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
+                    let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
+                    let replies = thread.reply_count ?? 0
+                    return RightPanelRow(
+                        title: snippet.isEmpty ? "(attachment)" : snippet,
+                        subtitle: [author, channelName].filter { !$0.isEmpty }.joined(separator: " · "),
+                        meta: "\(replies) repl\(replies == 1 ? "y" : "ies")",
+                        action: { [weak self] in
+                            self?.openChannel(withId: post.channel_id)
+                            self?.closeRightPanel()
+                        }
+                    )
+                }
+                self.renderRightPanel(empty: "No threads yet", rows: rows)
+            }
+        }
+    }
+    
+    private func loadChannelMembers() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              !activeChannelId.isEmpty else {
+            renderRightPanel(empty: "No channel selected", rows: [])
+            return
+        }
+        let channelId = activeChannelId
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let members = try? await ws.fetchChannelMembers(channelId: channelId) else {
+                self.renderRightPanel(empty: "Could not load members", rows: [])
+                return
+            }
+            self.hydrateUsers(members.map { $0.user_id }) {
+                let rows = members.map { member -> RightPanelRow in
+                    let user = self.usersById[member.user_id]
+                    let name = user?.username ?? member.user_id
+                    let role = (member.roles ?? "").contains("channel_admin") ? "Channel Admin"
+                        : (member.roles ?? "").contains("channel_user") ? "Member" : ""
+                    return RightPanelRow(
+                        title: name,
+                        subtitle: [user?.first_name, user?.last_name].compactMap { $0 }.joined(separator: " "),
+                        meta: role,
+                        action: nil
+                    )
+                }
+                self.renderRightPanel(empty: "No members", rows: rows)
+            }
+        }
+    }
+    
+    private func loadPinnedPosts() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              !activeChannelId.isEmpty else {
+            renderRightPanel(empty: "No channel selected", rows: [])
+            return
+        }
+        let channelId = activeChannelId
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let list = try? await ws.fetchPinnedPosts(channelId: channelId) else {
+                self.renderRightPanel(empty: "Could not load pinned posts", rows: [])
+                return
+            }
+            let posts = list.order.compactMap { list.posts[$0] }
+            self.hydrateUsers(posts.map { $0.user_id }) {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "MMM d, h:mm a"
+                let rows = posts.map { post -> RightPanelRow in
+                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
+                    let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+                    return RightPanelRow(
+                        title: post.message.replacingOccurrences(of: "\n", with: " "),
+                        subtitle: "\(author) · \(when)",
+                        meta: "",
+                        action: { [weak self] in
+                            self?.openChannel(withId: post.channel_id)
+                            self?.closeRightPanel()
+                        }
+                    )
+                }
+                self.renderRightPanel(empty: "No pinned posts", rows: rows)
+            }
+        }
+    }
+    
+    private struct RightPanelRow {
+        let title: String
+        let subtitle: String
+        let meta: String
+        let action: (() -> Void)?
+    }
+    
+    private func hydrateUsers(_ ids: [String], completion: @escaping () -> Void) {
+        let missing = Array(Set(ids).subtracting(usersById.keys))
+        guard !missing.isEmpty, let ws = (NSApp.delegate as? AppDelegate)?.webService else {
+            completion()
+            return
+        }
+        Task { @MainActor in
+            if let users = try? await ws.fetchUsersByIds(missing) {
+                for user in users {
+                    self.usersById[user.id] = user
+                }
+            }
+            completion()
+        }
+    }
+    
+    private func renderRightPanel(empty: String, rows: [RightPanelRow]) {
+        let width = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
+        rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
+        
+        var y: CGFloat = 8
+        if rows.isEmpty {
+            let label = NSTextField(labelWithString: empty)
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 12, y: 24, width: width - 24, height: 20)
+            rightPanelDoc.addSubview(label)
+            y = 56
+        } else {
+            for item in rows {
+                let row = makeRightPanelRow(item, width: width - 24)
+                row.frame = NSRect(x: 12, y: y, width: width - 24, height: 64)
+                rightPanelDoc.addSubview(row)
+                y += 68
+            }
+        }
+        rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+    }
+    
+    private func makeRightPanelRow(_ item: RightPanelRow, width: CGFloat) -> RoundedEdgePanel {
+        let row = RoundedEdgePanel()
+        row.cornerRadius = 6
+        row.color = .clear
+        
+        let title = NSTextField(labelWithString: item.title)
+        title.font = MMFont.font(ofSize: 13, weight: .semibold)
+        title.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        title.lineBreakMode = .byTruncatingTail
+        title.isEditable = false
+        title.isSelectable = false
+        title.frame = NSRect(x: 10, y: 40, width: width - 20, height: 18)
+        row.addSubview(title)
+        
+        if !item.subtitle.isEmpty {
+            let subtitle = NSTextField(labelWithString: item.subtitle)
+            subtitle.font = MMFont.font(ofSize: 12)
+            subtitle.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            subtitle.lineBreakMode = .byTruncatingTail
+            subtitle.isEditable = false
+            subtitle.isSelectable = false
+            subtitle.frame = NSRect(x: 10, y: 22, width: width - 20, height: 16)
+            row.addSubview(subtitle)
+        }
+        
+        if !item.meta.isEmpty {
+            let meta = NSTextField(labelWithString: item.meta)
+            meta.font = MMFont.font(ofSize: 11)
+            meta.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+            meta.isEditable = false
+            meta.isSelectable = false
+            meta.frame = NSRect(x: 10, y: 6, width: width - 20, height: 14)
+            row.addSubview(meta)
+        }
+        
+        row.onHoverChanged = { [weak row] isHovered in
+            row?.color = isHovered
+                ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                : .clear
+            row?.setNeedsAppearanceUpdate()
+        }
+        if let action = item.action {
+            row.onClick = action
+        }
+        return row
     }
     
     private func applyComposerToolbarVisibility() {
@@ -4341,6 +4649,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let headerH: CGFloat = 56
         let headerY = chatH - headerH
         
+        if isRightPanelVisible {
+            let composerArea: CGFloat = 24 + (isComposerToolbarVisible ? 90 : 50) + 8
+            let panelWidth = min(320, max(240, chatW * 0.36))
+            let panelHeight = max(0, chatH - headerH - composerArea)
+            rightPanel.frame = NSRect(x: chatW - panelWidth, y: composerArea, width: panelWidth, height: panelHeight)
+            rightPanelTitle.frame = NSRect(x: 16, y: panelHeight - 40, width: panelWidth - 64, height: 20)
+            rightPanelCloseButton.frame = NSRect(x: panelWidth - 38, y: panelHeight - 44, width: 24, height: 24)
+            rightPanelScroll.frame = NSRect(x: 0, y: 0, width: panelWidth, height: max(0, panelHeight - 48))
+        }
+        
         chatTimelineContainer.frame = NSRect(x: 0, y: 0, width: chatW, height: headerY)
         
         // 1. Channel Header Bar (web: 56pt tall, 12pt padding, 12pt top corners)
@@ -4744,6 +5062,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         activeChannelId = ch.id
         refreshFavoriteState()
         (NSApp.delegate as? AppDelegate)?.markChannelRead(ch.id)
+        reloadRightPanelIfNeeded()
         let resolvedTitle = channelDisplayName(for: ch)
         channelTitleLabel.stringValue = resolvedTitle
         heroTitleLabel.stringValue = resolvedTitle

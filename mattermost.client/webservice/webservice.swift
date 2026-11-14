@@ -130,6 +130,20 @@ struct MMPost: Codable {
     let type: String?
 }
 
+struct MMThreadParticipant: Decodable {
+    let id: String?
+    let username: String?
+}
+
+struct MMThread: Decodable {
+    let id: String
+    let reply_count: Int?
+    let last_reply_at: Int64?
+    let last_viewed_at: Int64?
+    let participants: [MMThreadParticipant]?
+    let post: MMPost?
+}
+
 struct MMChannelMember: Decodable {
     let user_id: String
     let channel_id: String
@@ -641,6 +655,15 @@ final class WebService: NSObject {
             method: "POST",
             body: ["user_id": userId]
         )
+    }
+    
+    func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
+        struct ThreadsResponse: Decodable { let threads: [MMThread] }
+        let response: ThreadsResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/threads",
+            queryItems: [URLQueryItem(name: "per_page", value: String(perPage))]
+        )
+        return response.threads
     }
     
     func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> MMPostList {
