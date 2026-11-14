@@ -8,10 +8,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarMenu: NSMenu!
     var webService = webservice()
     private weak var zoomPercentMenuItem: NSMenuItem?
+    private var zoomGestureStartFactor: CGFloat?
+    private var zoomGestureMagnification: CGFloat = 0
+    private var zoomGestureMonitor: Any?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         DebugLog.log("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
         setupMainMenu()
+        installZoomGestureMonitor()
         
         let statusBar = NSStatusBar.system
         statusBarItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
@@ -53,6 +57,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             tryLoginWithStoredCredentials()
         }
+    }
+    
+    // MARK: - Zoom Gestures
+    
+    /// Pinch-to-zoom on the trackpad and Command+scroll wheel change the UI zoom,
+    /// matching browser behaviour.
+    private func installZoomGestureMonitor() {
+        zoomGestureMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
+            guard let self = self else { return event }
+            return self.handleZoomGesture(event)
+        }
+    }
+    
+    private func handleZoomGesture(_ event: NSEvent) -> NSEvent? {
+        guard event.window != nil else { return event }
+        
+        if event.type == .magnify {
+            switch event.phase {
+            case .began:
+                zoomGestureStartFactor = ZoomManager.shared.currentZoomFactor
+                zoomGestureMagnification = 0
+            case .ended, .cancelled:
+                zoomGestureStartFactor = nil
+                zoomGestureMagnification = 0
+            default:
+                if zoomGestureStartFactor == nil {
+                    zoomGestureStartFactor = ZoomManager.shared.currentZoomFactor
+                    zoomGestureMagnification = 0
+                }
+                zoomGestureMagnification += event.magnification
+                if let base = zoomGestureStartFactor, zoomGestureMagnification != 0 {
+                    ZoomManager.shared.setZoomFactor(base * (1 + zoomGestureMagnification))
+                }
+            }
+            return nil
+        }
+        
+        if event.type == .scrollWheel, event.modifierFlags.contains(.command) {
+            let delta = event.scrollingDeltaY
+            guard abs(delta) > 0.01 else { return nil }
+            // Precise trackpad deltas are small and frequent; wheel notches are coarse.
+            let step = event.hasPreciseScrollingDeltas ? delta * 0.004 : delta * 0.05
+            ZoomManager.shared.setZoomFactor(ZoomManager.shared.currentZoomFactor * (1 + step))
+            return nil
+        }
+        
+        return event
     }
     
     func tryLoginWithStoredCredentials() {

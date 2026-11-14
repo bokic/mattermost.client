@@ -119,6 +119,7 @@ class LoginWindow: NSWindow {
     
     @objc private func zoomDidChangeNotification(_ notification: Notification) {
         applyZoomFactor(ZoomManager.shared.currentZoomFactor)
+        ZoomHUD.shared.show(factor: ZoomManager.shared.currentZoomFactor, in: self)
     }
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {

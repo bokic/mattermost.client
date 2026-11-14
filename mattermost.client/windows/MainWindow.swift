@@ -4050,6 +4050,7 @@ class MainWindow: NSWindow, NSTextViewDelegate {
     
     @objc private func zoomDidChangeNotification(_ notification: Notification) {
         applyZoomFactor(ZoomManager.shared.currentZoomFactor)
+        ZoomHUD.shared.show(factor: ZoomManager.shared.currentZoomFactor, in: self)
     }
     
     func updateViews() {
