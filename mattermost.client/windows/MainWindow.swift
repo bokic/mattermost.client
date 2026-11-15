@@ -108,6 +108,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let rightPanel = RoundedEdgePanel()
     let rightPanelTitle = NSTextField(labelWithString: "Threads")
     let rightPanelCloseButton = RoundedEdgePanel()
+    let connectionBanner = RoundedEdgePanel()
+    let connectionLabel = NSTextField(labelWithString: "")
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
     private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse }
@@ -3828,6 +3830,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         composerHelpLabel.isSelectable = false
         chatPanel.addSubview(composerHelpLabel)
         
+        connectionBanner.color = NSColor(red: 255 / 255, green: 244 / 255, blue: 229 / 255, alpha: 0.98)
+        connectionBanner.cornerRadius = 0
+        connectionBanner.isHidden = true
+        connectionLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+        connectionLabel.textColor = NSColor(red: 138 / 255, green: 90 / 255, blue: 0 / 255, alpha: 1.0)
+        connectionLabel.alignment = .center
+        connectionLabel.isEditable = false
+        connectionLabel.isSelectable = false
+        connectionBanner.addSubview(connectionLabel)
+        chatPanel.addSubview(connectionBanner)
+        
         applyComposerToolbarVisibility()
         updateComposerSendState()
         setupRightPanel()
@@ -4453,7 +4466,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             ),
             RightPanelRow(
                 title: "Reconnect",
-                subtitle: "Re-establish the realtime connection",
+                subtitle: (NSApp.delegate as? AppDelegate)?.webService.isWebSocketConnected == true
+                    ? "Connected"
+                    : "Reconnecting…",
                 meta: "Connection",
                 action: { [weak self] in
                     (NSApp.delegate as? AppDelegate)?.webService.reconnectIfNeeded()
@@ -6073,6 +6088,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let headerH: CGFloat = 56
         let headerY = chatH - headerH
         
+        connectionBanner.frame = NSRect(x: 0, y: headerY - 26, width: chatW, height: 26)
+        connectionLabel.frame = NSRect(x: 12, y: 4, width: max(0, chatW - 24), height: 18)
+        
         if isRightPanelVisible {
             let composerArea: CGFloat = 24 + (isComposerToolbarVisible ? 90 : 50) + 8
             let panelWidth = min(320, max(240, chatW * 0.36))
@@ -6312,6 +6330,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self.handleIncomingPost(post)
             }
         }
+        
+        ws.onWebSocketStateChanged = { [weak self] connected, message in
+            Task { @MainActor [weak self] in
+                self?.updateConnectionState(connected: connected, message: message)
+            }
+        }
+        updateConnectionState(
+            connected: ws.isWebSocketConnected,
+            message: ws.isWebSocketConnected ? "Connected" : "Connecting to Mattermost…"
+        )
         
         ws.onWebSocketEvent = { event in
             DebugLog.log("ws.onWebSocketEvent: \(event)")
@@ -6566,6 +6594,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.usersByUsername[user.username.lowercased()] = user
             self.fetchAvatarIfNeeded(for: user.id)
             self.rebuildTimelineContent(scrollToBottom: true)
+        }
+    }
+    
+    @MainActor
+    private func updateConnectionState(connected: Bool, message: String) {
+        connectionLabel.stringValue = message
+        connectionBanner.isHidden = connected
+        if !connected {
+            layoutRightChatPanel()
         }
     }
     

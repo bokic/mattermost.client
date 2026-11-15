@@ -34,7 +34,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 ### 4. Live REST API v4 & Real-Time WebSockets
 - **Team & Channel Sync**: `GET /api/v4/users/me/teams`, `GET /api/v4/users/me/teams/{team_id}/channels`, and `GET /api/v4/users/me/teams/{team_id}/channels/categories`.
 - **Posts & Messaging**: Fetches channel posts (`GET /api/v4/channels/{channel_id}/posts`) and sends new messages (`POST /api/v4/posts`).
-- **Real-Time WebSocket**: Bidirectional event streaming for incoming messages (`posted`), user presence (`status_change`), and live typing indicators (`typing`).
+- **Real-Time WebSocket**: Bidirectional event streaming for incoming messages (`posted`), user presence (`status_change`), and live typing indicators (`typing`). Reconnects with exponential backoff and shows an in-app connection banner until the socket is healthy.
 
 ### 5. macOS System Integration
 - **Status Bar Item**: System menu bar icon with click-to-toggle window visibility.

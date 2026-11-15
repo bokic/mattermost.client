@@ -145,11 +145,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     extracted and rendered as inline images. External links still open in the default browser.
   - Remaining: Markdown tables and syntax highlighting inside code blocks.
 
-- [ ] **WebSocket reconnect is a fixed 3 s retry** — `S`  
-  _Progress: exponential backoff with jitter (1→30 s), reset on connect, and immediate reconnect on `NSWorkspace.didWakeNotification`. Still missing a visible connection state._
-  - Where: `webservice.swift` — `scheduleReconnect` uses a constant interval, there is no exponential
-    backoff, no jitter, no UI connection state, and no `NSWorkspace.didWakeNotification` handling.
-  - Done when: a visible "reconnecting" state exists in the UI.
+- [x] **WebSocket reconnect is a fixed 3 s retry** — `S`
+  - Done: exponential backoff with jitter (1 s → 30 s cap), reset on a successful `hello`, and
+    immediate reconnect on `NSWorkspace.didWakeNotification`.
+  - Visible state: a slim amber banner ("Connecting…", "Reconnecting to Mattermost…", "Disconnected
+    from Mattermost") appears below the channel header while the socket is down and hides on connect;
+    the Settings panel's Reconnect row shows Connected/Reconnecting.
 
 - [ ] **Typing is receive-only; date/time handling is static** — `S`
   - Where: `sendUserTyping` is never called; dates use `en_US_POSIX` and a fixed `h:mm a` format.

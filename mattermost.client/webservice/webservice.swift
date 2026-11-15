@@ -909,6 +909,8 @@ final class WebService: NSObject {
     
     // Callbacks for WebSocket events
     var onWebSocketMessage: ((String) -> Void)?
+    private(set) var isWebSocketConnected = false
+    var onWebSocketStateChanged: ((Bool, String) -> Void)?
     var onWebSocketConnected: (() -> Void)?
     var onWebSocketDisconnected: ((Error?) -> Void)?
     var onWebSocketEvent: ((MMWebSocketEvent) -> Void)?
@@ -919,6 +921,14 @@ final class WebService: NSObject {
     var onTeamUpdated: ((MMTeam) -> Void)?
     var onUserTeamsChanged: (() -> Void)?
     var onSidebarCategoriesUpdated: (() -> Void)?
+    
+    private func notifySocketState(_ connected: Bool, _ message: String) {
+        DebugLog.log("WS STATE notify connected=\(connected) msg=\(message)")
+        isWebSocketConnected = connected
+        DispatchQueue.main.async { [weak self] in
+            self?.onWebSocketStateChanged?(connected, message)
+        }
+    }
     
     func connectWebSocket() {
         guard !mToken.isEmpty else { return }
@@ -936,6 +946,7 @@ final class WebService: NSObject {
         
         webSocketTask = URLSession.shared.webSocketTask(with: request)
         webSocketTask?.resume()
+        notifySocketState(false, "Connecting to Mattermost…")
         
         receiveWebSocketMessage()
         sendWebSocketAuthentication(token: mToken)
@@ -948,6 +959,7 @@ final class WebService: NSObject {
         reconnectTimer = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
+        notifySocketState(false, "Disconnected from Mattermost")
     }
     
     private func startPingTimer() {
@@ -1059,6 +1071,7 @@ final class WebService: NSObject {
                 DispatchQueue.main.async {
                     self.onWebSocketDisconnected?(error)
                 }
+                self.notifySocketState(false, "Reconnecting to Mattermost…")
                 self.scheduleReconnect()
             case .success(let message):
                 switch message {
@@ -1198,6 +1211,7 @@ final class WebService: NSObject {
             guard let self = self else { return }
             if didConnect {
                 self.reconnectAttempts = 0
+                self.notifySocketState(true, "Connected")
                 self.onWebSocketConnected?()
                 self.requestStatuses()
             }
