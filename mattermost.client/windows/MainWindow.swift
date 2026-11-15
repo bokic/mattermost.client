@@ -86,7 +86,7 @@ private class RightPanelResizeHandle: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         if isHovering {
-            NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.25).setFill()
+            Theme.shared.buttonBg.withAlphaComponent(0.25).setFill()
             NSRect(x: 2, y: 0, width: 1.5, height: bounds.height).fill()
         }
     }
@@ -102,7 +102,7 @@ private class FileTypeIconView: NSView {
     var fileExtension: String = ""
 
     override func draw(_ dirtyRect: NSRect) {
-        let blue = NSColor(red: 56 / 255, green: 111 / 255, blue: 229 / 255, alpha: 1.0)
+        let blue = Theme.shared.linkColor
         let sheet = NSRect(x: (bounds.width - 32) / 2, y: (bounds.height - 40) / 2, width: 32, height: 40)
         let path = NSBezierPath(roundedRect: sheet, xRadius: 3, yRadius: 3)
         path.lineWidth = 1.5
@@ -568,7 +568,7 @@ final class ComposerTextView: NSTextView {
     var placeholderString: String = "" {
         didSet { needsDisplay = true }
     }
-    var placeholderColor: NSColor = NSColor(red: 153 / 255, green: 153 / 255, blue: 153 / 255, alpha: 1.0) {
+    var placeholderColor: NSColor = Theme.shared.centerTextPlaceholder {
         didSet { needsDisplay = true }
     }
 
@@ -959,7 +959,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         super.init(contentRect: rect, styleMask: style, backing: backingStoreType, defer: flag)
 
         self.isReleasedWhenClosed = false
-        self.backgroundColor = NSColor(red: 25 / 255, green: 42 / 255, blue: 77 / 255, alpha: 1)
+        self.backgroundColor = Theme.shared.sidebarTeamBarBg
         
         self.title = "Mattermost"
         self.contentViewController = MainWindowViewController()
@@ -969,9 +969,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         // default 1440x783 content size from AppDelegate is used.
         self.setFrameAutosaveName("MainWindowFrame")
 
-        mainPanel.color = NSColor(red: 30 / 255, green: 50 / 255, blue: 92 / 255, alpha: 1)
+        mainPanel.color = Theme.shared.sidebarBg
         mainPanel.cornerRadius = 8
-        sidebarTopBorder.color = NSColor(white: 1.0, alpha: 0.10)
+        sidebarTopBorder.color = Theme.shared.sidebarText.withAlphaComponent(0.10)
         sidebarTopBorder.cornerRadius = 0
         
         entryView.backgroundColor = .clear
@@ -982,14 +982,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         entryView.allowsUndo = true
         entryView.isHidden = false
         entryView.font = MMFont.font(ofSize: 14)
-        entryView.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
-        entryView.insertionPointColor = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        entryView.textColor = Theme.shared.centerText
+        entryView.insertionPointColor = Theme.shared.buttonBg
         entryView.textContainerInset = NSSize(width: 0, height: 13)
         entryView.textContainer?.lineFragmentPadding = 0
         entryView.delegate = self
         entryView.placeholderString = "Write to Town Square"
         
-        chatEntryPanel.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        chatEntryPanel.color = Theme.shared.centerText.withAlphaComponent(0.16)
         chatEntryPanel.cornerRadius = 4
         chatEntryPanel.borderWidth = 2
         chatPanel.addSubview(chatEntryPanel)
@@ -1003,7 +1003,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         contentView?.addSubview(mainPanel)
 
-        chatPanel.color = .white
+        chatPanel.color = Theme.shared.centerBg
         chatPanel.cornerRadius = 8
         contentView?.addSubview(chatPanel)
         
@@ -1047,9 +1047,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func setupTopGlobalBar() {
         // Web client: header icons/text sit at 56% white, the search field at 64%.
-        let topBarTint = NSColor(white: 1.0, alpha: 0.56)
-        let searchTint = NSColor(white: 1.0, alpha: 0.64)
-        let hoverBg = NSColor(white: 1.0, alpha: 0.08)
+        let topBarTint = Theme.shared.sidebarText.withAlphaComponent(0.56)
+        let searchTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
+        let hoverBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
         
         // Left: Product switcher container (grid icon + Mattermost logo + TEAM EDITION badge)
         productSwitcherPanel.color = .clear
@@ -1060,10 +1060,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         logo.imageScaling = .scaleProportionallyUpOrDown
         logo.alphaValue = 0.94
         
-        editionBadgePanel.color = NSColor(white: 1.0, alpha: 0.08)
+        editionBadgePanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         editionBadgePanel.cornerRadius = 4
         editionBadgeLabel.font = MMFont.font(ofSize: 10, weight: .semibold)
-        editionBadgeLabel.textColor = NSColor(white: 1.0, alpha: 0.75)
+        editionBadgeLabel.textColor = Theme.shared.sidebarText.withAlphaComponent(0.75)
         editionBadgeLabel.alignment = .center
         editionBadgeLabel.isEditable = false
         editionBadgeLabel.isSelectable = false
@@ -1081,7 +1081,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         contentView?.addSubview(productSwitcherPanel)
         
         // Center: Search bar (non-editable trigger, no caret) + Help (?) button
-        searchPanel.color = NSColor(white: 1.0, alpha: 0.08)
+        searchPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         searchPanel.cornerRadius = 4
         if let searchImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search") {
             searchIconView.image = searchImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
@@ -1095,10 +1095,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         searchPanel.addSubview(searchLabel)
         searchPanel.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.searchPanel.color = NSColor(white: 1.0, alpha: isHovered ? 0.12 : 0.08)
+            self.searchPanel.color = Theme.shared.sidebarText.withAlphaComponent(isHovered ? 0.12 : 0.08)
             self.searchPanel.setNeedsAppearanceUpdate()
-            self.searchIconView.contentTintColor = isHovered ? .white : searchTint
-            self.searchLabel.textColor = isHovered ? .white : searchTint
+            self.searchIconView.contentTintColor = isHovered ? Theme.shared.sidebarText : searchTint
+            self.searchLabel.textColor = isHovered ? Theme.shared.sidebarText : searchTint
         }
         searchPanel.onClick = { [weak self] in
             self?.toggleSearchPopover()
@@ -1183,7 +1183,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         statusDotPanel.color = statusColor(for: currentUserStatus)
         statusDotPanel.cornerRadius = 8
         statusDotPanel.borderWidth = 1.35
-        statusDotPanel.borderColor = NSColor(red: 22 / 255, green: 37 / 255, blue: 69 / 255, alpha: 1.0)
+        statusDotPanel.borderColor = Theme.shared.sidebarTeamBarBg
         
         avatarButtonPanel.addSubview(avatarPanel)
         avatarButtonPanel.addSubview(statusDotPanel)
@@ -1204,28 +1204,28 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func updateProductSwitcherAppearance() {
         let active = productSwitcherPanel.isHovered || isProductMenuOpen
-        let hoverBg = NSColor(white: 1.0, alpha: 0.08)
+        let hoverBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
         productSwitcherPanel.color = active ? hoverBg : .clear
         productSwitcherPanel.setNeedsAppearanceUpdate()
         boxImage.alphaValue = active ? 1.0 : 0.72
         logo.alphaValue = active ? 1.0 : 0.94
-        editionBadgePanel.color = NSColor(white: 1.0, alpha: active ? 0.16 : 0.12)
+        editionBadgePanel.color = Theme.shared.sidebarText.withAlphaComponent(active ? 0.16 : 0.12)
         editionBadgePanel.setNeedsAppearanceUpdate()
-        editionBadgeLabel.textColor = active ? .white : NSColor(white: 1.0, alpha: 0.72)
+        editionBadgeLabel.textColor = active ? Theme.shared.sidebarText : Theme.shared.sidebarText.withAlphaComponent(0.72)
     }
     
     private func updateHelpButtonAppearance() {
         let active = helpPanel.isHovered || isHelpMenuOpen
-        let topBarTint = NSColor(white: 1.0, alpha: 0.64)
-        let activeBg = NSColor(white: 1.0, alpha: isHelpMenuOpen ? 0.12 : 0.08)
+        let topBarTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
+        let activeBg = Theme.shared.sidebarText.withAlphaComponent(isHelpMenuOpen ? 0.12 : 0.08)
         helpPanel.color = active ? activeBg : .clear
         helpPanel.setNeedsAppearanceUpdate()
-        helpIconView.contentTintColor = active ? .white : topBarTint
+        helpIconView.contentTintColor = active ? Theme.shared.sidebarText : topBarTint
     }
     
     private func updateAvatarButtonAppearance() {
         let active = avatarButtonPanel.isHovered || isStatusMenuOpen
-        avatarButtonPanel.color = active ? NSColor(white: 1.0, alpha: 0.14) : .clear
+        avatarButtonPanel.color = active ? Theme.shared.sidebarText.withAlphaComponent(0.14) : .clear
         avatarButtonPanel.setNeedsAppearanceUpdate()
     }
     
@@ -1325,7 +1325,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         guard isDndSubMenuOpen != open else { return }
         isDndSubMenuOpen = open
         dndSubMenu.isHidden = !open
-        let rowHoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+        let rowHoverBg = Theme.shared.centerHover
         if let dndRow = dndStatusRow {
             dndRow.color = (open || dndRow.isHovered) ? rowHoverBg : .clear
             dndRow.setNeedsAppearanceUpdate()
@@ -1352,15 +1352,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     private func statusColor(for status: String) -> NSColor {
         switch status.lowercased() {
         case "online":
-            return NSColor(red: 99 / 255, green: 182 / 255, blue: 138 / 255, alpha: 1.0)
+            return Theme.shared.onlineIndicator
         case "away":
-            return NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
+            return Theme.shared.awayIndicator
         case "dnd":
-            return NSColor(red: 210 / 255, green: 75 / 255, blue: 78 / 255, alpha: 1.0)
+            return Theme.shared.dndIndicator
         case "offline":
-            return NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+            return Theme.shared.centerTextPlaceholder
         default:
-            return NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0)
+            return Theme.shared.onlineIndicator
         }
     }
     
@@ -1617,8 +1617,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     // MARK: - Search results
     
     private func setupSearchResultsPanel() {
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        searchResultsPanel.color = .white
+        let dividerColor = Theme.shared.divider
+        searchResultsPanel.color = Theme.shared.centerBg
         searchResultsPanel.cornerRadius = 10
         searchResultsPanel.borderWidth = 1
         searchResultsPanel.borderColor = dividerColor
@@ -1629,7 +1629,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         searchResultsPanel.isHidden = true
         
         searchResultsTitle.font = MMFont.font(ofSize: 13, weight: .semibold)
-        searchResultsTitle.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        searchResultsTitle.textColor = Theme.shared.centerText
         searchResultsTitle.isEditable = false
         searchResultsTitle.isSelectable = false
         searchResultsPanel.addSubview(searchResultsTitle)
@@ -1639,7 +1639,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let closeIcon = NSImageView()
         if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close search") {
             closeIcon.image = img.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-            closeIcon.contentTintColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            closeIcon.contentTintColor = Theme.shared.centerTextMuted
         }
         closeIcon.frame = NSRect(x: 5, y: 5, width: 12, height: 12)
         searchResultsCloseButton.addSubview(closeIcon)
@@ -1718,7 +1718,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         let metaLabel = NSTextField(labelWithString: meta)
         metaLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
-        metaLabel.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        metaLabel.textColor = Theme.shared.centerTextMuted
         metaLabel.isEditable = false
         metaLabel.isSelectable = false
         metaLabel.lineBreakMode = .byTruncatingTail
@@ -1728,7 +1728,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let snippetText = post.message.replacingOccurrences(of: "\n", with: " ")
         let snippet = NSTextField(labelWithString: snippetText)
         snippet.font = MMFont.font(ofSize: 13)
-        snippet.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.9)
+        snippet.textColor = Theme.shared.centerText.withAlphaComponent(0.9)
         snippet.isEditable = false
         snippet.isSelectable = false
         snippet.lineBreakMode = .byTruncatingTail
@@ -1737,7 +1737,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         row.onHoverChanged = { [weak row] isHovered in
             row?.color = isHovered
-                ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                ? Theme.shared.centerHover
                 : .clear
             row?.setNeedsAppearanceUpdate()
         }
@@ -1786,9 +1786,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Favorite") {
             channelStarIconView.image = image.withSymbolConfiguration(.init(pointSize: 12.5, weight: .medium))
         }
-        let starGold = NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
-        let muted = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let dark = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        let starGold = Theme.shared.awayIndicator
+        let muted = Theme.shared.centerTextMuted
+        let dark = Theme.shared.centerText
         channelStarIconView.contentTintColor = isChannelFavorited
             ? starGold
             : (channelStarButton.isHovered ? dark : muted)
@@ -1870,7 +1870,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             item.badgeLabel.frame = NSRect(x: 2, y: 3, width: 30, height: 14)
             if mentions > 0 {
                 item.badgePanel.isHidden = false
-                item.badgePanel.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+                item.badgePanel.color = Theme.shared.buttonBg
                 item.badgeLabel.stringValue = mentions > 99 ? "99+" : "\(mentions)"
                 item.badgeLabel.alignment = .center
                 item.badgeLabel.textColor = .white
@@ -1879,7 +1879,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 item.badgePanel.color = .clear
                 item.badgeLabel.stringValue = unread > 99 ? "99+" : "\(unread)"
                 item.badgeLabel.alignment = .right
-                item.badgeLabel.textColor = NSColor(white: 1.0, alpha: 0.88)
+                item.badgeLabel.textColor = Theme.shared.sidebarText.withAlphaComponent(0.88)
             } else {
                 item.badgePanel.isHidden = true
                 item.badgeLabel.stringValue = ""
@@ -1937,7 +1937,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let pillW = textW + 26
         let pillH: CGFloat = 26
         let pill = RoundedEdgePanel()
-        pill.color = .white
+        pill.color = Theme.shared.centerBg
         pill.cornerRadius = pillH / 2
         pill.frame = NSRect(x: (width - pillW) / 2, y: 4, width: pillW, height: pillH)
         let label = NSTextField(labelWithString: text)
@@ -1955,7 +1955,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     /// Blue floating "N new messages" pill (`postlist.toast.newMessages`) shown when
     /// the first unread post is below the visible part of the timeline.
     private func setupNewMessagesPill() {
-        newMessagesPill.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        newMessagesPill.color = Theme.shared.buttonBg
         newMessagesPill.cornerRadius = 4
         newMessagesPill.isHidden = true
         newMessagesPill.onClick = { [weak self] in
@@ -2083,10 +2083,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     private func updateSearchTabsAppearance() {
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let activeTabBg = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.12)
-        let hoverTabBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let mutedText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        let brandBlue = Theme.shared.buttonBg
+        let activeTabBg = Theme.shared.buttonBg.withAlphaComponent(0.12)
+        let hoverTabBg = Theme.shared.centerHover
+        let mutedText = Theme.shared.centerTextMuted
         
         if isSearchFilesTabSelected {
             messagesTabPanel.color = messagesTabPanel.isHovered ? hoverTabBg : .clear
@@ -2108,15 +2108,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     private func setupSearchPopover() {
         let popoverWidth: CGFloat = 400
         let popoverHeight: CGFloat = 122
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let mutedText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let placeholderColor = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        let pillBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let pillHoverBg = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        let pillText = NSColor(red: 75 / 255, green: 85 / 255, blue: 99 / 255, alpha: 1.0)
+        let brandBlue = Theme.shared.buttonBg
+        let mutedText = Theme.shared.centerTextMuted
+        let placeholderColor = Theme.shared.centerTextPlaceholder
+        let dividerColor = Theme.shared.divider
+        let pillBg = Theme.shared.centerHover
+        let pillHoverBg = Theme.shared.divider
+        let pillText = Theme.shared.centerTextMuted
         
-        searchPopoverPanel.color = .white
+        searchPopoverPanel.color = Theme.shared.centerBg
         searchPopoverPanel.cornerRadius = 8
         searchPopoverPanel.borderWidth = 1
         searchPopoverPanel.borderColor = dividerColor
@@ -2210,7 +2210,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         searchInputBox.addSubview(innerSearchIcon)
         
         searchPopoverInputLabel.font = MMFont.font(ofSize: 13)
-        searchPopoverInputLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        searchPopoverInputLabel.textColor = Theme.shared.centerText
         searchPopoverInputLabel.placeholderString = "Search messages"
         searchPopoverInputLabel.isEditable = true
         searchPopoverInputLabel.isSelectable = true
@@ -2301,13 +2301,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func setupProductSwitcherMenu() {
         let menuWidth: CGFloat = 220
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let mutedIcon = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let rowHoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        let brandBlue = Theme.shared.buttonBg
+        let darkText = Theme.shared.centerText
+        let mutedIcon = Theme.shared.centerTextMuted
+        let rowHoverBg = Theme.shared.centerHover
+        let dividerColor = Theme.shared.divider
         
-        productSwitcherMenu.color = .white
+        productSwitcherMenu.color = Theme.shared.centerBg
         productSwitcherMenu.cornerRadius = 6
         productSwitcherMenu.borderWidth = 1
         productSwitcherMenu.borderColor = dividerColor
@@ -2378,7 +2378,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         let footerBadgeLabel = NSTextField(labelWithString: "TEAM EDITION")
         footerBadgeLabel.font = MMFont.font(ofSize: 8, weight: .bold)
-        footerBadgeLabel.textColor = NSColor(red: 75 / 255, green: 85 / 255, blue: 99 / 255, alpha: 1.0)
+        footerBadgeLabel.textColor = Theme.shared.centerTextMuted
         footerBadgeLabel.alignment = .center
         
         let footerBadgeText = footerBadgeLabel.stringValue.isEmpty ? "TEAM EDITION" : footerBadgeLabel.stringValue
@@ -2429,13 +2429,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func setupHelpMenu() {
         let menuWidth: CGFloat = 204
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let mutedIcon = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let rowHoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        let brandBlue = Theme.shared.buttonBg
+        let darkText = Theme.shared.centerText
+        let mutedIcon = Theme.shared.centerTextMuted
+        let rowHoverBg = Theme.shared.centerHover
+        let dividerColor = Theme.shared.divider
         
-        helpMenu.color = .white
+        helpMenu.color = Theme.shared.centerBg
         helpMenu.cornerRadius = 6
         helpMenu.borderWidth = 1
         helpMenu.borderColor = dividerColor
@@ -2474,13 +2474,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func setupStatusMenu() {
         let menuWidth: CGFloat = 248
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let mutedIcon = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let rowHoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        let brandBlue = Theme.shared.buttonBg
+        let darkText = Theme.shared.centerText
+        let mutedIcon = Theme.shared.centerTextMuted
+        let rowHoverBg = Theme.shared.centerHover
+        let dividerColor = Theme.shared.divider
         
-        statusMenu.color = .white
+        statusMenu.color = Theme.shared.centerBg
         statusMenu.cornerRadius = 6
         statusMenu.borderWidth = 1
         statusMenu.borderColor = dividerColor
@@ -2518,7 +2518,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         menuDot.cornerRadius = 5
         menuDot.color = statusColor(for: currentUserStatus)
         menuDot.borderWidth = 1.5
-        menuDot.borderColor = .white
+        menuDot.borderColor = Theme.shared.centerBg
         headerRow.addSubview(menuDot)
         menuAvatarStatusDot = menuDot
         
@@ -2578,10 +2578,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         statusCheckViews.removeAll()
         
         let statusConfigs: [(index: Int, symbol: String, tint: NSColor, title: String, subtitle: String?, y: CGFloat, height: CGFloat, showsChevron: Bool)] = [
-            (0, "checkmark.circle.fill", NSColor(red: 61 / 255, green: 184 / 255, blue: 135 / 255, alpha: 1.0), "Online", nil, 216, 34, false),
-            (1, "clock.fill", NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0), "Away", nil, 182, 34, false),
-            (2, "minus.circle.fill", NSColor(red: 210 / 255, green: 75 / 255, blue: 78 / 255, alpha: 1.0), "Do not disturb", "Disables all notifications", 136, 46, true),
-            (3, "circle", NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0), "Offline", nil, 102, 34, false)
+            (0, "checkmark.circle.fill", Theme.shared.onlineIndicator, "Online", nil, 216, 34, false),
+            (1, "clock.fill", Theme.shared.awayIndicator, "Away", nil, 182, 34, false),
+            (2, "minus.circle.fill", Theme.shared.dndIndicator, "Do not disturb", "Disables all notifications", 136, 46, true),
+            (3, "circle", Theme.shared.centerTextPlaceholder, "Offline", nil, 102, 34, false)
         ]
         
         for cfg in statusConfigs {
@@ -2732,12 +2732,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func setupDndSubMenu() {
         let subWidth: CGFloat = 212
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let mutedText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let rowHoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        let darkText = Theme.shared.centerText
+        let mutedText = Theme.shared.centerTextMuted
+        let rowHoverBg = Theme.shared.centerHover
+        let dividerColor = Theme.shared.divider
         
-        dndSubMenu.color = .white
+        dndSubMenu.color = Theme.shared.centerBg
         dndSubMenu.cornerRadius = 6
         dndSubMenu.borderWidth = 1
         dndSubMenu.borderColor = dividerColor
@@ -2989,21 +2989,21 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         panel.onHoverChanged = { [weak panel, weak iconView] isHovered in
             panel?.color = isHovered ? hoverBg : .clear
             panel?.setNeedsAppearanceUpdate()
-            iconView?.contentTintColor = isHovered ? .white : defaultTint
+            iconView?.contentTintColor = isHovered ? Theme.shared.sidebarText : defaultTint
         }
         panel.onClick = onClick
         contentView?.addSubview(panel)
     }
     
     private func setupLeftChannelSidebar() {
-        let mutedTint = NSColor(white: 1.0, alpha: 0.64)
-        let hoverBg = NSColor(white: 1.0, alpha: 0.08)
+        let mutedTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
+        let hoverBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
         
         // 1. Team Header Row: "None v" button + "+" button
         teamHeaderButton.color = .clear
         teamHeaderButton.cornerRadius = 4
         teamHeaderLabel.font = MMFont.font(ofSize: 16, weight: .semibold)
-        teamHeaderLabel.textColor = .white
+        teamHeaderLabel.textColor = Theme.shared.sidebarText
         teamHeaderLabel.isEditable = false
         teamHeaderLabel.isSelectable = false
         teamHeaderButton.addSubview(teamHeaderLabel)
@@ -3017,7 +3017,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             guard let self = self else { return }
             self.teamHeaderButton.color = isHovered ? hoverBg : .clear
             self.teamHeaderButton.setNeedsAppearanceUpdate()
-            self.teamHeaderChevron.contentTintColor = isHovered ? .white : mutedTint
+            self.teamHeaderChevron.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
         }
         teamHeaderButton.onClick = { [weak self] in
             self?.toggleTeamMenu()
@@ -3027,7 +3027,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         teamDropdownMenu.isHidden = true
         contentView?.addSubview(teamDropdownMenu)
         
-        teamAddButton.color = NSColor(white: 1.0, alpha: 0.12)
+        teamAddButton.color = Theme.shared.sidebarText.withAlphaComponent(0.12)
         teamAddButton.cornerRadius = 16
         if let plusImg = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add") {
             teamAddIconView.image = plusImg.withSymbolConfiguration(.init(pointSize: 15, weight: .medium))
@@ -3036,9 +3036,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         teamAddButton.addSubview(teamAddIconView)
         teamAddButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.teamAddButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.18 : 0.12)
+            self.teamAddButton.color = Theme.shared.sidebarText.withAlphaComponent(isHovered ? 0.18 : 0.12)
             self.teamAddButton.setNeedsAppearanceUpdate()
-            self.teamAddIconView.contentTintColor = isHovered ? .white : mutedTint
+            self.teamAddIconView.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
         }
         teamAddButton.onClick = { [weak self] in
             self?.showCreateTeamDialog()
@@ -3046,7 +3046,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         mainPanel.addSubview(teamAddButton)
         
         // 2. Filter & Find Channel Row
-        filterChannelButton.color = NSColor(white: 1.0, alpha: 0.08)
+        filterChannelButton.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         filterChannelButton.cornerRadius = 4
         if let filterImg = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: "Filter") {
             filterChannelIconView.image = filterImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
@@ -3055,9 +3055,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         filterChannelButton.addSubview(filterChannelIconView)
         filterChannelButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.filterChannelButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.15 : 0.08)
+            self.filterChannelButton.color = Theme.shared.sidebarText.withAlphaComponent(isHovered ? 0.15 : 0.08)
             self.filterChannelButton.setNeedsAppearanceUpdate()
-            self.filterChannelIconView.contentTintColor = isHovered ? .white : mutedTint
+            self.filterChannelIconView.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
         }
         filterChannelButton.onClick = { [weak self] in
             guard let self = self else { return }
@@ -3065,7 +3065,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         mainPanel.addSubview(filterChannelButton)
         
-        findChannelPanel.color = NSColor(white: 1.0, alpha: 0.08)
+        findChannelPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         findChannelPanel.cornerRadius = 4
         if let findImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find channel") {
             findChannelIconView.image = findImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
@@ -3085,10 +3085,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         findChannelPanel.addSubview(findChannelLabel)
         findChannelPanel.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.findChannelPanel.color = NSColor(white: 1.0, alpha: isHovered ? 0.14 : 0.08)
+            self.findChannelPanel.color = Theme.shared.sidebarText.withAlphaComponent(isHovered ? 0.14 : 0.08)
             self.findChannelPanel.setNeedsAppearanceUpdate()
-            self.findChannelIconView.contentTintColor = isHovered ? .white : mutedTint
-            self.findChannelLabel.textColor = isHovered ? .white : mutedTint
+            self.findChannelIconView.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
+            self.findChannelLabel.textColor = isHovered ? Theme.shared.sidebarText : mutedTint
         }
         mainPanel.addSubview(findChannelPanel)
         setupFilterMenu()
@@ -3567,7 +3567,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         items: [SidebarItemView],
         isCollapsed: Bool = false
     ) -> SidebarCategoryView {
-        let mutedTint = NSColor(white: 1.0, alpha: 0.64)
+        let mutedTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
         let headerRow = RoundedEdgePanel()
         headerRow.cornerRadius = 0
         headerRow.color = .clear
@@ -3600,17 +3600,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             addIcon.frame = NSRect(x: 3, y: 3, width: 14, height: 14)
             btn.addSubview(addIcon)
             btn.onHoverChanged = { [weak btn, weak addIcon] isHovered in
-                btn?.color = isHovered ? NSColor(white: 1.0, alpha: 0.12) : .clear
+                btn?.color = isHovered ? Theme.shared.sidebarText.withAlphaComponent(0.12) : .clear
                 btn?.setNeedsAppearanceUpdate()
-                addIcon?.contentTintColor = isHovered ? .white : mutedTint
+                addIcon?.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
             }
             headerRow.addSubview(btn)
             addBtn = btn
         }
         
         headerRow.onHoverChanged = { [weak chevronView, weak titleLabel] isHovered in
-            chevronView?.contentTintColor = isHovered ? .white : mutedTint
-            titleLabel?.textColor = isHovered ? .white : mutedTint
+            chevronView?.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
+            titleLabel?.textColor = isHovered ? Theme.shared.sidebarText : mutedTint
         }
         headerRow.onClick = { [weak self] in
             self?.toggleSidebarCategory(id)
@@ -3647,7 +3647,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         let leftBar = RoundedEdgePanel()
         leftBar.cornerRadius = 2
-        leftBar.color = NSColor(red: 93 / 255, green: 137 / 255, blue: 234 / 255, alpha: 1.0)
+        leftBar.color = Theme.shared.sidebarActiveBorder
         leftBar.isHidden = true
         row.addSubview(leftBar)
         
@@ -3660,7 +3660,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         } else if isBotBadge {
             if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: title) {
                 iconView.image = img.withSymbolConfiguration(.init(pointSize: 9.5, weight: .semibold))
-                iconView.contentTintColor = NSColor(white: 1.0, alpha: 0.85)
+                iconView.contentTintColor = Theme.shared.sidebarText.withAlphaComponent(0.85)
             }
             iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
             row.addSubview(iconView)
@@ -3698,7 +3698,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             let xView = NSImageView()
             if let xImg = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close") {
                 xView.image = xImg.withSymbolConfiguration(.init(pointSize: 9.5, weight: .bold))
-                xView.contentTintColor = NSColor(white: 1.0, alpha: 0.72)
+                xView.contentTintColor = Theme.shared.sidebarText.withAlphaComponent(0.72)
             }
             xView.isHidden = true
             row.addSubview(xView)
@@ -3768,10 +3768,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         // Web: selected and hovered rows both use 8% white, labels are 14pt regular.
-        let selectedBg = NSColor(white: 1.0, alpha: 0.08)
-        let hoverBg = NSColor(white: 1.0, alpha: 0.08)
-        let defaultText = NSColor(white: 1.0, alpha: 0.64)
-        let defaultIcon = NSColor(white: 1.0, alpha: 0.64)
+        let selectedBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        let hoverBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        let defaultText = Theme.shared.sidebarText.withAlphaComponent(0.64)
+        let defaultIcon = Theme.shared.sidebarText.withAlphaComponent(0.64)
         
         for item in allItems {
             let isSelected = item.isSelectable && (item.id == selectedSidebarItemId)
@@ -3780,18 +3780,18 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             if isSelected {
                 item.row.color = selectedBg
                 item.label.font = MMFont.font(ofSize: 14, weight: .regular)
-                item.label.textColor = .white
+                item.label.textColor = Theme.shared.sidebarActiveColor
                 if !item.isBotBadge {
-                    item.iconView.contentTintColor = .white
+                    item.iconView.contentTintColor = Theme.shared.sidebarActiveColor
                 } else {
                     item.iconView.contentTintColor = nil
                 }
             } else if isHovered {
                 item.row.color = hoverBg
                 item.label.font = MMFont.font(ofSize: 14, weight: .regular)
-                item.label.textColor = .white
+                item.label.textColor = Theme.shared.sidebarActiveColor
                 if !item.isBotBadge {
-                    item.iconView.contentTintColor = .white
+                    item.iconView.contentTintColor = Theme.shared.sidebarActiveColor
                 } else {
                     item.iconView.contentTintColor = nil
                 }
@@ -3806,7 +3806,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 }
             }
             item.leftBar.isHidden = !isSelected
-            item.leftBar.color = NSColor(red: 93 / 255, green: 137 / 255, blue: 234 / 255, alpha: 1.0)
+            item.leftBar.color = Theme.shared.sidebarActiveBorder
             item.leftBar.setNeedsAppearanceUpdate()
             item.row.setNeedsAppearanceUpdate()
             item.hoverCloseView?.isHidden = !isHovered
@@ -3839,7 +3839,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let menuY = teamHeaderButton.frame.minY - menuHeight - 4
         
         teamDropdownMenu.frame = NSRect(x: menuX, y: menuY, width: menuWidth, height: menuHeight)
-        teamDropdownMenu.color = .white
+        teamDropdownMenu.color = Theme.shared.centerBg
         teamDropdownMenu.cornerRadius = 6
         teamDropdownMenu.borderWidth = 1
         teamDropdownMenu.borderColor = NSColor(white: 0.85, alpha: 1.0)
@@ -4064,10 +4064,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     private func setupFilterMenu() {
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        let textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        let dividerColor = Theme.shared.divider
+        let textColor = Theme.shared.centerText
         
-        filterMenu.color = .white
+        filterMenu.color = Theme.shared.centerBg
         filterMenu.cornerRadius = 6
         filterMenu.borderWidth = 1
         filterMenu.borderColor = dividerColor
@@ -4092,13 +4092,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             let check = NSImageView()
             if let image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Selected") {
                 check.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))
-                check.contentTintColor = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+                check.contentTintColor = Theme.shared.buttonBg
             }
             check.frame = NSRect(x: 146, y: 7, width: 14, height: 14)
             row.addSubview(check)
             row.onHoverChanged = { [weak row] isHovered in
                 row?.color = isHovered
-                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
             }
@@ -4134,15 +4134,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     private func setupRightChatPanel() {
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let mutedText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let lightPlaceholder = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        let hoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let msgHoverBg = NSColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1.0)
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let brandBlueHover = NSColor(red: 22 / 255, green: 70 / 255, blue: 176 / 255, alpha: 1.0)
-        let starGold = NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
+        let darkText = Theme.shared.centerText
+        let mutedText = Theme.shared.centerTextMuted
+        let lightPlaceholder = Theme.shared.centerTextPlaceholder
+        let dividerColor = Theme.shared.divider
+        let hoverBg = Theme.shared.centerHover
+        let msgHoverBg = Theme.shared.centerHoverSubtle
+        let brandBlue = Theme.shared.buttonBg
+        let brandBlueHover = Theme.shared.buttonBg.blended(withFraction: 0.2, of: .black) ?? Theme.shared.buttonBg
+        let starGold = Theme.shared.awayIndicator
         
         // 0. Timeline clipping container (clips messages & hero text to channelHeaderBorder below star icon)
         chatTimelineContainer.wantsLayer = true
@@ -4184,9 +4184,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         channelTitleButton.addSubview(channelTitleLabel)
         
         channelHeaderBotBadge.cornerRadius = 4
-        channelHeaderBotBadge.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
+        channelHeaderBotBadge.color = Theme.shared.centerText.withAlphaComponent(0.12)
         channelHeaderBotBadgeLabel.font = MMFont.font(ofSize: 9.5, weight: .bold)
-        channelHeaderBotBadgeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        channelHeaderBotBadgeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
         channelHeaderBotBadgeLabel.alignment = .center
         channelHeaderBotBadgeLabel.isEditable = false
         channelHeaderBotBadgeLabel.isSelectable = false
@@ -4308,7 +4308,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         timelineHeroContainer.color = .clear
         
         heroIllustrationCircle.cornerRadius = 38
-        heroIllustrationCircle.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+        heroIllustrationCircle.color = Theme.shared.centerHover
         timelineHeroContainer.addSubview(heroIllustrationCircle)
         
         heroBotAvatarView.imageScaling = .scaleProportionallyUpOrDown
@@ -4317,11 +4317,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         heroWhiteBubble.cornerRadius = 4
         heroWhiteBubble.borderWidth = 1.5
-        heroWhiteBubble.color = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+        heroWhiteBubble.color = Theme.shared.centerTextPlaceholder
         for i in 0..<3 {
             let line = RoundedEdgePanel()
             line.cornerRadius = 1
-            line.color = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+            line.color = Theme.shared.centerTextPlaceholder
             let w: CGFloat = (i == 2) ? 20 : 32
             line.frame = NSRect(x: 9, y: CGFloat(24 - i * 7), width: w, height: 2)
             heroWhiteBubble.addSubview(line)
@@ -4348,9 +4348,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         timelineHeroContainer.addSubview(heroTitleLabel)
         
         heroBotBadge.cornerRadius = 4
-        heroBotBadge.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
+        heroBotBadge.color = Theme.shared.centerText.withAlphaComponent(0.12)
         heroBotBadgeLabel.font = MMFont.font(ofSize: 10, weight: .bold)
-        heroBotBadgeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        heroBotBadgeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
         heroBotBadgeLabel.alignment = .center
         heroBotBadgeLabel.isEditable = false
         heroBotBadgeLabel.isSelectable = false
@@ -4420,7 +4420,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         // The editor draws its own placeholder; keep the label only as the
         // canonical string source and never put it in the hit-test path.
         composerPlaceholderLabel.font = MMFont.font(ofSize: 14)
-        composerPlaceholderLabel.textColor = NSColor(red: 153 / 255, green: 153 / 255, blue: 153 / 255, alpha: 1.0)
+        composerPlaceholderLabel.textColor = Theme.shared.centerTextPlaceholder
         composerPlaceholderLabel.isEditable = false
         composerPlaceholderLabel.isSelectable = false
         composerPlaceholderLabel.isHidden = true
@@ -4560,11 +4560,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         
         composerSendButton.cornerRadius = 4
-        composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+        composerSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
         let sendIcon = NSImageView()
         if let sImg = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send") {
             sendIcon.image = sImg.withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
-            sendIcon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.32)
+            sendIcon.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.32)
         }
         sendIcon.frame = NSRect(x: 15, y: 7, width: 18, height: 18)
         composerSendButton.addSubview(sendIcon)
@@ -4573,10 +4573,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             guard let self = self else { return }
             if self.composerSendEnabled {
                 self.composerSendButton.color = isHovered
-                    ? NSColor(red: 22 / 255, green: 70 / 255, blue: 176 / 255, alpha: 1.0)
-                    : NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+                    ? Theme.shared.buttonBg.blended(withFraction: 0.2, of: .black) ?? Theme.shared.buttonBg
+                    : Theme.shared.buttonBg
             } else {
-                self.composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                self.composerSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
             }
             self.composerSendButton.setNeedsAppearanceUpdate()
         }
@@ -4586,17 +4586,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         chatEntryPanel.addSubview(composerSendButton)
         
         composerHelpLabel.font = MMFont.font(ofSize: 12)
-        composerHelpLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        composerHelpLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
         composerHelpLabel.alignment = .right
         composerHelpLabel.isEditable = false
         composerHelpLabel.isSelectable = false
         chatPanel.addSubview(composerHelpLabel)
         
-        connectionBanner.color = NSColor(red: 255 / 255, green: 244 / 255, blue: 229 / 255, alpha: 0.98)
+        connectionBanner.color = Theme.shared.mentionHighlightBg.withAlphaComponent(0.98)
         connectionBanner.cornerRadius = 0
         connectionBanner.isHidden = true
         connectionLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
-        connectionLabel.textColor = NSColor(red: 138 / 255, green: 90 / 255, blue: 0 / 255, alpha: 1.0)
+        connectionLabel.textColor = Theme.shared.mentionHighlightLink
         connectionLabel.alignment = .center
         connectionLabel.isEditable = false
         connectionLabel.isSelectable = false
@@ -4622,10 +4622,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     // MARK: - Channel menu
     
     private func setupChannelMenu() {
-        channelMenu.color = .white
+        channelMenu.color = Theme.shared.centerBg
         channelMenu.cornerRadius = 6
         channelMenu.borderWidth = 1
-        channelMenu.borderColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        channelMenu.borderColor = Theme.shared.divider
         channelMenu.shadowColor = .black
         channelMenu.shadowOpacity = 0.18
         channelMenu.shadowRadius = 12
@@ -4656,8 +4656,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     private func setupDMPicker() {
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        dmPickerPanel.color = .white
+        let dividerColor = Theme.shared.divider
+        dmPickerPanel.color = Theme.shared.centerBg
         dmPickerPanel.cornerRadius = 8
         dmPickerPanel.borderWidth = 1
         dmPickerPanel.borderColor = dividerColor
@@ -4666,8 +4666,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         dmPickerPanel.shadowRadius = 12
         dmPickerPanel.shadowOffset = CGSize(width: 0, height: -4)
         dmPickerPanel.isHidden = true
-        dmPickerPanel.appearance = NSAppearance(named: .aqua)
-        dmSearchField.appearance = NSAppearance(named: .aqua)
+        let dmAppearance = NSAppearance(named: Theme.shared.isDark ? .darkAqua : .aqua)
+        dmPickerPanel.appearance = dmAppearance
+        dmSearchField.appearance = dmAppearance
 
         dmSearchField.placeholderString = "Search for a user"
         dmSearchField.font = MMFont.font(ofSize: 13)
@@ -4776,7 +4777,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if filtered.isEmpty {
             let label = NSTextField(labelWithString: empty)
             label.font = MMFont.font(ofSize: 13)
-            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
             label.isEditable = false
             label.isSelectable = false
@@ -4788,7 +4789,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
         let palette: [NSColor] = [
             NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0),
-            NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+            Theme.shared.buttonBg,
             NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
             NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
             NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
@@ -4827,7 +4828,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
             let name = NSTextField(labelWithString: user.username)
             name.font = MMFont.font(ofSize: 13, weight: .semibold)
-            name.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+            name.textColor = Theme.shared.centerText
             name.isEditable = false
             name.isSelectable = false
             name.frame = NSRect(x: 44, y: 5, width: max(0, width - 70), height: 17)
@@ -4837,7 +4838,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             if !fullName.isEmpty {
                 let subtitle = NSTextField(labelWithString: fullName)
                 subtitle.font = MMFont.font(ofSize: 11)
-                subtitle.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+                subtitle.textColor = Theme.shared.centerTextMuted
                 subtitle.isEditable = false
                 subtitle.isSelectable = false
                 subtitle.frame = NSRect(x: 44, y: 22, width: max(0, width - 70), height: 15)
@@ -4846,7 +4847,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
             row.onHoverChanged = { [weak row] isHovered in
                 row?.color = isHovered
-                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
             }
@@ -4927,8 +4928,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if y < 8 { y = channelTitleButton.frame.maxY + 4 }
         channelMenu.frame = NSRect(x: x, y: y, width: width, height: height)
         
-        let textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let iconColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        let textColor = Theme.shared.centerText
+        let iconColor = Theme.shared.centerTextMuted
         for (index, item) in rows.enumerated() {
             let row = RoundedEdgePanel()
             row.cornerRadius = 4
@@ -4957,7 +4958,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             
             row.onHoverChanged = { [weak row] isHovered in
                 row?.color = isHovered
-                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
             }
@@ -5028,23 +5029,24 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     private func setupEmojiPanel() {
-        emojiPanel.color = .white
+        emojiPanel.color = Theme.shared.centerBg
         emojiPanel.cornerRadius = 4
         emojiPanel.borderWidth = 1
-        emojiPanel.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        emojiPanel.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         emojiPanel.shadowColor = .black
         emojiPanel.shadowOpacity = 0.12
         emojiPanel.shadowRadius = 24
         emojiPanel.shadowOffset = CGSize(width: 0, height: -8)
         emojiPanel.clipContentToBounds = true
         emojiPanel.isHidden = true
-        emojiPanel.appearance = NSAppearance(named: .aqua)
+        let emojiAppearance = NSAppearance(named: Theme.shared.isDark ? .darkAqua : .aqua)
+        emojiPanel.appearance = emojiAppearance
 
         emojiSearchField.placeholderString = "Search"
         emojiSearchField.font = MMFont.font(ofSize: 13)
         emojiSearchField.delegate = self
         emojiSearchField.sendsSearchStringImmediately = true
-        emojiSearchField.appearance = NSAppearance(named: .aqua)
+        emojiSearchField.appearance = emojiAppearance
         emojiPanel.addSubview(emojiSearchField)
 
         emojiCategoryBar.frame = NSRect(x: 0, y: 366, width: 350, height: 28)
@@ -5097,7 +5099,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             button.onHoverChanged = { [weak self, weak button] isHovered in
                 guard let self = self, let button = button else { return }
                 if self.emojiSelectedCategory != title, isHovered {
-                    button.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.06)
+                    button.color = Theme.shared.centerText.withAlphaComponent(0.06)
                 } else if self.emojiSelectedCategory != title {
                     button.color = .clear
                 }
@@ -5115,12 +5117,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     private func updateEmojiCategorySelection() {
-        let selectedBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let idle = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+        let selectedBlue = Theme.shared.buttonBg
+        let idle = Theme.shared.centerText.withAlphaComponent(0.64)
         for (title, button) in emojiCategoryBarButtons {
             let isSelected = title == emojiSelectedCategory
             button.color = isSelected
-                ? NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
+                ? Theme.shared.buttonBg.withAlphaComponent(0.08)
                 : .clear
             button.subviews.compactMap { $0 as? NSImageView }.forEach {
                 $0.contentTintColor = isSelected ? selectedBlue : idle
@@ -5155,7 +5157,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let selection = emojiEntriesForSelection()
         let header = NSTextField(labelWithString: selection.title.uppercased())
         header.font = MMFont.font(ofSize: 12, weight: .semibold)
-        header.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.48)
+        header.textColor = Theme.shared.centerText.withAlphaComponent(0.48)
         header.isEditable = false
         header.isSelectable = false
         header.frame = NSRect(x: 12, y: 0, width: max(0, width - 24), height: 36)
@@ -5164,7 +5166,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if selection.entries.isEmpty {
             let label = NSTextField(labelWithString: "No emoji found")
             label.font = MMFont.font(ofSize: 13)
-            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
             label.isEditable = false
             label.isSelectable = false
@@ -5215,7 +5217,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             }
             button.onHoverChanged = { [weak button] isHovered in
                 button?.color = isHovered
-                    ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+                    ? Theme.shared.centerText.withAlphaComponent(0.16)
                     : .clear
                 button?.setNeedsAppearanceUpdate()
             }
@@ -5390,21 +5392,21 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     private func setupRightPanel() {
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
-        rightPanel.color = .white
+        let dividerColor = Theme.shared.divider
+        rightPanel.color = Theme.shared.centerBg
         rightPanel.cornerRadius = 0
         rightPanel.borderWidth = 1
         rightPanel.borderColor = dividerColor
         rightPanel.isHidden = true
         
         rightPanelTitle.font = MMFont.font(ofSize: 16, weight: .semibold)
-        rightPanelTitle.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        rightPanelTitle.textColor = Theme.shared.centerText
         rightPanelTitle.isEditable = false
         rightPanelTitle.isSelectable = false
         rightPanel.addSubview(rightPanelTitle)
 
         rightPanelSubtitle.font = MMFont.font(ofSize: 12)
-        rightPanelSubtitle.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        rightPanelSubtitle.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
         rightPanelSubtitle.isEditable = false
         rightPanelSubtitle.isSelectable = false
         rightPanel.addSubview(rightPanelSubtitle)
@@ -5414,7 +5416,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let closeIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close panel") {
             closeIcon.image = image.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-            closeIcon.contentTintColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            closeIcon.contentTintColor = Theme.shared.centerTextMuted
         }
         closeIcon.frame = NSRect(x: 9, y: 9, width: 14, height: 14)
         rightPanelCloseButton.addSubview(closeIcon)
@@ -5429,7 +5431,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         rightPanelScroll.documentView = rightPanelDoc
         rightPanel.addSubview(rightPanelScroll)
 
-        threadReplyPanel.color = .white
+        threadReplyPanel.color = Theme.shared.centerBg
         threadReplyPanel.cornerRadius = 4
         threadReplyPanel.borderWidth = 1
         threadReplyPanel.borderColor = dividerColor
@@ -5437,7 +5439,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
         threadReplyField.placeholderString = "Reply to thread…"
         threadReplyField.font = MMFont.font(ofSize: 13)
-        threadReplyField.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        threadReplyField.textColor = Theme.shared.centerText
         threadReplyField.isBordered = false
         threadReplyField.drawsBackground = false
         threadReplyField.focusRingType = .none
@@ -5447,12 +5449,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         threadReplyPanel.addSubview(threadReplyField)
 
         threadPlaceholderLabel.font = MMFont.font(ofSize: 13)
-        threadPlaceholderLabel.textColor = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+        threadPlaceholderLabel.textColor = Theme.shared.centerTextPlaceholder
         threadPlaceholderLabel.isEditable = false
         threadPlaceholderLabel.isSelectable = false
         threadReplyPanel.addSubview(threadPlaceholderLabel, positioned: .below, relativeTo: threadReplyField)
 
-        threadSendButton.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        threadSendButton.color = Theme.shared.buttonBg
         threadSendButton.cornerRadius = 4
         let sendIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send reply") {
@@ -5645,7 +5647,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         guard !threadPosts.isEmpty else {
             let label = NSTextField(labelWithString: empty ?? "No replies yet")
             label.font = MMFont.font(ofSize: 13)
-            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
             label.isEditable = false
             label.isSelectable = false
@@ -5669,7 +5671,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 let replyCount = max(0, threadPosts.count - 1)
                 let header = NSTextField(labelWithString: "\(replyCount) \(replyCount == 1 ? "reply" : "replies")")
                 header.font = MMFont.font(ofSize: 11, weight: .semibold)
-                header.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+                header.textColor = Theme.shared.centerTextMuted
                 header.isEditable = false
                 header.isSelectable = false
                 header.frame = NSRect(x: 13, y: y + 4, width: contentWidth - 2, height: 16)
@@ -5833,7 +5835,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         var y: CGFloat = 12
         let heading = NSTextField(labelWithString: "Recent files")
         heading.font = MMFont.font(ofSize: 14, weight: .semibold)
-        heading.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        heading.textColor = Theme.shared.centerText
         heading.isEditable = false
         heading.isSelectable = false
         heading.frame = NSRect(x: 15, y: y, width: max(0, width - 30), height: 20)
@@ -5843,7 +5845,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if files.isEmpty {
             let label = NSTextField(labelWithString: empty)
             label.font = MMFont.font(ofSize: 13)
-            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
             label.isEditable = false
             label.isSelectable = false
@@ -5858,14 +5860,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         for file in files {
             let card = FlippedEdgePanel()
             card.cornerRadius = 4
-            card.color = .white
+            card.color = Theme.shared.centerBg
             card.borderWidth = 1
-            card.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+            card.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
             card.frame = NSRect(x: 14, y: y, width: rowWidth, height: rowHeight)
             card.onHoverChanged = { [weak card] isHovered in
                 card?.color = isHovered
-                    ? NSColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1.0)
-                    : .white
+                    ? Theme.shared.centerHoverSubtle
+                    : Theme.shared.centerBg
                 card?.setNeedsAppearanceUpdate()
             }
 
@@ -5875,7 +5877,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             if isImage {
                 let thumb = RoundedEdgePanel()
                 thumb.cornerRadius = 4
-                thumb.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                thumb.color = Theme.shared.centerHover
                 thumb.clipContentToBounds = true
                 thumb.frame = thumbFrame
                 let imageView = NSImageView(frame: NSRect(origin: .zero, size: thumbFrame.size))
@@ -5899,7 +5901,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
             let name = NSTextField(labelWithString: file.name ?? file.id)
             name.font = MMFont.font(ofSize: 12, weight: .semibold)
-            name.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+            name.textColor = Theme.shared.centerText
             name.lineBreakMode = .byTruncatingMiddle
             name.isEditable = false
             name.isSelectable = false
@@ -5911,7 +5913,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 .joined(separator: "  •  ")
             let metadata = NSTextField(labelWithString: details)
             metadata.font = MMFont.font(ofSize: 12)
-            metadata.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+            metadata.textColor = Theme.shared.centerText
             metadata.isEditable = false
             metadata.isSelectable = false
             metadata.frame = NSRect(x: 64, y: 32, width: max(60, rowWidth - 76), height: 17)
@@ -6236,7 +6238,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if rows.isEmpty {
             let label = NSTextField(labelWithString: empty)
             label.font = MMFont.font(ofSize: 13)
-            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
             label.isEditable = false
             label.isSelectable = false
@@ -6261,7 +6263,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         let title = NSTextField(labelWithString: item.title)
         title.font = MMFont.font(ofSize: 13, weight: .semibold)
-        title.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        title.textColor = Theme.shared.centerText
         title.lineBreakMode = .byTruncatingTail
         title.isEditable = false
         title.isSelectable = false
@@ -6271,7 +6273,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if !item.subtitle.isEmpty {
             let subtitle = NSTextField(labelWithString: item.subtitle)
             subtitle.font = MMFont.font(ofSize: 12)
-            subtitle.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            subtitle.textColor = Theme.shared.centerTextMuted
             subtitle.lineBreakMode = .byTruncatingTail
             subtitle.isEditable = false
             subtitle.isSelectable = false
@@ -6282,7 +6284,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if !item.meta.isEmpty {
             let meta = NSTextField(labelWithString: item.meta)
             meta.font = MMFont.font(ofSize: 11)
-            meta.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+            meta.textColor = Theme.shared.centerText.withAlphaComponent(0.64)
             meta.isEditable = false
             meta.isSelectable = false
             meta.frame = NSRect(x: 10, y: 6, width: width - 20, height: 14)
@@ -6291,7 +6293,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         row.onHoverChanged = { [weak row] isHovered in
             row?.color = isHovered
-                ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                ? Theme.shared.centerHover
                 : .clear
             row?.setNeedsAppearanceUpdate()
         }
@@ -6348,7 +6350,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             heroBotAvatarView.image = avatar
             heroBotAvatarView.frame = NSRect(x: 0, y: 0, width: 76, height: 76)
         } else {
-            heroIllustrationCircle.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+            heroIllustrationCircle.color = Theme.shared.centerHover
             heroWhiteBubble.isHidden = false
             heroBlueBubble.isHidden = false
             heroBotAvatarView.isHidden = true
@@ -6402,8 +6404,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     private func createDateSeparator(dateStr: String, width: CGFloat) -> NSView {
         let container = TimelineFlippedView()
-        let dividerColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
-        let separatorText = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        let dividerColor = Theme.shared.centerText.withAlphaComponent(0.16)
+        let separatorText = Theme.shared.centerText
 
         // Web: 1pt rule behind a white 26pt pill, 13pt bold label, 13pt horizontal padding.
         let font = MMFont.font(ofSize: 13, weight: .bold)
@@ -6421,7 +6423,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         line.frame = NSRect(x: 20, y: 16, width: max(0, width - 40), height: 1)
 
         let pill = RoundedEdgePanel()
-        pill.color = .white
+        pill.color = Theme.shared.centerBg
         pill.cornerRadius = pillH / 2
         pill.frame = NSRect(x: pillX, y: 4, width: pillW, height: pillH)
 
@@ -6682,7 +6684,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     private func appendEditedIndicator(to attributedString: NSMutableAttributedString, font: NSFont, editDate: Date?) {
         let editFont = MMFont.font(ofSize: max(10, font.pointSize - 2))
-        let editColor = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+        let editColor = Theme.shared.centerTextPlaceholder
         
         let space = NSAttributedString(string: "  ", attributes: [
             .font: editFont,
@@ -6719,8 +6721,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let groups = groupedReactions(post)
         guard !groups.isEmpty else { return 0 }
 
-        let blue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let centerColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        let blue = Theme.shared.buttonBg
+        let centerColor = Theme.shared.centerText
         let chipY = y + 4
         var chipX = x
         let emojiW: CGFloat = 16
@@ -6737,8 +6739,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             let chip = RoundedEdgePanel()
             chip.cornerRadius = 4
             chip.color = reacted
-                ? NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
-                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                ? Theme.shared.buttonBg.withAlphaComponent(0.08)
+                : Theme.shared.centerText.withAlphaComponent(0.08)
             chip.borderWidth = 1
             chip.borderColor = reacted ? blue : .clear
             chip.frame = NSRect(x: chipX, y: chipY, width: chipW, height: 24)
@@ -6771,12 +6773,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 // chips keep their blue border and text.
                 guard let chip = chip else { return }
                 let idleFill = reacted
-                    ? NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
-                    : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
-                chip.color = isHovered ? .white : idleFill
+                    ? Theme.shared.buttonBg.withAlphaComponent(0.08)
+                    : Theme.shared.centerText.withAlphaComponent(0.08)
+                chip.color = isHovered ? Theme.shared.centerBg : idleFill
                 chip.borderColor = reacted
                     ? blue
-                    : (isHovered ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16) : .clear)
+                    : (isHovered ? Theme.shared.centerText.withAlphaComponent(0.16) : .clear)
                 emojiLabel?.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
                 chipCountLabel?.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
                 chip.setNeedsAppearanceUpdate()
@@ -6792,7 +6794,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         // is revealed while the row is hovered (`.post:hover .Reaction__add`).
         let addChip = RoundedEdgePanel()
         addChip.cornerRadius = 4
-        addChip.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+        addChip.color = Theme.shared.centerText.withAlphaComponent(0.08)
         addChip.borderWidth = 1
         addChip.borderColor = .clear
         addChip.frame = NSRect(x: chipX, y: chipY, width: 28, height: 24)
@@ -6806,8 +6808,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         addChip.addSubview(plus)
         addChip.onHoverChanged = { [weak addChip] isHovered in
             addChip?.color = isHovered
-                ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
-                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                ? Theme.shared.centerText.withAlphaComponent(0.12)
+                : Theme.shared.centerText.withAlphaComponent(0.08)
             addChip?.setNeedsAppearanceUpdate()
         }
         addChip.onClick = { [weak self, weak addChip] in
@@ -6827,9 +6829,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     private func addHoverToolbar(for post: MMPost, to row: NSView, width: CGFloat, compact: Bool = false) -> RoundedEdgePanel {
         let toolbar = RoundedEdgePanel()
         toolbar.cornerRadius = 4
-        toolbar.color = .white
+        toolbar.color = Theme.shared.centerBg
         toolbar.borderWidth = 1
-        toolbar.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        toolbar.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         toolbar.shadowColor = .black
         toolbar.shadowOpacity = 0.08
         toolbar.shadowRadius = 3
@@ -6876,19 +6878,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             let icon = NSImageView()
             if let image = NSImage(systemSymbolName: entry.symbol, accessibilityDescription: entry.label) {
                 icon.image = image.withSymbolConfiguration(.init(pointSize: compact ? 13 : 15, weight: .regular))
-                icon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+                icon.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.64)
             }
             let iconInset: CGFloat = compact ? 5 : 6
             icon.frame = NSRect(x: iconInset, y: iconInset, width: 16, height: 16)
             button.addSubview(icon)
             button.onHoverChanged = { [weak button, weak icon] isHovered in
                 button?.color = isHovered
-                    ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                    ? Theme.shared.centerText.withAlphaComponent(0.08)
                     : .clear
-                icon?.contentTintColor = NSColor(
-                    red: 63 / 255, green: 67 / 255, blue: 80 / 255,
-                    alpha: isHovered ? 0.8 : 0.64
-                )
+                icon?.contentTintColor = Theme.shared.centerText.withAlphaComponent(isHovered ? 0.8 : 0.64)
                 button?.setNeedsAppearanceUpdate()
             }
             button.onClick = entry.action
@@ -6967,10 +6966,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     // MARK: - Reaction picker & post overflow menu
 
     private func setupPostInteractionPanels() {
-        reactionPickerPanel.color = .white
+        reactionPickerPanel.color = Theme.shared.centerBg
         reactionPickerPanel.cornerRadius = 6
         reactionPickerPanel.borderWidth = 1
-        reactionPickerPanel.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        reactionPickerPanel.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         reactionPickerPanel.shadowColor = .black
         reactionPickerPanel.shadowOpacity = 0.12
         reactionPickerPanel.shadowRadius = 8
@@ -6978,10 +6977,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         reactionPickerPanel.isHidden = true
         chatPanel.addSubview(reactionPickerPanel)
 
-        postActionMenu.color = .white
+        postActionMenu.color = Theme.shared.centerBg
         postActionMenu.cornerRadius = 6
         postActionMenu.borderWidth = 1
-        postActionMenu.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        postActionMenu.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         postActionMenu.shadowColor = .black
         postActionMenu.shadowOpacity = 0.12
         postActionMenu.shadowRadius = 8
@@ -7015,7 +7014,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         lightboxOverlay.addSubview(lightboxContentPanel)
 
         lightboxAvatarPanel.cornerRadius = 20
-        lightboxAvatarPanel.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        lightboxAvatarPanel.color = Theme.shared.buttonBg
         lightboxAvatarPanel.clipContentToBounds = true
         lightboxAvatarView.imageScaling = .scaleProportionallyUpOrDown
         lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
@@ -7312,7 +7311,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             button.addSubview(label)
             button.onHoverChanged = { [weak button] isHovered in
                 button?.color = isHovered
-                    ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                    ? Theme.shared.centerText.withAlphaComponent(0.08)
                     : .clear
                 button?.setNeedsAppearanceUpdate()
             }
@@ -7393,8 +7392,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         postActionMenu.frame = NSRect(x: x, y: max(8, y), width: width, height: height)
 
-        let textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let iconColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        let textColor = Theme.shared.centerText
+        let iconColor = Theme.shared.centerTextMuted
         for (index, item) in rows.enumerated() {
             let row = RoundedEdgePanel()
             row.cornerRadius = 4
@@ -7423,7 +7422,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
             row.onHoverChanged = { [weak row] isHovered in
                 row?.color = isHovered
-                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
             }
@@ -7588,7 +7587,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         container.cornerRadius = 8
         container.color = .clear
         container.borderWidth = 1
-        container.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        container.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
         container.frame = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
 
         let imageView = NSImageView()
@@ -7603,9 +7602,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         // Download affordance shown on hover (`.image-preview-utility-buttons-container`).
         let download = RoundedEdgePanel()
         download.cornerRadius = 4
-        download.color = .white
+        download.color = Theme.shared.centerBg
         download.borderWidth = 1
-        download.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        download.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
         download.shadowColor = .black
         download.shadowOpacity = 0.08
         download.shadowRadius = 3
@@ -7615,7 +7614,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let downloadIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
             downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
-            downloadIcon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+            downloadIcon.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.75)
         }
         downloadIcon.frame = NSRect(x: 7, y: 7, width: 14, height: 14)
         download.addSubview(downloadIcon)
@@ -7627,8 +7626,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         container.onHoverChanged = { [weak container, weak download] isHovered in
             download?.isHidden = !isHovered
             container?.borderColor = isHovered
-                ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.3)
-                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+                ? Theme.shared.centerText.withAlphaComponent(0.3)
+                : Theme.shared.centerText.withAlphaComponent(0.16)
             container?.setNeedsAppearanceUpdate()
         }
         container.onClick = { [weak self, weak imageView] in
@@ -7665,14 +7664,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let cardH: CGFloat = 64
         let card = FlippedEdgePanel()
         card.cornerRadius = 4
-        card.color = .white
+        card.color = Theme.shared.centerBg
         card.borderWidth = 1
-        card.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        card.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
         card.frame = NSRect(x: 0, y: 0, width: cardW, height: cardH)
         card.onHoverChanged = { [weak card] isHovered in
             card?.color = isHovered
-                ? NSColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1.0)
-                : .white
+                ? Theme.shared.centerHoverSubtle
+                : Theme.shared.centerBg
             card?.setNeedsAppearanceUpdate()
         }
         card.onClick = { [weak self] in
@@ -7687,7 +7686,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let nameWidth = min(151, max(60, cardW - detailsLeft - 40))
         let name = NSTextField(labelWithString: file.name ?? file.id)
         name.font = MMFont.font(ofSize: 12, weight: .semibold)
-        name.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        name.textColor = Theme.shared.centerText
         name.lineBreakMode = .byTruncatingMiddle
         name.isEditable = false
         name.isSelectable = false
@@ -7697,7 +7696,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let typeText = fileExtensionLabel(for: file)
         let typeLabel = NSTextField(labelWithString: typeText)
         typeLabel.font = MMFont.font(ofSize: 12)
-        typeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        typeLabel.textColor = Theme.shared.centerText
         typeLabel.isEditable = false
         typeLabel.isSelectable = false
         typeLabel.frame = NSRect(x: detailsLeft, y: 33, width: 60, height: 17)
@@ -7707,7 +7706,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let sizeText = formatFileSize(file.size)
         let sizeLabel = NSTextField(labelWithString: sizeText)
         sizeLabel.font = MMFont.font(ofSize: 12)
-        sizeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        sizeLabel.textColor = Theme.shared.centerText
         sizeLabel.isEditable = false
         sizeLabel.isSelectable = false
         sizeLabel.frame = NSRect(x: detailsLeft + typeWidth + 4, y: 33, width: 70, height: 17)
@@ -7720,13 +7719,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let downloadIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
             downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
-            downloadIcon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+            downloadIcon.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.64)
         }
         downloadIcon.frame = NSRect(x: 8, y: 8, width: 16, height: 16)
         downloadButton.addSubview(downloadIcon)
         downloadButton.onHoverChanged = { [weak downloadButton] isHovered in
             downloadButton?.color = isHovered
-                ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                ? Theme.shared.centerText.withAlphaComponent(0.08)
                 : .clear
             downloadButton?.setNeedsAppearanceUpdate()
         }
@@ -7812,12 +7811,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         row.cornerRadius = 0
         row.color = .clear
         
-        let darkText = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
-        let mutedText = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        let lightPlaceholder = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
-        let hoverBg = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        let msgHoverBg = NSColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1.0)
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        let darkText = Theme.shared.centerText
+        let mutedText = Theme.shared.centerTextMuted
+        let lightPlaceholder = Theme.shared.centerTextPlaceholder
+        let hoverBg = Theme.shared.centerHover
+        let msgHoverBg = Theme.shared.centerHoverSubtle
+        let dividerColor = Theme.shared.divider
 
         let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
 
@@ -7837,8 +7836,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let formattedBody: NSAttributedString
         if hasBodyText {
             let bodyColor = isDeleted
-                ? NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 0.9)
-                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+                ? Theme.shared.centerTextMuted.withAlphaComponent(0.9)
+                : Theme.shared.centerText.withAlphaComponent(0.75)
             let mutable = NSMutableAttributedString(attributedString: formattedMessage(bodyText, font: bodyFont, color: bodyColor))
             if isEdited {
                 appendEditedIndicator(to: mutable, font: bodyFont, editDate: editDate)
@@ -7893,7 +7892,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 bodyView.isVerticallyResizable = false
                 bodyView.delegate = self
                 bodyView.linkTextAttributes = [
-                    .foregroundColor: NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+                    .foregroundColor: Theme.shared.buttonBg,
                     .underlineStyle: NSUnderlineStyle.single.rawValue,
                     .cursor: NSCursor.pointingHand
                 ]
@@ -8024,7 +8023,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         } else {
             let palette: [NSColor] = [
                 NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0),
-                NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+                Theme.shared.buttonBg,
                 NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
                 NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
                 NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
@@ -8111,7 +8110,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let timeLabel = NSTextField(labelWithString: timeStr)
         let timeFont = MMFont.font(ofSize: 12.6)
         timeLabel.font = timeFont
-        timeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        timeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
         timeLabel.isEditable = false
         timeLabel.isSelectable = false
         let timeSize = (timeStr as NSString).size(withAttributes: [.font: timeFont])
@@ -8124,7 +8123,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             let pinView = NSImageView()
             if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned") {
                 pinView.image = pinImage.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-                pinView.contentTintColor = NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
+                pinView.contentTintColor = Theme.shared.awayIndicator
             }
             pinView.frame = NSRect(x: timeLabel.frame.maxX + 6, y: headerTopY + 5, width: 13, height: 13)
             row.addSubview(pinView)
@@ -8144,7 +8143,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             bodyView.isVerticallyResizable = false
             bodyView.delegate = self
             bodyView.linkTextAttributes = [
-                .foregroundColor: NSColor(red: 56 / 255, green: 111 / 255, blue: 229 / 255, alpha: 1.0),
+                .foregroundColor: Theme.shared.linkColor,
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
                 .cursor: NSCursor.pointingHand
             ]
@@ -8183,7 +8182,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             usrDot.cornerRadius = dotSize / 2
             usrDot.color = statusColor(for: stat)
             usrDot.borderWidth = 1.5
-            usrDot.borderColor = .white
+            usrDot.borderColor = Theme.shared.centerBg
             row.addSubview(usrDot)
             updateStatusCheck(in: usrDot, status: stat)
         }
@@ -8283,7 +8282,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         var codeRanges: [NSRange] = []
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineBreakMode = .byWordWrapping
-        let codeColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+        let codeColor = Theme.shared.centerText.withAlphaComponent(0.08)
         
         // Render fenced code blocks verbatim; everything else goes through the
         // inline Markdown pipeline.
@@ -8350,7 +8349,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             ])
         }
 
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        let brandBlue = Theme.shared.buttonBg
         let result = NSMutableAttributedString()
         for run in attr.runs {
             let text = String(attr[run.range].characters)
@@ -8368,7 +8367,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             ]
 
             if isCode {
-                attrs[.backgroundColor] = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                attrs[.backgroundColor] = Theme.shared.centerText.withAlphaComponent(0.08)
             }
 
             if intent.contains(.strikethrough) {
@@ -8388,8 +8387,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     /// Styles @mentions and ~channel/#channel links, and expands :emoji: shortcodes.
     private func applyInlineEnhancements(to result: NSMutableAttributedString, codeRanges: [NSRange], font: NSFont) {
-        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        let mentionBg = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.10)
+        let brandBlue = Theme.shared.buttonBg
+        let mentionBg = Theme.shared.buttonBg.withAlphaComponent(0.10)
         let string = result.string as NSString
         let fullRange = NSRange(location: 0, length: string.length)
         
@@ -8474,10 +8473,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     private func createBotBadge() -> RoundedEdgePanel {
         let badge = RoundedEdgePanel()
         badge.cornerRadius = 4
-        badge.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
+        badge.color = Theme.shared.centerText.withAlphaComponent(0.12)
         let label = NSTextField(labelWithString: "BOT")
         label.font = MMFont.font(ofSize: 9.5, weight: .bold)
-        label.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        label.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
         label.alignment = .center
         label.isEditable = false
         label.isSelectable = false
@@ -8594,7 +8593,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             loadRow.frame = NSRect(x: 0, y: currentY, width: chatW, height: 32)
             let loadLabel = NSTextField(labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")
             loadLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
-            loadLabel.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            loadLabel.textColor = Theme.shared.centerTextMuted
             loadLabel.alignment = .center
             loadLabel.isEditable = false
             loadLabel.isSelectable = false
@@ -8602,7 +8601,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             loadRow.addSubview(loadLabel)
             loadRow.onHoverChanged = { [weak loadRow] isHovered in
                 loadRow?.color = isHovered
-                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    ? Theme.shared.centerHover
                     : .clear
                 loadRow?.setNeedsAppearanceUpdate()
             }
@@ -9277,7 +9276,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
             if let panel = row as? RoundedEdgePanel {
                 let previous = panel.color
-                panel.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
+                panel.color = Theme.shared.buttonBg.withAlphaComponent(0.08)
                 panel.setNeedsAppearanceUpdate()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                     panel.color = previous
@@ -9386,11 +9385,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         guard hasText != composerSendEnabled else { return }
         composerSendEnabled = hasText
         if hasText {
-            composerSendButton.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+            composerSendButton.color = Theme.shared.buttonBg
             composerSendIconView?.contentTintColor = .white
         } else {
-            composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
-            composerSendIconView?.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.32)
+            composerSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
+            composerSendIconView?.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.32)
         }
         composerSendButton.setNeedsAppearanceUpdate()
     }

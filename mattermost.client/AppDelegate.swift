@@ -278,6 +278,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     
     func showMainWindow() {
+        guard mainWindow == nil else {
+            createMainWindow()
+            return
+        }
+        let service = webService
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            var teamId: String?
+            if let me = try? await service.fetchCurrentUser(),
+               let preferences = try? await service.fetchUserPreferences(userId: me.id) {
+                if let teams = try? await service.fetchTeams() {
+                    teamId = teams.first?.id
+                }
+                ThemeManager.shared.apply(preferences: preferences, teamId: teamId)
+            }
+            self.createMainWindow()
+        }
+    }
+
+    private func createMainWindow() {
+        guard mainWindow == nil else { return }
         loginWindow?.close()
         loginWindow = nil
         // Default to the web client's viewport (1440x783), clamped to the screen.

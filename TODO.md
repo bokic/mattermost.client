@@ -330,7 +330,23 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     the composer and recorded as recent, and the panel closes.
   - Verified with screenshots of the Smileys, People, Recent and search states. This server has no
     custom emoji, so the Custom category is hidden until the API returns results. 23 tests pass.
-- [ ] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`
+- [x] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`
+  - Reads the `theme` user preference (`GET /users/{id}/preferences`), preferring the active team's
+    entry and falling back to the global (`name == ""`) entry. Fetched before the main window is
+    created, so the UI starts in the server theme; no preference defaults to Denim.
+  - Supports the built-in Mattermost palettes (Denim, Sapphire, Quartz, Indigo, Onyx) plus custom
+    themes by parsing `sidebarBg`, `sidebarText`, `sidebarTextHoverBg`, `sidebarTextActiveBorder`,
+    `sidebarHeaderBg`, `sidebarTeamBarBg`, `centerChannelBg`, `centerChannelColor`, `linkColor`,
+    `buttonBg`/`buttonColor`, `mention*`, `newMessageSeparator`, indicators and error colors. Dark
+    mode is detected from the center-channel background luminance.
+  - Applied the palette across the window/top bar/sidebar, message timeline, composer, date and
+    "New Messages" separators, hover toolbars, reactions, attachment cards, right-hand panel,
+    Files/Threads rows, search/menus/popovers, emoji picker and DM picker. Derived hover, divider,
+    muted and placeholder colors are blended from the center-channel palette so dark themes get
+    proper layering. Emoji/DM search fields switch between aqua and dark aqua.
+  - Verified with screenshots in Onyx (dark), Quartz (light sidebar with dark text) and the default
+    Denim theme, plus preference-selection and custom-color unit tests. Theme changes made on the
+    server apply on the next launch. 26 tests pass.
 - [ ] **Keyboard shortcuts**: ⌘K search, ⌘F in-channel search, `Esc` to close overlays, `↑` to edit
       last message, focus traversal between sidebar/timeline/composer — `M`
 - [ ] **Drag & drop files** onto the composer — `M`

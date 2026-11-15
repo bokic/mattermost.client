@@ -37,6 +37,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Localized Dates**: Timestamps, date separators and panel rows use the system locale and 24-hour setting, with relative Today/Yesterday labels.
 - **Message Composer**: Single-row composer matching the web client (2 pt translucent border, 4 pt radius, 50 pt editor plus a 24 pt `Help` footer), with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), a web-style emoji picker (categories, search, persisted recents and server custom emojis), `NSOpenPanel` attachment upload (`POST /files` + `file_ids`), and a 48×32 *Send* button.
 - **Typography**: Bundles Open Sans (SIL OFL 1.1, see `mattermost.client/OpenSans-OFL.txt`) and registers it at launch so text metrics match the web client instead of falling back to the system font.
+- **Server Themes**: Reads the team/global `theme` preference and applies the built-in Denim, Sapphire, Quartz, Indigo and Onyx palettes or custom colors, including dark mode, across the sidebar, timeline, composer, menus and panels.
 
 ### 4. Live REST API v4 & Real-Time WebSockets
 - **Team & Channel Sync**: `GET /api/v4/users/me/teams`, `GET /api/v4/users/me/teams/{team_id}/channels`, and `GET /api/v4/users/me/teams/{team_id}/channels/categories`.
