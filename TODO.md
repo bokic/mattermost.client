@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **93/93 pass** |
+| `./test.sh` | **98/98 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -29,11 +29,6 @@ completed baseline remains at the end.
 ## P3 — Web-parity backlog
 
 ### Message rendering
-
-- [ ] **No reply count/thread indicator on timeline root posts** — `S`
-  - `createPostRow` never shows "N replies" or a participant avatars row, so users cannot
-    tell a root has a thread without opening the hover menu. Add the reply footer from the
-    web client and refresh it on `thread_updated`/reply.
 
 - [ ] **System messages, presence and bot detection are heuristic** — `S`
   - `MMPost` has no `props`, so system posts with an empty `message` collapse to
@@ -348,6 +343,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 - **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
   badges, mentions, "New Messages" divider + floating jump pill, date separators with
   localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,
+  clickable reply-count thread footers refreshed from live reply/thread events,
   attachments/image cards/lightbox, reactions chips with add/remove, hover toolbar,
   block-level Markdown (headings, ordered/nested lists, blockquotes, tables, rules),
   fenced code with language labels, syntax highlighting and copy links, inline
@@ -378,7 +374,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 93 tests today; keep the count rising
+./test.sh       # 98 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

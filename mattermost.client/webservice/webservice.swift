@@ -300,6 +300,7 @@ struct MMPost: Codable {
     let type: String?
     var file_ids: [String]? = nil
     var metadata: MMPostMetadata? = nil
+    var reply_count: Int? = nil
 }
 
 struct MMThreadParticipant: Decodable {
@@ -374,7 +375,7 @@ enum MMWebSocketEvent {
     case channelUpdated(channel: MMChannel)
     case channelMembershipChanged(channelId: String, userId: String)
     case preferencesChanged(userId: String)
-    case threadUpdated(rootId: String)
+    case threadUpdated(rootId: String, replyCount: Int?)
     case emojiAdded
     case statusChange(userId: String, status: String)
     case userStatuses(statuses: [String: String])
@@ -1855,7 +1856,10 @@ final class WebService: NSObject {
                         ?? (broadcast["thread_id"] as? String)
                         ?? ""
                     if !rootId.isEmpty {
-                        parsedEvent = .threadUpdated(rootId: rootId)
+                        let replyCount = (eventData["reply_count"] as? NSNumber)?.intValue
+                            ?? (eventData["reply_count"] as? String).flatMap(Int.init)
+                            ?? (eventData["reply_count"] as? Int)
+                        parsedEvent = .threadUpdated(rootId: rootId, replyCount: replyCount)
                     }
                 case "status_change":
                     let userId = (eventData["user_id"] as? String) ?? (broadcast["user_id"] as? String) ?? ""

@@ -201,7 +201,8 @@ extension MainWindow {
                             self.loadSettingsPanel()
                         }
                     }
-                case .threadUpdated(let rootId):
+                case .threadUpdated(let rootId, let replyCount):
+                    self.updateThreadReplyCount(rootId: rootId, replyCount: replyCount)
                     if self.isRightPanelVisible && self.rightPanelMode == .thread && self.threadRootId == rootId {
                         self.loadThread()
                     } else if self.isRightPanelVisible && self.rightPanelMode == .threads {
@@ -593,12 +594,60 @@ extension MainWindow {
         }
     }
 
+    func updateThreadReplyCount(rootId: String, replyCount: Int?) {
+        guard !rootId.isEmpty else { return }
+        var previous: Int?
+        if let index = currentChannelPosts.firstIndex(where: { $0.id == rootId }) {
+            previous = currentChannelPosts[index].reply_count
+            let next = replyCount ?? ((previous ?? 0) + 1)
+            currentChannelPosts[index].reply_count = next
+        }
+        if let index = threadPosts.firstIndex(where: { $0.id == rootId }) {
+            if previous == nil { previous = threadPosts[index].reply_count }
+            let next = replyCount ?? ((threadPosts[index].reply_count ?? 0) + 1)
+            threadPosts[index].reply_count = next
+        }
+        guard let count = replyCount
+            ?? currentChannelPosts.first(where: { $0.id == rootId })?.reply_count
+        else { return }
+
+        if count == 0 {
+            if (previous ?? 0) > 0 {
+                rebuildTimelineContent(scrollToBottom: false)
+            }
+        } else if (previous ?? 0) == 0 {
+            // The root row did not reserve a footer yet; rebuild it once.
+            rebuildTimelineContent(scrollToBottom: false)
+        } else {
+            updateThreadReplyFooterLabel(rootId: rootId, count: count)
+        }
+    }
+
+    func updateThreadReplyFooterLabel(rootId: String, count: Int) {
+        let identifier = "replyFooter_\(rootId)"
+        func findFooter(in view: NSView) -> NSView? {
+            if view.identifier?.rawValue == identifier { return view }
+            for subview in view.subviews {
+                if let found = findFooter(in: subview) { return found }
+            }
+            return nil
+        }
+        guard let footer = findFooter(in: timelineDocView),
+              let label = footer.subviews.compactMap({ $0 as? NSTextField }).first
+        else { return }
+        label.stringValue = "\(count) \(count == 1 ? "reply" : "replies")"
+        footer.isHidden = count == 0
+    }
+
     func appendRealtimePost(_ post: MMPost) {
         guard post.channel_id == activeChannelId else { return }
         guard !currentChannelPosts.contains(where: { $0.id == post.id }) else { return }
 
         // Replies belong to threads, not the channel feed.
         let isReply = !(post.root_id ?? "").isEmpty
+        if isReply, let rootId = post.root_id, !rootId.isEmpty {
+            self.updateThreadReplyCount(rootId: rootId, replyCount: nil)
+        }
         let clip = timelineScrollView.contentView
         let wasNearBottom = clip.bounds.maxY >= (timelineDocView.frame.height - 40)
 

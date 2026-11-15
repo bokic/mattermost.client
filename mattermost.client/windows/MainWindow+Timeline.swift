@@ -1911,7 +1911,50 @@ extension MainWindow {
         update(timelineDocView)
     }
 
-    func createPostRow(post: MMPost, width: CGFloat, timeStr: String, isConsecutive: Bool = false) -> (NSView, CGFloat) {
+    func makeThreadReplyFooter(for post: MMPost, width: CGFloat) -> RoundedEdgePanel {
+        let count = post.reply_count ?? 0
+        let footer = RoundedEdgePanel()
+        footer.identifier = NSUserInterfaceItemIdentifier("replyFooter_\(post.id)")
+        footer.cornerRadius = MMRadius.control
+        footer.color = .clear
+        footer.frame = NSRect(x: 0, y: 0, width: width, height: 26)
+
+        let icon = NSImageView()
+        if let image = NSImage(systemSymbolName: "arrowshape.turn.up.left", accessibilityDescription: "Thread") {
+            icon.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+            icon.contentTintColor = Theme.shared.buttonBg
+        }
+        icon.frame = NSRect(x: 4, y: 7, width: 13, height: 13)
+        footer.addSubview(icon)
+
+        let label = NSTextField(labelWithString: "\(count) \(count == 1 ? "reply" : "replies")")
+        label.font = MMFont.font(ofSize: 12, weight: .semibold)
+        label.textColor = Theme.shared.buttonBg
+        label.isEditable = false
+        label.isSelectable = false
+        label.lineBreakMode = .byTruncatingTail
+        label.frame = NSRect(x: 22, y: 5, width: max(60, width - 28), height: 16)
+        footer.addSubview(label)
+
+        footer.onHoverChanged = { [weak footer] isHovered in
+            footer?.color = isHovered ? Theme.shared.centerHover : .clear
+            footer?.setNeedsAppearanceUpdate()
+        }
+        footer.onClick = { [weak self] in
+            self?.showThread(for: post)
+        }
+        footer.accessibilityTitle = "\(count) \(count == 1 ? "reply" : "replies")"
+        footer.accessibilityHelp = "Open thread"
+        return footer
+    }
+
+    func createPostRow(
+        post: MMPost,
+        width: CGFloat,
+        timeStr: String,
+        isConsecutive: Bool = false,
+        showsThreadFooter: Bool = true
+    ) -> (NSView, CGFloat) {
         let row = TimelineRowView()
         row.identifier = NSUserInterfaceItemIdentifier("postRow_\(post.id)")
         row.cornerRadius = 0
@@ -1933,6 +1976,10 @@ extension MainWindow {
         let bodyText = isDeleted ? "This message was deleted." : parsed.text
         let gifURLs = isDeleted ? [] : parsed.gifURLs
         let hasBodyText = !bodyText.isEmpty
+        let replyCount = post.reply_count ?? 0
+        let showsReplyFooter = showsThreadFooter
+            && (post.root_id ?? "").isEmpty
+            && replyCount > 0
         let isEdited = !isDeleted && (post.edit_at != nil && post.edit_at! > 0)
         let editDate = isEdited ? Date(timeIntervalSince1970: TimeInterval(post.edit_at!) / 1000.0) : nil
 
@@ -2025,6 +2072,13 @@ extension MainWindow {
             }
             contentY += addReactionChips(for: post, to: row, x: 79, y: contentY)
 
+            if showsReplyFooter {
+                let footer = makeThreadReplyFooter(for: post, width: bodyMaxW)
+                footer.frame.origin = CGPoint(x: 79, y: contentY)
+                row.addSubview(footer)
+                contentY += 30
+            }
+
             let totalRowH = max(24, contentY)
             row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
 
@@ -2091,6 +2145,7 @@ extension MainWindow {
         for (_, gifH) in gifViews { stackHeight += gifH + 6 }
         if attachmentsView != nil { stackHeight += attachmentsHeight + 2 }
         stackHeight += reactionsHeight
+        if showsReplyFooter { stackHeight += 30 }
 
         let totalRowH = topPad + headerH + stackHeight + bottomPad
         row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
@@ -2283,6 +2338,13 @@ extension MainWindow {
         if !reactionGroups.isEmpty {
             _ = addReactionChips(for: post, to: row, x: contentX, y: stackTop)
             stackTop += reactionsHeight
+        }
+
+        if showsReplyFooter {
+            let footer = makeThreadReplyFooter(for: post, width: bodyMaxW)
+            footer.frame.origin = CGPoint(x: contentX, y: stackTop)
+            row.addSubview(footer)
+            stackTop += 30
         }
 
         if !isSystem && !isBotUser {

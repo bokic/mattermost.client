@@ -676,7 +676,8 @@ extension MainWindow {
                 post: post,
                 width: contentWidth,
                 timeStr: Self.localizedTimeFormatter.string(from: postDate),
-                isConsecutive: isConsecutive
+                isConsecutive: isConsecutive,
+                showsThreadFooter: false
             )
             rowView.frame.origin = CGPoint(x: 12, y: y)
             rightPanelDoc.addSubview(rowView)
