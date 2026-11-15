@@ -422,7 +422,7 @@ source revision. The long list of previously completed work is preserved in
     disconnected/reconnecting. Reserve space in the timeline frame while the banner is
     visible.
 
-- [ ] **Theme is applied once at launch and not on team switch** — `M`
+- [x] **Theme is applied once at launch and not on team switch** — `M`
   - `ThemeManager.apply` is only called in `AppDelegate.showMainWindow`
     (`AppDelegate.swift:290-295`) using the first team. `switchActiveTeam`
     (`MainWindow+Sidebar.swift:897-939`) never re-fetches preferences or re-applies the
@@ -657,7 +657,7 @@ source revision. The long list of previously completed work is preserved in
     `"system-bot"` IDs (`:310-323`) that do not match real server IDs, so selection and
     unread lookup are wrong. Build the fallback from real channels.
 
-- [ ] **"View Info" opens the Members panel instead of channel info** — `S`
+- [x] **"View Info" opens the Members panel instead of channel info** — `S`
   - `MainWindow+Menus.swift:1030-1033` maps View Info to `.members`. Channel header,
     purpose, creator, created date, member count, files/pins shortcuts and notification
     preferences are not shown. Add a Channel Info RHS mode.
@@ -669,7 +669,7 @@ source revision. The long list of previously completed work is preserved in
   - Add a profile view reused by members, mentions, search authors and the current user;
     add "Message" and "Copy username".
 
-- [ ] **Status/Help/Product menus have dead rows and hardcoded chrome** — `S`
+- [x] **Status/Help/Product menus have dead rows and hardcoded chrome** — `S`
   - `setupStatusMenu` (`MainWindow+Menus.swift:315-318`) hardcodes the menu avatar color,
     never loads the user's actual avatar image, falls back to hardcoded `"boris"`, and never
     updates `@username` or initial after `fetchCurrentUser()` completes if `UserDefaults`
@@ -687,7 +687,7 @@ source revision. The long list of previously completed work is preserved in
 
 ### Composer and account
 
-- [ ] **Formatting toolbar is visual only** — `M`
+- [x] **Formatting toolbar is visual only** — `M`
   - The nine `composerLeftButtons` (`MainWindow+Layout.swift:304-334`) have hover styling
     but no `onClick`; the `Aa` toggle only shows/hides them. Wire Bold/Italic/Strike/
     Heading/Link/Code/Quote/Lists to wrap the selection in Markdown (and update

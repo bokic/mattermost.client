@@ -174,6 +174,25 @@ extension MainWindow {
                 showsCheckmark: false,
                 checkmarkColor: brandBlue
             )
+            let itemTitle = item.title
+            row.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.setProductSwitcherMenuOpen(false)
+                switch itemTitle {
+                case "System Console":
+                    self.openServerPath("/admin_console")
+                case "Integrations":
+                    self.openServerPath("/integrations")
+                case "App Marketplace":
+                    self.openServerPath("/marketplace")
+                case "Download Apps":
+                    self.openExternalURL("https://mattermost.com/download/")
+                case "About Mattermost":
+                    NSApp.orderFrontStandardAboutPanel(nil)
+                default:
+                    break
+                }
+            }
             productSwitcherMenu.addSubview(row)
         }
 
@@ -279,10 +298,42 @@ extension MainWindow {
                 showsCheckmark: false,
                 checkmarkColor: brandBlue
             )
+            let itemTitle = item.title
+            row.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.setHelpMenuOpen(false)
+                switch itemTitle {
+                case "Mattermost user guide":
+                    self.openExternalURL("https://docs.mattermost.com/guides/messaging.html")
+                case "Training resources":
+                    self.openExternalURL("https://academy.mattermost.com/")
+                case "Ask the community":
+                    self.openExternalURL("https://community.mattermost.com/")
+                case "Report a problem":
+                    self.openExternalURL("https://github.com/bokic/mattermost.client/issues")
+                case "Keyboard shortcuts":
+                    self.openExternalURL("https://docs.mattermost.com/end-user-guide/keyboard-shortcuts.html")
+                default:
+                    break
+                }
+            }
             helpMenu.addSubview(row)
         }
 
         contentView?.addSubview(helpMenu)
+    }
+
+    func openExternalURL(_ string: String) {
+        guard let url = URL(string: string) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func openServerPath(_ path: String) {
+        guard let url = webService?.buildURL(path: path) else {
+            openExternalURL("https://mattermost.com/")
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     func setupStatusMenu() {

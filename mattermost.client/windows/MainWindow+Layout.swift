@@ -332,6 +332,10 @@ extension MainWindow {
                 btn?.setNeedsAppearanceUpdate()
                 icon?.contentTintColor = isHovered ? darkText : mutedText
             }
+            let symbol = sym
+            btn.onClick = { [weak self] in
+                self?.applyComposerFormat(symbol)
+            }
             chatEntryPanel.addSubview(btn)
             composerLeftButtons.append(btn)
         }

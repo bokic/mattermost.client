@@ -1100,6 +1100,44 @@ extension MainWindow {
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
     }
 
+    func applyComposerFormat(_ symbol: String) {
+        guard activeChannelId.isEmpty == false else { return }
+        makeFirstResponder(entryView)
+        let range = entryView.selectedRange()
+        let text = entryView.string as NSString
+        let selected = range.location <= text.length && range.location + range.length <= text.length
+            ? text.substring(with: range)
+            : ""
+        let prefix: String
+        let suffix: String
+        switch symbol {
+        case "bold":
+            prefix = "**"; suffix = "**"
+        case "italic":
+            prefix = "_"; suffix = "_"
+        case "strikethrough":
+            prefix = "~~"; suffix = "~~"
+        case "link":
+            prefix = "["; suffix = "](https://)"
+        case "chevron.left.forwardslash.chevron.right":
+            prefix = "`"; suffix = "`"
+        case "text.quote":
+            prefix = "> "; suffix = ""
+        case "list.bullet":
+            prefix = "- "; suffix = ""
+        case "list.number":
+            prefix = "1. "; suffix = ""
+        case "number":
+            prefix = "# "; suffix = ""
+        default:
+            return
+        }
+        entryView.insertText(prefix + selected + suffix, replacementRange: range)
+        let selectedLocation = range.location + (prefix as NSString).length
+        entryView.setSelectedRange(NSRange(location: selectedLocation, length: (selected as NSString).length))
+        updateComposerSendState()
+    }
+
     func sendTypingIfNeeded() {
         guard !entryView.string.isEmpty, !activeChannelId.isEmpty else { return }
         if let last = lastTypingSentAt, Date().timeIntervalSince(last) < 1.5 { return }
