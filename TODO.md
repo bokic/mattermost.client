@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **76/76 pass** |
+| `./test.sh` | **79/79 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -28,33 +28,10 @@ completed baseline remains at the end.
 
 ## P1 — Correctness, data loss & reliability
 
-### Threads and the right-hand panel
-
-- [ ] **Threads lack read state, a rich composer, and pagination** — `L`
-  - Opening a thread (`loadThread`, `MainWindow+RightPanel.swift:236-260`) never calls
-    `PUT /users/me/teams/{team}/threads/{id}/read`, so unread thread replies never clear.
-    The `ThreadsResponse` totals (`total_unread_threads`, etc.) are discarded
-    (`webservice.swift:975-981`), and the Threads sidebar row never shows unread.
-  - The reply field is a single-line `NSTextField` (`:60-90`): no multiline, emoji,
-    `@`/`#`/`:emoji:` autocomplete, attachments, typing events, or send state.
-  - The thread list fetches 60 threads (`webservice.swift:975-982`) with no load-more and
-    no unread indicator; thread replies are not paginated.
-  - `loadThread` has no root/request token (`:243-259`): a late response for thread A can
-    overwrite thread B, and replies can be posted to the wrong root. On fetch failure,
-    `showThread` leaves the preloaded `[post]` in place so no error is shown (`:223-233`).
-  - `renderThreadPanel` scrolls to zero after every load/reply (`:323`), so long threads open
-    at the oldest post and the new reply is off-screen.
-  - Clicking a row in the Threads list jumps to the root in the channel and closes the panel
-    instead of opening the thread (`:210-215`).
-  - Verify reply ordering: `renderThreadPanel` uses `list.order` as-is
-    (`MainWindow+RightPanel.swift:249`), while channel posts reverse it via
-    `MMPostList.chronologicalPosts` (`webservice.swift:313`). If the API returns newest
-    first, the root/replies render backwards.
-
 - [ ] **Every RHS list is first-page-only** — `M`
-  - Members: 60 (`webservice.swift:822-832`), Threads: 60 (`:975`), Files: 60 (`:1036`),
-    Saved: 60 (`:846`), Mentions: 30 (`MainWindow+RightPanel.swift:571`), Pinned: no
-    pagination. None load more on scroll.
+  - Members: 60 (`webservice.swift:822-832`), Files: 60 (`:1036`), Saved: 60 (`:846`),
+    Mentions: 30 (`MainWindow+RightPanel.swift:571`), Pinned: no pagination. Only Threads
+    paginates today; the remaining lists do not load more on scroll.
   - Members also have no search, role/presence grouping, pagination, or click-through to a
     profile/DM (`loadChannelMembers`, `MainWindow+RightPanel.swift:349-378`).
   - `loadUnreadState` fetches one page of 200 memberships (`MainWindow+Sidebar.swift:85`,
@@ -407,11 +384,10 @@ completed baseline remains at the end.
 1. **Sign, notarize and verify the release artifact** — requires the Developer ID certificate and notary credentials.
 2. **RHS pagination + stale-result guards** — the daily-use list panels still stop at one page.
 3. **Sidebar scrolling + category management** — long sidebars become unreachable.
-4. **Rich thread composer + thread pagination** — threads are still a reduced experience.
-5. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
-6. **Accessibility/localization pass** — labels, focus traversal and localized strings.
-7. **Timeline incremental updates + bounded caches** — scalability for large channels.
-8. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
+4. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
+5. **Accessibility/localization pass** — labels, focus traversal and localized strings.
+6. **Timeline incremental updates + bounded caches** — scalability for large channels.
+7. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
 
 ---
 
@@ -430,8 +406,10 @@ history is in git; the original long-form checklist lives in prior commits of th
   Messages/Files results with scroll/load-more, Up/Down/Enter navigation, term highlighting,
   recent searches, working `From:`/`In:`/`On:`/`Before:`/`After:` filter pills, and scoped
   `in:` prefill from ⌘F.
-- **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels, thread
-  view with grouped replies + inline reply, draggable/persisted width, channel subtitle.
+- **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels,
+  paginated thread list with unread indicators and read-state clearing, thread view with
+  newest-reply pagination, grouped replies, multiline/emoji/autocomplete/attachment reply
+  composer, typing indicators and send state, draggable/persisted width, channel subtitle.
 - **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
   badges, mentions, "New Messages" divider + floating jump pill, date separators with
   localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,
@@ -463,7 +441,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 76 tests today; keep the count rising
+./test.sh       # 79 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

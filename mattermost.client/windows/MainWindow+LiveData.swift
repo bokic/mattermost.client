@@ -246,7 +246,7 @@ extension MainWindow {
         }
 
         ws.onUserTyping = { [weak self] userId, channelId, parentId in
-            guard let self = self, channelId == self.activeChannelId else { return }
+            guard let self = self else { return }
             if let myId = self.currentUser?.id, myId == userId { return }
             let typer = self.usersById[userId]?.username ?? "Someone"
 
@@ -255,16 +255,18 @@ extension MainWindow {
                 guard self.rightPanelMode == .thread, self.threadRootId == parentId else { return }
                 self.threadTypingIndicatorWorkItem?.cancel()
                 let typingPlaceholder = "\(typer) is typing…"
-                self.threadReplyField.placeholderString = typingPlaceholder
+                self.threadReplyTextView.placeholderString = typingPlaceholder
                 let work = DispatchWorkItem { [weak self] in
                     guard let self = self,
-                          self.threadReplyField.placeholderString == typingPlaceholder else { return }
-                    self.threadReplyField.placeholderString = "Reply to thread…"
+                          self.threadReplyTextView.placeholderString == typingPlaceholder else { return }
+                    self.threadReplyTextView.placeholderString = "Reply to thread…"
                 }
                 self.threadTypingIndicatorWorkItem = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
                 return
             }
+
+            guard channelId == self.activeChannelId else { return }
 
             // Don't replace a real status (editing/upload/send) with a typing hint.
             let currentStatus = self.composerHelpLabel.stringValue

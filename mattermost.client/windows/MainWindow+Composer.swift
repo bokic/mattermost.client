@@ -272,17 +272,24 @@ extension MainWindow {
         }
     }
 
-    func toggleEmojiPanel() {
+    func toggleEmojiPanel(for target: EmojiInsertionTarget = .composer) {
         if isEmojiPanelOpen {
             closeEmojiPanel()
             return
         }
         guard !activeChannelId.isEmpty else { return }
-        let buttonFrame = chatEntryPanel.convert(composerEmojiButton.frame, to: chatPanel)
+        emojiInsertionTarget = target
+        let buttonFrame: NSRect
+        switch target {
+        case .composer:
+            buttonFrame = chatEntryPanel.convert(composerEmojiButton.frame, to: chatPanel)
+        case .thread:
+            buttonFrame = threadReplyPanel.convert(threadEmojiButton.frame, to: chatPanel)
+        }
         let width: CGFloat = 350
         let height: CGFloat = 440
         let x = min(max(8, buttonFrame.midX - width / 2), max(8, chatPanel.bounds.width - width - 8))
-        let y = min(chatEntryPanel.frame.maxY + 8, chatPanel.bounds.height - height - 8)
+        let y = min(max(8, buttonFrame.maxY + 8), max(8, chatPanel.bounds.height - height - 8))
         emojiPanel.frame = NSRect(x: x, y: y, width: width, height: height)
         emojiSearchField.stringValue = ""
         emojiSearchField.frame = NSRect(x: 12, y: height - 44, width: width - 24, height: 26)
@@ -309,17 +316,24 @@ extension MainWindow {
 
     func insertEmoji(_ emoji: String) {
         closeCompletion()
-        let range = entryView.selectedRange()
-        entryView.insertText(emoji, replacementRange: range)
-        entryView.needsDisplay = true
-        updateComposerSendState()
+        let textView = emojiInsertionTarget == .thread ? threadReplyTextView : entryView
+        let range = textView.selectedRange()
+        textView.insertText(emoji, replacementRange: range)
+        textView.needsDisplay = true
+        if emojiInsertionTarget == .thread {
+            updateThreadSendState()
+        } else {
+            updateComposerSendState()
+        }
         closeEmojiPanel()
-        makeFirstResponder(entryView)
+        makeFirstResponder(textView)
     }
 
-    func updateCompletion() {
-        guard entryView.selectedRange().length == 0,
-              let trigger = detectCompletionTrigger() else {
+    func updateCompletion(target: CompletionTarget = .composer) {
+        completionTarget = target
+        let textView = target == .thread ? threadReplyTextView : entryView
+        guard textView.selectedRange().length == 0,
+              let trigger = detectCompletionTrigger(in: textView) else {
             closeCompletion()
             return
         }
@@ -414,11 +428,11 @@ extension MainWindow {
         renderCompletionPanel()
     }
 
-    func detectCompletionTrigger() -> CompletionTrigger? {
-        let selection = entryView.selectedRange()
+    func detectCompletionTrigger(in textView: NSTextView) -> CompletionTrigger? {
+        let selection = textView.selectedRange()
         guard selection.length == 0 else { return nil }
         let caret = selection.location
-        let text = entryView.string as NSString
+        let text = textView.string as NSString
         guard caret >= 0, caret <= text.length else { return nil }
         let prefix = text.substring(to: caret)
 
@@ -455,7 +469,7 @@ extension MainWindow {
                 self.usersByUsername[user.username.lowercased()] = user
             }
             if self.isCompletionVisible {
-                self.updateCompletion()
+                self.updateCompletion(target: self.completionTarget)
             }
         }
     }
@@ -467,13 +481,21 @@ extension MainWindow {
         let width: CGFloat = 300
         let rowHeight: CGFloat = 36
         let height = CGFloat(completionItems.count) * rowHeight + 8
-        let rightLimit = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
+        let anchorFrame: NSRect
+        let rightLimit: CGFloat
+        if completionTarget == .thread, isRightPanelVisible {
+            anchorFrame = rightPanel.convert(threadReplyPanel.frame, to: chatPanel)
+            rightLimit = chatPanel.bounds.width
+        } else {
+            anchorFrame = chatEntryPanel.frame
+            rightLimit = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
+        }
         let x = min(
-            max(8, chatEntryPanel.frame.minX + 14),
+            max(8, anchorFrame.minX + 14),
             max(8, rightLimit - width - 8)
         )
         let y = min(
-            max(8, chatEntryPanel.frame.maxY + 6),
+            max(8, anchorFrame.maxY + 6),
             max(8, chatPanel.bounds.height - height - 8)
         )
         completionPanel.frame = NSRect(x: x, y: y, width: width, height: height)
@@ -604,7 +626,8 @@ extension MainWindow {
     func acceptCompletion(at index: Int) {
         guard isCompletionVisible, completionItems.indices.contains(index) else { return }
         let item = completionItems[index]
-        let length = (entryView.string as NSString).length
+        let textView = completionTarget == .thread ? threadReplyTextView : entryView
+        let length = (textView.string as NSString).length
         guard NSMaxRange(completionRange) <= length else {
             closeCompletion()
             return
@@ -620,10 +643,14 @@ extension MainWindow {
             UserDefaults.standard.set(recentEmojiNames, forKey: "recentEmojis")
         }
 
-        entryView.insertText(item.insertText, replacementRange: completionRange)
+        textView.insertText(item.insertText, replacementRange: completionRange)
         closeCompletion()
-        updateComposerSendState()
-        makeFirstResponder(entryView)
+        if completionTarget == .thread {
+            updateThreadSendState()
+        } else {
+            updateComposerSendState()
+        }
+        makeFirstResponder(textView)
     }
 
     func closeCompletion() {
@@ -682,6 +709,7 @@ extension MainWindow {
                 ActiveAttachmentUpload(
                     id: UUID(),
                     channelId: channelId,
+                    threadRootId: nil,
                     name: name,
                     size: size,
                     mimeType: mime,
@@ -707,6 +735,7 @@ extension MainWindow {
             ActiveAttachmentUpload(
                 id: UUID(),
                 channelId: activeChannelId,
+                threadRootId: nil,
                 name: filename,
                 size: Int64(data.count),
                 mimeType: "image/png",
@@ -716,15 +745,19 @@ extension MainWindow {
         )
     }
 
-    private func enqueueUpload(_ upload: ActiveAttachmentUpload) {
+    func enqueueUpload(_ upload: ActiveAttachmentUpload) {
         activeAttachmentUploads.removeAll { $0.id == upload.id }
         var upload = upload
         upload.state = .queued
         activeAttachmentUploads.append(upload)
-        if activeChannelId == upload.channelId {
+        if upload.threadRootId == nil, activeChannelId == upload.channelId {
             composerHelpLabel.stringValue = "Uploading \(upload.name)…"
         }
         renderPendingAttachments()
+        if upload.threadRootId != nil {
+            renderThreadAttachments()
+            updateThreadSendState()
+        }
         layoutRightChatPanel()
         updateComposerSendState()
         pumpAttachmentUploads()
@@ -790,26 +823,40 @@ extension MainWindow {
         else { return }
         guard abs(activeAttachmentUploads[index].currentProgress - progress) >= 0.01 || progress >= 1
         else { return }
+        let upload = activeAttachmentUploads[index]
         activeAttachmentUploads[index].state = .uploading(progress: progress)
-        renderPendingAttachments()
+        if let threadRootId = upload.threadRootId, !threadRootId.isEmpty {
+            if rightPanelMode == .thread && self.threadRootId == threadRootId {
+                renderThreadAttachments()
+            }
+        } else {
+            renderPendingAttachments()
+        }
     }
 
     private func finishUpload(id: UUID, fileId: String) {
         guard let upload = activeAttachmentUploads.first(where: { $0.id == id }) else { return }
         activeAttachmentUploads.removeAll { $0.id == id }
         attachmentUploadTasks.removeValue(forKey: id)
-        addPendingAttachment(
-            PendingAttachment(id: fileId, name: upload.name, size: upload.size),
-            to: upload.channelId
-        )
-        if activeChannelId == upload.channelId {
-            composerHelpLabel.stringValue = pendingAttachments.isEmpty
-                ? defaultComposerStatusText()
-                : "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+        let attachment = PendingAttachment(id: fileId, name: upload.name, size: upload.size)
+        if let threadRootId = upload.threadRootId, !threadRootId.isEmpty {
+            threadPendingAttachmentsByRootId[threadRootId, default: []].append(attachment)
+            if rightPanelMode == .thread && self.threadRootId == threadRootId {
+                renderThreadAttachments()
+                layoutRightChatPanel()
+                updateThreadSendState()
+            }
+        } else {
+            addPendingAttachment(attachment, to: upload.channelId)
+            if activeChannelId == upload.channelId {
+                composerHelpLabel.stringValue = pendingAttachments.isEmpty
+                    ? defaultComposerStatusText()
+                    : "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+            }
+            renderPendingAttachments()
+            layoutRightChatPanel()
+            updateComposerSendState()
         }
-        renderPendingAttachments()
-        layoutRightChatPanel()
-        updateComposerSendState()
         pumpAttachmentUploads()
     }
 
@@ -818,12 +865,19 @@ extension MainWindow {
         let upload = activeAttachmentUploads[index]
         activeAttachmentUploads[index].state = .failed(message: message)
         attachmentUploadTasks.removeValue(forKey: id)
-        if activeChannelId == upload.channelId {
-            composerHelpLabel.stringValue = "\(upload.name): \(message)"
+        if let threadRootId = upload.threadRootId, !threadRootId.isEmpty {
+            if rightPanelMode == .thread && self.threadRootId == threadRootId {
+                renderThreadAttachments()
+                updateThreadSendState()
+            }
+        } else {
+            if activeChannelId == upload.channelId {
+                composerHelpLabel.stringValue = "\(upload.name): \(message)"
+            }
+            renderPendingAttachments()
+            layoutRightChatPanel()
+            updateComposerSendState()
         }
-        renderPendingAttachments()
-        layoutRightChatPanel()
-        updateComposerSendState()
         pumpAttachmentUploads()
     }
 
@@ -862,17 +916,27 @@ extension MainWindow {
     }
 
     private func removeUpload(id: UUID) {
+        let upload = activeAttachmentUploads.first(where: { $0.id == id })
         activeAttachmentUploads.removeAll { $0.id == id }
         attachmentUploadTasks.removeValue(forKey: id)
-        renderPendingAttachments()
-        layoutRightChatPanel()
-        updateComposerSendState()
+        if let threadRootId = upload?.threadRootId, !threadRootId.isEmpty {
+            if rightPanelMode == .thread && self.threadRootId == threadRootId {
+                renderThreadAttachments()
+                updateThreadSendState()
+            }
+        } else {
+            renderPendingAttachments()
+            layoutRightChatPanel()
+            updateComposerSendState()
+        }
         pumpAttachmentUploads()
     }
 
     func renderPendingAttachments() {
         composerAttachmentTray.subviews.forEach { $0.removeFromSuperview() }
-        let uploads = activeAttachmentUploads.filter { $0.channelId == activeChannelId }
+        let uploads = activeAttachmentUploads.filter {
+            $0.channelId == activeChannelId && $0.threadRootId == nil
+        }
         let total = uploads.count + pendingAttachments.count
         composerAttachmentTray.isHidden = total == 0
         guard total > 0 else { return }
@@ -886,7 +950,11 @@ extension MainWindow {
         var rendered = 0
 
         for upload in uploads.prefix(maxVisible) {
-            renderUploadChip(upload, frame: NSRect(x: x, y: 2, width: chipW, height: chipH))
+            renderUploadChip(
+                upload,
+                frame: NSRect(x: x, y: 2, width: chipW, height: chipH),
+                in: composerAttachmentTray
+            )
             x += chipW + gap
             rendered += 1
         }
@@ -949,7 +1017,11 @@ extension MainWindow {
         }
     }
 
-    private func renderUploadChip(_ upload: ActiveAttachmentUpload, frame: NSRect) {
+    func renderUploadChip(
+        _ upload: ActiveAttachmentUpload,
+        frame: NSRect,
+        in tray: NSView
+    ) {
         let chip = RoundedEdgePanel()
         chip.cornerRadius = MMRadius.control
         chip.color = Theme.shared.centerHover
@@ -1049,7 +1121,7 @@ extension MainWindow {
         }
         chip.addSubview(remove)
 
-        composerAttachmentTray.addSubview(chip)
+        tray.addSubview(chip)
     }
 
     func removePendingAttachment(id: String) {
@@ -1125,7 +1197,7 @@ extension MainWindow {
 
     func saveThreadDraft() {
         guard !threadRootId.isEmpty else { return }
-        let text = threadReplyField.stringValue
+        let text = threadReplyTextView.string
         if text.isEmpty {
             threadDraftsByRootId.removeValue(forKey: threadRootId)
         } else {
@@ -1134,8 +1206,8 @@ extension MainWindow {
     }
 
     func restoreThreadDraft() {
-        threadReplyField.stringValue = threadDraftsByRootId[threadRootId] ?? ""
-        threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
+        threadReplyTextView.string = threadDraftsByRootId[threadRootId] ?? ""
+        threadReplyTextView.needsDisplay = true
     }
 
     func clearThreadDraft(for rootId: String) {
@@ -1179,7 +1251,7 @@ extension MainWindow {
 
     func updateComposerSendState() {
         let hasActiveUpload = activeAttachmentUploads.contains {
-            $0.channelId == activeChannelId && $0.isInProgress
+            $0.channelId == activeChannelId && $0.threadRootId == nil && $0.isInProgress
         }
         let hasText =
             (!entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1364,10 +1436,6 @@ extension MainWindow {
             renderDMUsers()
             return
         }
-        if (notification.object as? NSTextField) === threadReplyField {
-            threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
-            return
-        }
         if (notification.object as? NSTextField) === searchPopoverInputLabel {
             if searchPopoverInputLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 showRecentSearchesIfNeeded()
@@ -1427,7 +1495,15 @@ extension MainWindow {
     }
 
     func textDidChange(_ notification: Notification) {
-        guard (notification.object as? NSTextView) === entryView else { return }
+        guard let textView = notification.object as? NSTextView else { return }
+        if textView === threadReplyTextView {
+            threadReplyTextView.needsDisplay = true
+            updateThreadSendState()
+            sendThreadTypingIfNeeded()
+            updateCompletion(target: .thread)
+            return
+        }
+        guard textView === entryView else { return }
         entryView.needsDisplay = true
         updateComposerSendState()
         sendTypingIfNeeded()
@@ -1435,12 +1511,18 @@ extension MainWindow {
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
-        guard (notification.object as? NSTextView) === entryView else { return }
+        guard let textView = notification.object as? NSTextView else { return }
+        if textView === threadReplyTextView {
+            updateCompletion(target: .thread)
+            return
+        }
+        guard textView === entryView else { return }
         updateCompletion()
     }
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard textView === entryView else { return false }
+        guard textView === entryView || textView === threadReplyTextView else { return false }
+        let isThread = textView === threadReplyTextView
         if isCompletionVisible {
             if commandSelector == #selector(NSResponder.moveUp(_:)) {
                 return moveCompletionSelection(by: -1)
@@ -1464,10 +1546,14 @@ extension MainWindow {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             // Shift+Return inserts a newline; Return sends.
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { return false }
-            sendComposerMessage()
+            if isThread {
+                sendThreadReply()
+            } else {
+                sendComposerMessage()
+            }
             return true
         }
-        if commandSelector == #selector(NSResponder.moveUp(_:)) {
+        if !isThread, commandSelector == #selector(NSResponder.moveUp(_:)) {
             let shiftHeld = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
             if !shiftHeld,
                editingPostId == nil,

@@ -521,7 +521,7 @@ extension MainWindow {
             rightPanelResizeHandle.frame = NSRect(x: 0, y: 0, width: 6, height: panelHeight)
 
             let isThreadMode = (rightPanelMode == .thread)
-            let replyBarHeight: CGFloat = isThreadMode ? 52 : 0
+            let replyBarHeight: CGFloat = isThreadMode ? threadComposerHeight : 0
             rightPanelScroll.frame = NSRect(
                 x: 0,
                 y: replyBarHeight,
@@ -536,11 +536,30 @@ extension MainWindow {
             }
             threadReplyPanel.isHidden = !isThreadMode
             if isThreadMode {
-                threadReplyPanel.frame = NSRect(x: 8, y: 8, width: panelWidth - 16, height: 36)
-                threadReplyField.frame = NSRect(x: 10, y: 9, width: panelWidth - 16 - 52, height: 18)
-                threadPlaceholderLabel.frame = NSRect(x: 10, y: 11, width: panelWidth - 16 - 52, height: 16)
-                threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
-                threadSendButton.frame = NSRect(x: panelWidth - 16 - 34, y: 11, width: 26, height: 26)
+                let trayHeight = threadAttachmentTrayHeight
+                threadReplyPanel.frame = NSRect(
+                    x: 8,
+                    y: 8,
+                    width: panelWidth - 16,
+                    height: threadComposerBaseHeight + trayHeight
+                )
+                let textWidth = max(120, panelWidth - 16 - 108)
+                threadReplyScroll.frame = NSRect(x: 10, y: 36, width: textWidth, height: 48)
+                threadReplyTextView.frame = NSRect(
+                    origin: .zero,
+                    size: NSSize(width: textWidth, height: 48)
+                )
+                threadAttachmentTray.frame = NSRect(
+                    x: 8,
+                    y: threadComposerBaseHeight + 2,
+                    width: panelWidth - 16,
+                    height: 26
+                )
+                threadAttachmentTray.isHidden = trayHeight == 0
+                threadEmojiButton.frame = NSRect(x: panelWidth - 16 - 86, y: 48, width: 24, height: 24)
+                threadAttachButton.frame = NSRect(x: panelWidth - 16 - 58, y: 48, width: 24, height: 24)
+                threadSendButton.frame = NSRect(x: panelWidth - 16 - 30, y: 46, width: 26, height: 26)
+                renderThreadAttachments()
             }
         }
 

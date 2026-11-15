@@ -90,10 +90,39 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         get { viewModel.threadRootId }
         set { viewModel.threadRootId = newValue }
     }
-    let threadReplyField = NSTextField()
     let threadReplyPanel = RoundedEdgePanel()
+    let threadReplyScroll = NSScrollView()
+    let threadReplyTextView = ComposerTextView()
     let threadSendButton = RoundedEdgePanel()
-    let threadPlaceholderLabel = NSTextField(labelWithString: "Reply to thread…")
+    let threadSendIconView = NSImageView()
+    let threadEmojiButton = RoundedEdgePanel()
+    let threadAttachButton = RoundedEdgePanel()
+    let threadAttachmentTray = NSView()
+    var readThreadIds: Set<String> = []
+    var threadRequestToken = 0
+    var threadsRequestToken = 0
+    var threadVisibleReplyLimit = 50
+    var threadItemsPage = 0
+    var threadItemsHasMore = false
+    var threadItemsLoading = false
+    var threadPendingAttachmentsByRootId: [String: [PendingAttachment]] = [:]
+    var lastThreadTypingSentAt: Date?
+    var threadComposerSending = false
+    var threadComposerBaseHeight: CGFloat = 92
+    var threadAttachmentTrayHeight: CGFloat {
+        let hasPending = threadPendingAttachmentsByRootId[threadRootId]?.isEmpty == false
+        let hasUploads = activeAttachmentUploads.contains {
+            $0.threadRootId == threadRootId && $0.isInProgress
+        }
+        return hasPending || hasUploads ? 30 : 0
+    }
+    var threadComposerHeight: CGFloat {
+        threadComposerBaseHeight + threadAttachmentTrayHeight
+    }
+    enum EmojiInsertionTarget { case composer, thread }
+    var emojiInsertionTarget: EmojiInsertionTarget = .composer
+    enum CompletionTarget { case composer, thread }
+    var completionTarget: CompletionTarget = .composer
 
     // Post hover toolbar extras: reaction picker and the "more" menu
     let reactionPickerPanel = RoundedEdgePanel()
@@ -402,6 +431,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
         let id: UUID
         let channelId: String
+        let threadRootId: String?
         let name: String
         let size: Int64
         let mimeType: String
@@ -490,7 +520,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var composerTotalHeight: CGFloat { composerBaseHeight + composerPendingHeight }
     var hasComposerAttachments: Bool {
         !pendingAttachments.isEmpty
-            || activeAttachmentUploads.contains { $0.channelId == activeChannelId }
+            || activeAttachmentUploads.contains {
+                $0.channelId == activeChannelId && $0.threadRootId == nil
+            }
     }
 
     // Live WebService state (owned by the view model; exposed for the views).

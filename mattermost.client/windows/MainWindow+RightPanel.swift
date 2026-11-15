@@ -49,6 +49,13 @@ extension MainWindow {
         rightPanelScroll.hasVerticalScroller = true
         rightPanelScroll.autohidesScrollers = true
         rightPanelScroll.documentView = rightPanelDoc
+        rightPanelScroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(rightPanelDidScroll),
+            name: NSView.boundsDidChangeNotification,
+            object: rightPanelScroll.contentView
+        )
         rightPanel.addSubview(rightPanelScroll)
 
         threadReplyPanel.color = Theme.shared.centerBg
@@ -57,35 +64,88 @@ extension MainWindow {
         threadReplyPanel.borderColor = dividerColor
         threadReplyPanel.isHidden = true
 
-        threadReplyField.placeholderString = "Reply to thread…"
-        threadReplyField.font = MMFont.font(ofSize: 13)
-        threadReplyField.textColor = Theme.shared.centerText
-        threadReplyField.isBordered = false
-        threadReplyField.drawsBackground = false
-        threadReplyField.focusRingType = .none
-        threadReplyField.target = self
-        threadReplyField.action = #selector(sendThreadReply)
-        threadReplyField.delegate = self
-        threadReplyPanel.addSubview(threadReplyField)
-
-        threadPlaceholderLabel.font = MMFont.font(ofSize: 13)
-        threadPlaceholderLabel.textColor = Theme.shared.centerTextPlaceholder
-        threadPlaceholderLabel.isEditable = false
-        threadPlaceholderLabel.isSelectable = false
-        threadReplyPanel.addSubview(threadPlaceholderLabel, positioned: .below, relativeTo: threadReplyField)
-
-        threadSendButton.color = Theme.shared.buttonBg
-        threadSendButton.cornerRadius = MMRadius.control
-        let sendIcon = NSImageView()
-        if let image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send reply") {
-            sendIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
-            sendIcon.contentTintColor = .white
+        threadReplyTextView.font = MMFont.font(ofSize: 13)
+        threadReplyTextView.textColor = Theme.shared.centerText
+        threadReplyTextView.drawsBackground = false
+        threadReplyTextView.isRichText = false
+        threadReplyTextView.isAutomaticQuoteSubstitutionEnabled = false
+        threadReplyTextView.isAutomaticDashSubstitutionEnabled = false
+        threadReplyTextView.isAutomaticTextReplacementEnabled = false
+        threadReplyTextView.isAutomaticSpellingCorrectionEnabled = false
+        threadReplyTextView.textContainerInset = NSSize(width: 0, height: 5)
+        threadReplyTextView.textContainer?.lineFragmentPadding = 0
+        threadReplyTextView.placeholderString = "Reply to thread…"
+        threadReplyTextView.delegate = self
+        threadReplyTextView.onFilesDropped = { [weak self] urls in
+            self?.uploadThreadFiles(urls)
         }
-        sendIcon.frame = NSRect(x: 6, y: 6, width: 14, height: 14)
-        threadSendButton.addSubview(sendIcon)
+        threadReplyTextView.onDropStateChanged = { [weak self] active in
+            self?.threadReplyPanel.borderColor = active
+                ? Theme.shared.buttonBg
+                : Theme.shared.divider
+            self?.threadReplyPanel.setNeedsAppearanceUpdate()
+        }
+        threadReplyTextView.onImagePasted = { [weak self] data, filename in
+            self?.uploadThreadPastedImage(data, filename: filename)
+        }
+
+        threadReplyScroll.drawsBackground = false
+        threadReplyScroll.hasVerticalScroller = true
+        threadReplyScroll.autohidesScrollers = true
+        threadReplyScroll.borderType = .noBorder
+        threadReplyScroll.documentView = threadReplyTextView
+        threadReplyTextView.minSize = NSSize(width: 0, height: 48)
+        threadReplyTextView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: 48)
+        threadReplyTextView.isVerticallyResizable = true
+        threadReplyTextView.isHorizontallyResizable = false
+        threadReplyTextView.autoresizingMask = [.width]
+        threadReplyPanel.addSubview(threadReplyScroll)
+
+        threadAttachmentTray.isHidden = true
+        threadReplyPanel.addSubview(threadAttachmentTray)
+
+        threadEmojiButton.color = .clear
+        threadEmojiButton.cornerRadius = MMRadius.control
+        let threadEmojiIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: "Add emoji") {
+            threadEmojiIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+            threadEmojiIcon.contentTintColor = Theme.shared.centerTextMuted
+        }
+        threadEmojiIcon.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+        threadEmojiButton.addSubview(threadEmojiIcon)
+        threadEmojiButton.onClick = { [weak self] in
+            self?.toggleEmojiPanel(for: .thread)
+        }
+        threadEmojiButton.accessibilityTitle = "Add emoji"
+        threadReplyPanel.addSubview(threadEmojiButton)
+
+        threadAttachButton.color = .clear
+        threadAttachButton.cornerRadius = MMRadius.control
+        let threadAttachIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "Attach files") {
+            threadAttachIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+            threadAttachIcon.contentTintColor = Theme.shared.centerTextMuted
+        }
+        threadAttachIcon.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+        threadAttachButton.addSubview(threadAttachIcon)
+        threadAttachButton.onClick = { [weak self] in
+            self?.attachThreadFiles()
+        }
+        threadAttachButton.accessibilityTitle = "Attach files"
+        threadReplyPanel.addSubview(threadAttachButton)
+
+        threadSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
+        threadSendButton.cornerRadius = MMRadius.control
+        if let image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send reply") {
+            threadSendIconView.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+            threadSendIconView.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.32)
+        }
+        threadSendIconView.frame = NSRect(x: 6, y: 6, width: 14, height: 14)
+        threadSendButton.addSubview(threadSendIconView)
         threadSendButton.onClick = { [weak self] in
             self?.sendThreadReply()
         }
+        threadSendButton.accessibilityTitle = "Send reply"
         threadReplyPanel.addSubview(threadSendButton)
         rightPanel.addSubview(threadReplyPanel)
 
@@ -108,6 +168,9 @@ extension MainWindow {
     func showRightPanel(mode: RightPanelMode) {
         if rightPanelMode == .thread && mode != .thread {
             saveThreadDraft()
+        }
+        if completionTarget == .thread && mode != .thread {
+            closeCompletion()
         }
         rightPanelMode = mode
         isRightPanelVisible = true
@@ -144,6 +207,8 @@ extension MainWindow {
         case .thread:
             rightPanelTitle.stringValue = "Thread"
             restoreThreadDraft()
+            renderThreadAttachments()
+            updateThreadSendState()
             loadThread()
         case .files:
             rightPanelTitle.stringValue = L10n.string("Files")
@@ -165,6 +230,7 @@ extension MainWindow {
 
     func closeRightPanel() {
         if rightPanelMode == .thread { saveThreadDraft() }
+        if completionTarget == .thread { closeCompletion() }
         isRightPanelVisible = false
         rightPanel.isHidden = true
         lastRightPanelContentWidth = 0
@@ -187,53 +253,148 @@ extension MainWindow {
         }
     }
 
-    func loadThreads() {
+    func loadThreads(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
-            renderRightPanel(empty: "Sign in to see your threads", rows: [])
+            if reset { renderRightPanel(empty: "Sign in to see your threads", rows: []) }
             return
         }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else {
-            renderRightPanel(empty: "Sign in to see your threads", rows: [])
+            if reset { renderRightPanel(empty: "Sign in to see your threads", rows: []) }
             return
         }
+
+        if reset {
+            threadsRequestToken += 1
+            threadItemsPage = 0
+            threadItemsHasMore = false
+            threadItemsLoading = true
+            renderRightPanel(empty: "Loading threads…", rows: [])
+        } else {
+            guard threadItemsHasMore, !threadItemsLoading else { return }
+            threadItemsLoading = true
+            renderThreadsPanel()
+        }
+
+        let token = threadsRequestToken
+        let page = reset ? 0 : threadItemsPage + 1
+        let pageSize = 30
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let response = try? await ws.fetchThreadsPage(userId: userId, teamId: team.id) else {
-                self.renderRightPanel(empty: "Could not load threads", rows: [])
-                return
-            }
-            let threads = response.threads
-            self.threadItems = threads
-            self.totalUnreadThreads = response.total_unread_threads
-                ?? threads.filter { ($0.last_reply_at ?? 0) > ($0.last_viewed_at ?? 0) }.count
-            self.updateSidebarBadges()
-            let authorIds = threads.compactMap { $0.post?.user_id }
-            self.hydrateUsers(authorIds) { [weak self] in
-                guard let self = self else { return }
-                let rows = threads.compactMap { thread -> RightPanelRow? in
-                    guard let post = thread.post else { return nil }
-                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
-                    let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
-                    let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
-                    let replies = thread.reply_count ?? 0
-                    let isUnread = (thread.last_reply_at ?? 0) > (thread.last_viewed_at ?? 0)
-                    return RightPanelRow(
-                        title: snippet.isEmpty ? "(attachment)" : snippet,
-                        subtitle: [author, channelName].filter { !$0.isEmpty }.joined(separator: " · "),
-                        meta: "\(replies) repl\(replies == 1 ? "y" : "ies")\(isUnread ? " • unread" : "")",
-                        action: { [weak self] in
-                            guard let self = self else { return }
-                            self.pendingJumpPostId = post.id
-                            self.openChannel(withId: post.channel_id)
-                            self.showThread(for: post)
-                        }
-                    )
+            do {
+                let response = try await ws.fetchThreadsPage(
+                    userId: userId,
+                    teamId: team.id,
+                    page: page,
+                    perPage: pageSize
+                )
+                guard token == self.threadsRequestToken else { return }
+                if reset {
+                    self.threadItems = response.threads
+                } else {
+                    let existing = Set(self.threadItems.map(\.id))
+                    self.threadItems += response.threads.filter { !existing.contains($0.id) }
                 }
-                self.renderRightPanel(empty: L10n.string("No threads yet"), rows: rows)
+                self.threadItemsPage = page
+                self.threadItemsHasMore = response.threads.count == pageSize
+                self.threadItemsLoading = false
+                if let unread = response.total_unread_threads {
+                    self.totalUnreadThreads = unread
+                } else {
+                    self.recomputeThreadUnreadCount()
+                }
+                self.updateSidebarBadges()
+
+                let authorIds = response.threads.compactMap { $0.post?.user_id }
+                self.hydrateUsers(authorIds) { [weak self] in
+                    guard let self = self, token == self.threadsRequestToken else { return }
+                    self.renderThreadsPanel()
+                }
+            } catch {
+                guard token == self.threadsRequestToken else { return }
+                self.threadItemsLoading = false
+                if reset {
+                    self.renderRightPanel(empty: "Could not load threads", rows: [])
+                } else {
+                    self.renderThreadsPanel()
+                }
             }
         }
+    }
+
+    func loadMoreThreads() {
+        guard threadItemsHasMore, !threadItemsLoading else { return }
+        loadThreads(reset: false)
+    }
+
+    @objc func rightPanelDidScroll() {
+        guard isRightPanelVisible,
+              rightPanelMode == .threads,
+              threadItemsHasMore,
+              !threadItemsLoading
+        else { return }
+        let clip = rightPanelScroll.contentView.bounds
+        if clip.maxY >= rightPanelDoc.frame.height - 100 {
+            loadMoreThreads()
+        }
+    }
+
+    func isThreadUnread(_ thread: MMThread) -> Bool {
+        ThreadSupport.isUnread(
+            lastReplyAt: thread.last_reply_at,
+            lastViewedAt: thread.last_viewed_at,
+            isMarkedRead: readThreadIds.contains(thread.id)
+        )
+    }
+
+    func recomputeThreadUnreadCount() {
+        totalUnreadThreads = threadItems.filter { isThreadUnread($0) }.count
+        updateSidebarBadges()
+    }
+
+    func refreshThreadUnreadCount() {
+        guard let ws = webService, ws.isLogged(), let team = activeTeam else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let response = try? await ws.fetchThreadsPage(
+                userId: userId,
+                teamId: team.id,
+                page: 0,
+                perPage: 1
+            ) else { return }
+            if let unread = response.total_unread_threads {
+                self.totalUnreadThreads = unread
+                self.updateSidebarBadges()
+            }
+        }
+    }
+
+    func renderThreadsPanel() {
+        guard !threadItems.isEmpty else {
+            renderRightPanel(empty: L10n.string("No threads yet"), rows: [])
+            return
+        }
+        let rows = threadItems.compactMap { thread -> RightPanelRow? in
+            guard let post = thread.post else { return nil }
+            let author = usersById[post.user_id]?.username ?? "Unknown"
+            let channelName = channelsById[post.channel_id].map { channelDisplayName(for: $0) } ?? ""
+            let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
+            let replies = thread.reply_count ?? 0
+            let unread = isThreadUnread(thread)
+            let meta = "\(replies) repl\(replies == 1 ? "y" : "ies")\(unread ? " • unread" : "")"
+            return RightPanelRow(
+                title: snippet.isEmpty ? "(attachment)" : snippet,
+                subtitle: [author, channelName].filter { !$0.isEmpty }.joined(separator: " · "),
+                meta: meta,
+                action: { [weak self] in
+                    self?.showThread(for: post)
+                }
+            )
+        }
+        renderRightPanel(empty: L10n.string("No threads yet"), rows: rows)
     }
 
     func showThread(for post: MMPost) {
@@ -241,14 +402,21 @@ extension MainWindow {
         if rightPanelMode == .thread && threadRootId != root {
             saveThreadDraft()
         }
+        threadRequestToken += 1
         threadRootId = root
         threadPosts = [post]
+        threadVisibleReplyLimit = 50
+        threadComposerSending = false
         rightPanelMode = .thread
         isRightPanelVisible = true
         rightPanel.isHidden = false
         rightPanelTitle.stringValue = "Thread"
-        rightPanelSubtitle.stringValue = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
+        let channel = channelsById[post.channel_id] ?? channelsById[activeChannelId]
+        rightPanelSubtitle.stringValue = channel.map { channelDisplayName(for: $0) } ?? ""
         restoreThreadDraft()
+        renderThreadPanel(empty: "Loading thread…")
+        renderThreadAttachments()
+        updateThreadSendState()
         layoutRightChatPanel()
         loadThread()
     }
@@ -259,40 +427,58 @@ extension MainWindow {
             renderThreadPanel(empty: "Could not load thread")
             return
         }
+        threadRequestToken += 1
+        let token = threadRequestToken
         let rootId = threadRootId
-        let wasUnread = threadItems.first(where: { $0.id == rootId })
-            .map { ($0.last_reply_at ?? 0) > ($0.last_viewed_at ?? 0) } ?? false
+        let wasUnread = threadItems.first(where: { $0.id == rootId }).map { isThreadUnread($0) } ?? false
+
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let list = try? await ws.fetchPostThread(postId: rootId) else {
-                self.renderThreadPanel(empty: "Could not load thread")
-                return
-            }
-            let posts = list.order.compactMap { list.posts[$0] }
-                .sorted { $0.create_at < $1.create_at }
-            // The thread endpoint accepts any post in the thread; normalise the
-            // reply target to the actual root post.
-            if let root = posts.first(where: { ($0.root_id ?? "").isEmpty }) {
-                self.threadRootId = root.id
-            }
-            self.threadPosts = posts
-            self.hydrateUsers(posts.map { $0.user_id }) {
-                self.renderThreadPanel()
-            }
-            if let team = self.activeTeam {
-                try? await ws.markThreadRead(teamId: team.id, threadId: self.threadRootId)
-                if wasUnread {
-                    self.totalUnreadThreads = self.threadItems.filter {
-                        $0.id != self.threadRootId
-                            && ($0.last_reply_at ?? 0) > ($0.last_viewed_at ?? 0)
-                    }.count
-                    self.updateSidebarBadges()
+            do {
+                let list = try await ws.fetchPostThread(postId: rootId)
+                guard token == self.threadRequestToken, self.threadRootId == rootId else { return }
+                let posts = list.order.compactMap { list.posts[$0] }
+                    .sorted { $0.create_at < $1.create_at }
+                guard !posts.isEmpty else {
+                    self.threadPosts = []
+                    self.renderThreadPanel(empty: "Could not load thread")
+                    return
                 }
+                // The thread endpoint accepts any post in the thread; normalise the
+                // reply target to the actual root post.
+                if let root = posts.first(where: { ($0.root_id ?? "").isEmpty }) {
+                    self.threadRootId = root.id
+                }
+                self.threadPosts = posts
+                self.threadVisibleReplyLimit = max(50, self.threadVisibleReplyLimit)
+                self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
+                    guard let self = self, token == self.threadRequestToken else { return }
+                    self.renderThreadPanel(scrollToBottom: true)
+                }
+
+                if let team = self.activeTeam {
+                    try? await ws.markThreadRead(teamId: team.id, threadId: self.threadRootId)
+                    guard token == self.threadRequestToken else { return }
+                    let threadId = self.threadRootId
+                    self.readThreadIds.insert(threadId)
+                    if wasUnread {
+                        self.totalUnreadThreads = max(0, self.totalUnreadThreads - 1)
+                    }
+                    self.updateSidebarBadges()
+                    self.refreshThreadUnreadCount()
+                    if self.rightPanelMode == .threads {
+                        self.renderThreadsPanel()
+                    }
+                }
+            } catch {
+                guard token == self.threadRequestToken else { return }
+                self.threadPosts = []
+                self.renderThreadPanel(empty: "Could not load thread")
             }
         }
     }
 
-    func renderThreadPanel(empty: String? = nil) {
+    func renderThreadPanel(empty: String? = nil, scrollToBottom: Bool = true) {
         let panelWidth = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
         rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
 
@@ -311,16 +497,51 @@ extension MainWindow {
 
         let contentWidth = max(200, panelWidth - 24)
         let rootId = threadRootId
+        let rootPost = threadPosts.first(where: { $0.id == rootId }) ?? threadPosts[0]
+        let replies = threadPosts.filter { $0.id != rootPost.id }
+        let pagination = ThreadSupport.visibleReplies(replies, limit: max(1, threadVisibleReplyLimit))
+        let visibleReplies = pagination.posts
+        let hiddenReplies = pagination.hidden
         var y: CGFloat = 8
+
+        if hiddenReplies > 0 {
+            let loadRow = RoundedEdgePanel()
+            loadRow.color = .clear
+            loadRow.cornerRadius = MMRadius.menu
+            loadRow.frame = NSRect(x: 12, y: y, width: contentWidth, height: 28)
+            let title = NSTextField(
+                labelWithString: "Load \(min(50, hiddenReplies)) earlier repl\(hiddenReplies == 1 ? "y" : "ies")"
+            )
+            title.font = MMFont.font(ofSize: 12, weight: .semibold)
+            title.textColor = Theme.shared.buttonBg
+            title.alignment = .center
+            title.isEditable = false
+            title.isSelectable = false
+            title.frame = NSRect(x: 8, y: 6, width: contentWidth - 16, height: 16)
+            loadRow.addSubview(title)
+            loadRow.onHoverChanged = { [weak loadRow] isHovered in
+                loadRow?.color = isHovered ? Theme.shared.centerHover : .clear
+                loadRow?.setNeedsAppearanceUpdate()
+            }
+            loadRow.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.threadVisibleReplyLimit += 50
+                self.renderThreadPanel(scrollToBottom: false)
+            }
+            loadRow.accessibilityTitle = "Load earlier replies"
+            rightPanelDoc.addSubview(loadRow)
+            y += 34
+        }
+
         var lastUserId: String?
         var lastTimestamp: Int64 = 0
         var replyHeaderAdded = false
 
-        for post in threadPosts {
-            let isReply = post.id != rootId
+        for post in [rootPost] + visibleReplies {
+            let isReply = post.id != rootPost.id
             if isReply && !replyHeaderAdded {
                 replyHeaderAdded = true
-                let replyCount = max(0, threadPosts.count - 1)
+                let replyCount = replies.count
                 let header = NSTextField(labelWithString: "\(replyCount) \(replyCount == 1 ? "reply" : "replies")")
                 header.font = MMFont.font(ofSize: 11, weight: .semibold)
                 header.textColor = Theme.shared.centerTextMuted
@@ -353,32 +574,230 @@ extension MainWindow {
 
         y += 8
         rightPanelDoc.frame = NSRect(x: 0, y: 0, width: panelWidth, height: max(y, 1))
+        guard scrollToBottom else { return }
         let clip = rightPanelScroll.contentView
         let maxY = max(0, rightPanelDoc.frame.height - clip.bounds.height)
         clip.scroll(to: NSPoint(x: 0, y: maxY))
         rightPanelScroll.reflectScrolledClipView(clip)
     }
 
+    func threadChannelId() -> String {
+        threadPosts.first(where: { $0.id == threadRootId })?.channel_id
+            ?? threadPosts.first?.channel_id
+            ?? activeChannelId
+    }
+
+    func attachThreadFiles() {
+        guard !threadRootId.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.beginSheetModal(for: self) { [weak self] response in
+            guard response == .OK, let self = self else { return }
+            self.uploadThreadFiles(panel.urls)
+        }
+    }
+
+    func uploadThreadFiles(_ urls: [URL]) {
+        let files = urls.filter { !$0.hasDirectoryPath }
+        guard !files.isEmpty, !threadRootId.isEmpty else { return }
+        let rootId = threadRootId
+        let channelId = threadChannelId()
+        let limit = attachmentSizeLimit
+        for url in files {
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init) ?? 0
+            let name = url.lastPathComponent
+            if AttachmentUploadPolicy.exceedsLimit(size: size, limit: limit) {
+                showInfoAlert(
+                    "\(name) is \(AttachmentUploadPolicy.formattedBytes(size)); the limit is \(AttachmentUploadPolicy.formattedBytes(limit))."
+                )
+                continue
+            }
+            let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+                ?? "application/octet-stream"
+            enqueueUpload(
+                ActiveAttachmentUpload(
+                    id: UUID(),
+                    channelId: channelId,
+                    threadRootId: rootId,
+                    name: name,
+                    size: size,
+                    mimeType: mime,
+                    source: .file(url),
+                    state: .queued
+                )
+            )
+        }
+    }
+
+    func uploadThreadPastedImage(_ data: Data, filename: String) {
+        guard !threadRootId.isEmpty else { return }
+        let limit = attachmentSizeLimit
+        guard !AttachmentUploadPolicy.exceedsLimit(size: Int64(data.count), limit: limit) else {
+            showInfoAlert(
+                "The pasted image is \(AttachmentUploadPolicy.formattedBytes(Int64(data.count))); the limit is \(AttachmentUploadPolicy.formattedBytes(limit))."
+            )
+            return
+        }
+        enqueueUpload(
+            ActiveAttachmentUpload(
+                id: UUID(),
+                channelId: threadChannelId(),
+                threadRootId: threadRootId,
+                name: filename,
+                size: Int64(data.count),
+                mimeType: "image/png",
+                source: .data(data),
+                state: .queued
+            )
+        )
+    }
+
+    func renderThreadAttachments() {
+        threadAttachmentTray.subviews.forEach { $0.removeFromSuperview() }
+        let pending = threadPendingAttachmentsByRootId[threadRootId] ?? []
+        let uploads = activeAttachmentUploads.filter { $0.threadRootId == threadRootId }
+        threadAttachmentTray.isHidden = pending.isEmpty && uploads.isEmpty
+        guard !pending.isEmpty || !uploads.isEmpty else { return }
+
+        let trayWidth = max(threadAttachmentTray.bounds.width, 200)
+        let chipW: CGFloat = 160
+        let chipH: CGFloat = 24
+        let gap: CGFloat = 6
+        let maxVisible = max(1, Int((trayWidth + gap) / (chipW + gap)))
+        var x: CGFloat = 0
+        var rendered = 0
+
+        for upload in uploads.prefix(maxVisible) {
+            renderUploadChip(
+                upload,
+                frame: NSRect(x: x, y: 2, width: chipW, height: chipH),
+                in: threadAttachmentTray
+            )
+            x += chipW + gap
+            rendered += 1
+        }
+
+        for attachment in pending.prefix(max(0, maxVisible - rendered)) {
+            let chip = RoundedEdgePanel()
+            chip.cornerRadius = MMRadius.control
+            chip.color = Theme.shared.centerHover
+            chip.borderWidth = 1
+            chip.borderColor = Theme.shared.divider
+            chip.frame = NSRect(x: x, y: 2, width: chipW, height: chipH)
+
+            let icon = NSImageView()
+            if let image = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: attachment.name) {
+                icon.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+                icon.contentTintColor = Theme.shared.centerTextMuted
+            }
+            icon.frame = NSRect(x: 7, y: 6, width: 12, height: 12)
+            chip.addSubview(icon)
+
+            let name = NSTextField(labelWithString: attachment.name)
+            name.font = MMFont.font(ofSize: 11)
+            name.textColor = Theme.shared.centerText
+            name.lineBreakMode = .byTruncatingMiddle
+            name.isEditable = false
+            name.isSelectable = false
+            name.frame = NSRect(x: 24, y: 5, width: chipW - 50, height: 14)
+            chip.addSubview(name)
+
+            let remove = RoundedEdgePanel()
+            remove.cornerRadius = MMRadius.tiny
+            remove.color = .clear
+            remove.frame = NSRect(x: chipW - 22, y: 4, width: 16, height: 16)
+            let xIcon = NSImageView()
+            if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Remove attachment") {
+                xIcon.image = image.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
+                xIcon.contentTintColor = Theme.shared.centerTextMuted
+            }
+            xIcon.frame = NSRect(x: 4, y: 4, width: 8, height: 8)
+            remove.addSubview(xIcon)
+            let attachmentId = attachment.id
+            remove.onClick = { [weak self] in
+                self?.removeThreadAttachment(id: attachmentId)
+            }
+            chip.addSubview(remove)
+            threadAttachmentTray.addSubview(chip)
+            x += chipW + gap
+            rendered += 1
+        }
+    }
+
+    func removeThreadAttachment(id: String) {
+        guard !threadRootId.isEmpty else { return }
+        threadPendingAttachmentsByRootId[threadRootId]?.removeAll { $0.id == id }
+        renderThreadAttachments()
+        layoutRightChatPanel()
+        updateThreadSendState()
+    }
+
+    func updateThreadSendState() {
+        let hasText = !threadReplyTextView.string
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasAttachments = !(threadPendingAttachmentsByRootId[threadRootId] ?? []).isEmpty
+        let hasUploads = activeAttachmentUploads.contains {
+            $0.threadRootId == threadRootId && $0.isInProgress
+        }
+        let enabled = !threadComposerSending && !hasUploads && (hasText || hasAttachments)
+        threadSendButton.color = enabled
+            ? Theme.shared.buttonBg
+            : Theme.shared.centerText.withAlphaComponent(0.08)
+        threadSendIconView.contentTintColor = enabled
+            ? .white
+            : Theme.shared.centerText.withAlphaComponent(0.32)
+        threadSendButton.setNeedsAppearanceUpdate()
+        threadSendButton.accessibilityHelp = enabled ? "Send reply" : "Enter a reply first"
+    }
+
+    func sendThreadTypingIfNeeded() {
+        guard !threadRootId.isEmpty else { return }
+        let text = threadReplyTextView.string
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if let last = lastThreadTypingSentAt, Date().timeIntervalSince(last) < 1.5 { return }
+        lastThreadTypingSentAt = Date()
+        webService?.sendUserTyping(channelId: threadChannelId(), parentId: threadRootId)
+    }
+
     @objc func sendThreadReply() {
         guard let ws = webService, ws.isLogged(),
-              !threadRootId.isEmpty else { return }
-        let text = threadReplyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        let channelId = threadPosts.first(where: { $0.id == threadRootId })?.channel_id ?? activeChannelId
+              !threadRootId.isEmpty,
+              !threadComposerSending else { return }
         let rootId = threadRootId
-        threadReplyField.stringValue = ""
-        threadPlaceholderLabel.isHidden = false
+        let channelId = threadChannelId()
+        let text = threadReplyTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments = threadPendingAttachmentsByRootId[rootId] ?? []
+        guard !text.isEmpty || !attachments.isEmpty else { return }
+        threadComposerSending = true
+        updateThreadSendState()
+
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                try await ws.createPost(channelId: channelId, message: text, rootId: rootId)
+                try await ws.createPost(
+                    channelId: channelId,
+                    message: text,
+                    rootId: rootId,
+                    fileIds: attachments.map(\.id)
+                )
+                self.threadPendingAttachmentsByRootId.removeValue(forKey: rootId)
                 self.clearThreadDraft(for: rootId)
-                self.loadThread()
+                if self.threadRootId == rootId {
+                    self.threadReplyTextView.string = ""
+                    self.threadReplyTextView.needsDisplay = true
+                    self.threadComposerSending = false
+                    self.renderThreadAttachments()
+                    self.updateThreadSendState()
+                    self.loadThread()
+                }
             } catch {
-                NSLog("Thread reply failed: \(error.localizedDescription)")
-                self.threadReplyField.stringValue = text
-                self.threadPlaceholderLabel.isHidden = true
-                self.threadDraftsByRootId[rootId] = text
+                if self.threadRootId == rootId {
+                    self.threadComposerSending = false
+                    self.updateThreadSendState()
+                }
+                self.showInfoAlert("Could not send the reply: \(error.localizedDescription)")
             }
         }
     }
@@ -975,7 +1394,43 @@ extension MainWindow {
                 y += 68
             }
         }
+
+        if rightPanelMode == .threads, !rows.isEmpty,
+           threadItemsHasMore || threadItemsLoading {
+            let footer = makeRightPanelFooter(
+                title: threadItemsLoading ? "Loading more threads…" : "Load more threads",
+                width: width - 24,
+                action: threadItemsLoading ? nil : { [weak self] in self?.loadMoreThreads() }
+            )
+            footer.frame = NSRect(x: 12, y: y, width: width - 24, height: 32)
+            rightPanelDoc.addSubview(footer)
+            y += 38
+        }
+
         rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+    }
+
+    func makeRightPanelFooter(title: String, width: CGFloat, action: (() -> Void)?) -> RoundedEdgePanel {
+        let row = RoundedEdgePanel()
+        row.cornerRadius = MMRadius.menu
+        row.color = .clear
+        let label = NSTextField(labelWithString: title)
+        label.font = MMFont.font(ofSize: 12, weight: .semibold)
+        label.textColor = action == nil ? Theme.shared.centerTextMuted : Theme.shared.buttonBg
+        label.alignment = .center
+        label.isEditable = false
+        label.isSelectable = false
+        label.frame = NSRect(x: 8, y: 7, width: max(40, width - 16), height: 18)
+        row.addSubview(label)
+        if let action = action {
+            row.onClick = action
+            row.onHoverChanged = { [weak row] isHovered in
+                row?.color = isHovered ? Theme.shared.centerHover : .clear
+                row?.setNeedsAppearanceUpdate()
+            }
+        }
+        row.accessibilityTitle = title
+        return row
     }
 
     func makeRightPanelRow(_ item: RightPanelRow, width: CGFloat) -> RoundedEdgePanel {
