@@ -17,7 +17,7 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Coverage | **33.5% line coverage**, enforced by a 30% gate in `test.sh` |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
-| Deployment target | **macOS 14.0** (app and tests) |
+| Deployment target | **macOS 15.0** (app and tests) |
 | App icon set | Correct 16/32/64/128/256/512/1024 px PNGs |
 | Privacy manifest | Present (`PrivacyInfo.xcprivacy`, UserDefaults CA92.1 and FileTimestamp C617.1) |
 | Transport security | HTTPS/443 default; explicit `http://` limited to local networks by ATS |
@@ -43,14 +43,14 @@ None. Resolved findings and the previously verified feature list are preserved i
   `notarytool` submission/stapling and checksums, and `RELEASE.md` documents the process. A real
   notarized artifact still has to be produced with the Developer ID certificate and notary
   credentials and verified with `spctl` on a clean machine.
-- The app has still not been run on an actual macOS 14 host (only the 27.x development host), so
-  the documented 14.0 floor is unproven.
+- CI builds, tests and smoke-launches the app on macOS 15; a notarized Release DMG still needs
+  verification on a clean machine.
 
 ---
 
 ## Recommended Next Steps
 
-1. Produce, notarize and verify a Release DMG on a clean macOS 14 machine.
+1. Produce, notarize and verify a Release DMG on a clean macOS 15 machine.
 
 ---
 

@@ -11,7 +11,7 @@ build/release scripts, CI, README/AUDIT._
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
 | `./test.sh` | **61/61 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
-| Deployment target | macOS 14.0 |
+| Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
 | Release signing | **Automated Developer ID/hardened-runtime/notarization pipeline**; ad-hoc DMG in CI; a real notarized build still needs the certificate and notary credentials |
 
@@ -467,7 +467,7 @@ history is in git; the original long-form checklist lives in prior commits of th
   application, design tokens for radii/metrics/native accents.
 - **Security/packaging:** Keychain in Release (documented debug plaintext store), HTTPS/443
   default with local-network ATS exception, scoped privacy manifest, correct icon set,
-  gated payload logging, macOS 14 deployment target, and an automated signing/notarization pipeline.
+  gated payload logging, macOS 15 deployment target, and an automated signing/notarization pipeline.
 - **Architecture:** `MainWindow` split into focused extensions, `ChatViewModel`, injected
   `WebService`, `@MainActor` + Swift 6 complete concurrency, deduplicated HTTP request
   building, dead prototype removal, centralized tokens.

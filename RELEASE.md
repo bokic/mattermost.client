@@ -69,15 +69,3 @@ The repository does not contain a Developer ID certificate or notary
 credentials, so a real notarized artifact can only be produced by a maintainer
 with access to those secrets (or by the protected CI release job once the
 secrets are configured).
-
-## macOS 14 verification runner
-
-GitHub-hosted `macos-14` runners are no longer available. To run the
-`macos14-verify` job, register a macOS 14 Mac or VM as a self-hosted GitHub
-Actions runner with a custom label such as `macos14`, then add a repository
-variable named `MACOS14_RUNNER` with the value `macos14`
-(Settings → Secrets and variables → Actions → Variables). The job is skipped
-while that variable is unset.
-
-The always-on `deployment-floor` job still checks `LSMinimumSystemVersion` and
-the linked `minos` value on every push.

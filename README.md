@@ -60,7 +60,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 
 ## Requirements
 
-- **Operating System**: macOS 14.0 or newer (the app and tests build against a 14.0 deployment target)
+- **Operating System**: macOS 15.0 or newer (the app and tests build against a 15.0 deployment target)
 - **Development Tools**: Xcode 16.0+ with Command Line Tools
 - **Swift**: Swift 6 language mode with complete strict-concurrency checking
 - **Mattermost Server**: Compatible with Mattermost Server v7.0+ (REST API v4 and WebSocket v4)

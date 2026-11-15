@@ -24,52 +24,16 @@ jobs:
       - name: Test
         run: ./test.sh
 
-  lint:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Lint migrated files
-        run: ./lint.sh
-
-  macos14-verify:
-    # GitHub-hosted macOS 14 runners are no longer available. Register a
-    # macOS 14 machine/VM as a self-hosted runner with a custom label (for
-    # example `macos14`) and set the repository variable MACOS14_RUNNER to that
-    # label to enable this job.
-    if: vars.MACOS14_RUNNER != ''
-    runs-on: ${{ vars.MACOS14_RUNNER }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Verify host and toolchain
-        run: |
-          set -euo pipefail
-          sw_vers
-          VERSION="$(sw_vers -productVersion)"
-          case "$VERSION" in
-            14.*) ;;
-            *) echo "::error::Expected a macOS 14 runner, got $VERSION"; exit 1 ;;
-          esac
-          xcodebuild -version
-          swift --version
-
-      - name: Build
-        run: ./build.sh
-
-      - name: Test
-        run: ./test.sh
-
-      - name: Smoke launch on macOS 14
+      - name: Smoke launch on macOS 15
         run: |
           set -euo pipefail
           APP="build/Build/Products/Debug/mattermost.client.app/Contents/MacOS/mattermost.client"
-          "$APP" >/tmp/mattermost-macos14-smoke.log 2>&1 &
+          "$APP" >/tmp/mattermost-macos15-smoke.log 2>&1 &
           PID=$!
           for _ in $(seq 1 20); do
             if ! kill -0 "$PID" 2>/dev/null; then
-              echo "::error::App exited during macOS 14 launch"
-              cat /tmp/mattermost-macos14-smoke.log
+              echo "::error::App exited during macOS 15 launch"
+              cat /tmp/mattermost-macos15-smoke.log
               exit 1
             fi
             sleep 0.5
@@ -78,8 +42,16 @@ jobs:
           wait "$PID" 2>/dev/null || true
           echo "App stayed alive on macOS $(sw_vers -productVersion) for the smoke window."
 
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint migrated files
+        run: ./lint.sh
+
   deployment-floor:
-    # Always-on check that the binary advertises the documented macOS 14 floor.
+    # Always-on check that the binary advertises the documented macOS 15 floor.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -91,8 +63,8 @@ jobs:
         run: |
           set -euo pipefail
           APP="build/Build/Products/Debug/mattermost.client.app"
-          if ! plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist" | grep -qx '14.0'; then
-            echo "::error::LSMinimumSystemVersion is not 14.0"
+          if ! plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist" | grep -qx '15.0'; then
+            echo "::error::LSMinimumSystemVersion is not 15.0"
             exit 1
           fi
           otool -l "$APP/Contents/MacOS/mattermost.client" | grep -A4 LC_BUILD_VERSION
