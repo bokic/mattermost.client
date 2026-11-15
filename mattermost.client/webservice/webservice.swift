@@ -703,6 +703,52 @@ final class WebService: NSObject {
         }
     }
     
+    func uploadFile(channelId: String, data: Data, filename: String, mimeType: String) async throws -> String {
+        guard let url = buildURL(path: "/api/v4/files", queryItems: [URLQueryItem(name: "channel_id", value: channelId)]) else {
+            throw WebServiceError.invalidHostname
+        }
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        func append(_ text: String) { body.append(Data(text.utf8)) }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(filename)\"\r\n")
+        append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        append("\r\n--\(boundary)--\r\n")
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        
+        struct UploadResponse: Decodable {
+            struct FileInfo: Decodable { let id: String }
+            let file_infos: [FileInfo]
+        }
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
+        }
+        let decoded = try JSONDecoder().decode(UploadResponse.self, from: responseData)
+        guard let fileId = decoded.file_infos.first?.id else {
+            throw WebServiceError.invalidResponse
+        }
+        return fileId
+    }
+    
+    func fetchActivePluginIds() async throws -> [String] {
+        struct PluginsResponse: Decodable {
+            struct Plugin: Decodable { let id: String }
+            let active: [Plugin]
+        }
+        let response: PluginsResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/plugins",
+            queryItems: [URLQueryItem(name: "filter", value: "activated")]
+        )
+        return response.active.map { $0.id }
+    }
+    
     func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
         struct ThreadsResponse: Decodable { let threads: [MMThread] }
         let response: ThreadsResponse = try await performAuthenticatedRequest(
@@ -724,13 +770,16 @@ final class WebService: NSObject {
     }
     
     @discardableResult
-    func createPost(channelId: String, message: String, rootId: String? = nil) async throws -> MMPost {
+    func createPost(channelId: String, message: String, rootId: String? = nil, fileIds: [String] = []) async throws -> MMPost {
         var payload: [String: Any] = [
             "channel_id": channelId,
             "message": message
         ]
         if let rootId = rootId, !rootId.isEmpty {
             payload["root_id"] = rootId
+        }
+        if !fileIds.isEmpty {
+            payload["file_ids"] = fileIds
         }
         return try await performAuthenticatedRequest(
             path: "/api/v4/posts",

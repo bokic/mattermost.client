@@ -6,6 +6,7 @@
 //
 
 import Cocoa
+import UniformTypeIdentifiers
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -113,6 +114,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var rightPanelMode: RightPanelMode = .threads
     private var isRightPanelVisible = false
     private var threadItems: [MMThread] = []
+    
+    // Composer emoji picker
+    let emojiPanel = RoundedEdgePanel()
+    private var isEmojiPanelOpen = false
     
     // Sidebar filter menu
     let filterMenu = RoundedEdgePanel()
@@ -1888,6 +1893,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 if isTeamMenuOpen && !teamDropdownMenu.frame.contains(point) && !teamHeaderButton.frame.contains(point) {
                     setTeamMenuOpen(false)
                 }
+                if isEmojiPanelOpen {
+                    let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
+                    let emojiButtonFrame = chatEntryPanel.convert(composerEmojiButton.frame, to: chatPanel)
+                    if !emojiPanel.frame.contains(chatPoint) && !emojiButtonFrame.contains(chatPoint) {
+                        closeEmojiPanel()
+                    }
+                }
                 if isFilterMenuOpen {
                     let mainPoint = mainPanel.convert(event.locationInWindow, from: nil)
                     if !filterMenu.frame.contains(mainPoint) && !filterChannelButton.frame.contains(mainPoint) {
@@ -3405,6 +3417,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.chatEntryPanel.addSubview(btn)
         }
         setupRightIconBtn(composerEmojiButton, "face.smiling")
+        composerEmojiButton.onClick = { [weak self] in
+            self?.toggleEmojiPanel()
+        }
 
         // GIF button in composer
         composerGifButton.cornerRadius = 4
@@ -3442,6 +3457,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         chatEntryPanel.addSubview(composerGifButton)
 
         setupRightIconBtn(composerAttachButton, "paperclip")
+        composerAttachButton.onClick = { [weak self] in
+            self?.attachFiles()
+        }
         
         composerSendButton.cornerRadius = 4
         composerSendButton.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
@@ -3479,10 +3497,158 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         applyComposerToolbarVisibility()
         updateComposerSendState()
         setupRightPanel()
+        setupEmojiPanel()
         rebuildTimelineContent(scrollToBottom: true)
     }
     
     // MARK: - Right-hand side panel
+    
+    // MARK: - Composer actions
+    
+    private func setupEmojiPanel() {
+        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        emojiPanel.color = .white
+        emojiPanel.cornerRadius = 8
+        emojiPanel.borderWidth = 1
+        emojiPanel.borderColor = dividerColor
+        emojiPanel.shadowColor = .black
+        emojiPanel.shadowOpacity = 0.18
+        emojiPanel.shadowRadius = 12
+        emojiPanel.shadowOffset = CGSize(width: 0, height: -4)
+        emojiPanel.isHidden = true
+        
+        let emojis: [String] = [
+            "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣",
+            "😊", "😇", "🙂", "😉", "😍", "🥰", "😘", "😋",
+            "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🥳", "😏",
+            "😒", "😞", "😔", "😟", "😕", "🙁", "😣", "😖",
+            "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "👍"
+        ]
+        let cell: CGFloat = 32
+        let gap: CGFloat = 4
+        let margin: CGFloat = 8
+        for (index, emoji) in emojis.enumerated() {
+            let column = index % 8
+            let row = index / 8
+            let button = RoundedEdgePanel()
+            button.cornerRadius = 4
+            button.color = .clear
+            button.frame = NSRect(
+                x: margin + CGFloat(column) * (cell + gap),
+                y: margin + CGFloat(4 - row) * (cell + gap),
+                width: cell,
+                height: cell
+            )
+            let label = NSTextField(labelWithString: emoji)
+            label.font = MMFont.font(ofSize: 20)
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 0, y: 4, width: cell, height: 24)
+            button.addSubview(label)
+            button.onHoverChanged = { [weak button] isHovered in
+                button?.color = isHovered
+                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    : .clear
+                button?.setNeedsAppearanceUpdate()
+            }
+            button.onClick = { [weak self] in
+                self?.insertEmoji(emoji)
+            }
+            emojiPanel.addSubview(button)
+        }
+        emojiPanel.frame = NSRect(x: 0, y: 0, width: 300, height: 192)
+    }
+    
+    private func toggleEmojiPanel() {
+        if isEmojiPanelOpen {
+            closeEmojiPanel()
+            return
+        }
+        guard !activeChannelId.isEmpty else { return }
+        let buttonFrame = chatEntryPanel.convert(composerEmojiButton.frame, to: chatPanel)
+        let width: CGFloat = 300
+        let height: CGFloat = 192
+        let x = min(max(8, buttonFrame.midX - width / 2), max(8, chatPanel.bounds.width - width - 8))
+        let y = min(chatEntryPanel.frame.maxY + 8, chatPanel.bounds.height - height - 8)
+        emojiPanel.frame = NSRect(x: x, y: y, width: width, height: height)
+        emojiPanel.removeFromSuperview()
+        chatPanel.addSubview(emojiPanel)
+        emojiPanel.isHidden = false
+        isEmojiPanelOpen = true
+    }
+    
+    private func closeEmojiPanel() {
+        emojiPanel.isHidden = true
+        isEmojiPanelOpen = false
+    }
+    
+    private func insertEmoji(_ emoji: String) {
+        let range = entryView.selectedRange()
+        entryView.insertText(emoji, replacementRange: range)
+        entryView.needsDisplay = true
+        updateComposerSendState()
+        closeEmojiPanel()
+        makeFirstResponder(entryView)
+    }
+    
+    private func attachFiles() {
+        guard !activeChannelId.isEmpty else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.beginSheetModal(for: self) { [weak self] response in
+            guard response == .OK, let self = self else { return }
+            self.uploadAndSendFiles(panel.urls)
+        }
+    }
+    
+    private func uploadAndSendFiles(_ urls: [URL]) {
+        guard !urls.isEmpty,
+              !activeChannelId.isEmpty,
+              let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        let channelId = activeChannelId
+        let message = entryView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        composerHelpLabel.stringValue = "Uploading…"
+        
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            var fileIds: [String] = []
+            for url in urls {
+                guard let data = try? Data(contentsOf: url) else { continue }
+                let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                if let fileId = try? await ws.uploadFile(
+                    channelId: channelId,
+                    data: data,
+                    filename: url.lastPathComponent,
+                    mimeType: mime
+                ) {
+                    fileIds.append(fileId)
+                }
+            }
+            guard !fileIds.isEmpty else {
+                self.composerHelpLabel.stringValue = "Upload failed"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                    self?.composerHelpLabel.stringValue = "Help"
+                }
+                return
+            }
+            do {
+                let post = try await ws.createPost(channelId: channelId, message: message, fileIds: fileIds)
+                if self.activeChannelId == channelId {
+                    self.currentChannelPosts.append(post)
+                    self.rebuildTimelineContent(scrollToBottom: true)
+                }
+                self.entryView.string = ""
+                self.updateComposerSendState()
+                self.composerHelpLabel.stringValue = "Help"
+            } catch {
+                self.composerHelpLabel.stringValue = "Upload failed"
+                NSLog("Failed to send attachment: \(error.localizedDescription)")
+            }
+        }
+    }
     
     private func setupRightPanel() {
         let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
@@ -4054,7 +4220,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             btn.isHidden = !visible
         }
         composerLeftSeparator.isHidden = !visible
-        composerGifButton.isHidden = !visible
+        composerGifButton.isHidden = true
         let symbol = visible ? "chevron.up" : "chevron.down"
         if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: "Formatting") {
             composerAaChevron.image = img.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))

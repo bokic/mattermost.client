@@ -62,11 +62,14 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Remaining: private-channel join requests, shareable invite links, richer filters
     (unread/mentions), team leaving.
 
-- [ ] **Composer action buttons are mock** — `S`
-  - Where: attachment/emoji buttons are visual only; GIF inserts a hard-coded local post
-    (`MainWindow.swift` ≈2889) instead of uploading.
-  - Done when: emoji picker inserts into the editor, attachment opens `NSOpenPanel` and uploads via
-    `POST /files`, GIF posts real content.
+- [x] **Composer action buttons are mock** — `S`
+  - Done: the emoji button opens a 40-emoji picker that inserts at the caret; the paperclip opens
+    `NSOpenPanel` and uploads through multipart `POST /files`, then posts with `file_ids`, with
+    uploading/failure feedback in the composer footer.
+  - GIF: the mock local-post button was removed — this server has no Giphy plugin (`/plugins` is
+    empty), so the control is hidden instead of faking content. Plugin-backed GIF search remains a
+    follow-up.
+  - Remaining: render uploaded attachments in the timeline (blocked on the `MMPost` files model).
 
 - [ ] **Channel-header controls are partial** — `M`
   - Where: favorite star toggles only local `isChannelFavorited` and is not persisted; the pinned
