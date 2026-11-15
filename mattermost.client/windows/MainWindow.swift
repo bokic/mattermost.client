@@ -219,6 +219,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var favoritesCategory: SidebarCategoryView?
     private var isFavoritesCollapsed = false
     private var channelFilterQuery: String = ""
+    private var isLoadingOlderPosts = false
+    private var didLoadAllHistory = false
+    private let postsPerPage = 60
     let channelTitleButton = RoundedEdgePanel()
     let channelTitleLabel = NSTextField(labelWithString: "Town Square")
     let channelHeaderBotBadge = RoundedEdgePanel()
@@ -5352,6 +5355,32 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             ]
         }
         
+        if !didLoadAllHistory && !postsToRender.isEmpty {
+            let loadRow = RoundedEdgePanel()
+            loadRow.cornerRadius = 4
+            loadRow.color = .clear
+            loadRow.frame = NSRect(x: 0, y: currentY, width: chatW, height: 32)
+            let loadLabel = NSTextField(labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")
+            loadLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+            loadLabel.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            loadLabel.alignment = .center
+            loadLabel.isEditable = false
+            loadLabel.isSelectable = false
+            loadLabel.frame = NSRect(x: 0, y: 7, width: chatW, height: 18)
+            loadRow.addSubview(loadLabel)
+            loadRow.onHoverChanged = { [weak loadRow] isHovered in
+                loadRow?.color = isHovered
+                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    : .clear
+                loadRow?.setNeedsAppearanceUpdate()
+            }
+            loadRow.onClick = { [weak self] in
+                self?.loadOlderPosts()
+            }
+            timelineDocView.addSubview(loadRow)
+            currentY += 40
+        }
+        
         var lastDateStr: String? = nil
         var lastUserId: String? = nil
         var lastWasSystem = false
@@ -5825,6 +5854,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         }
         layoutRightChatPanel()
         closeSearchResults()
+        isLoadingOlderPosts = false
+        didLoadAllHistory = false
         currentChannelPosts = []
         rebuildTimelineContent(scrollToBottom: false)
         Task { @MainActor [weak self] in
@@ -5859,6 +5890,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
             // Discard results for a channel that is no longer open.
             guard self.activeChannelId == channelId else { return }
+            self.didLoadAllHistory = posts.count < self.postsPerPage
             applyPostsToTimeline(posts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
@@ -6048,8 +6080,60 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         return false
     }
 
+    /// Fetches the page of posts older than the current oldest message and
+    /// prepends it, keeping the viewport anchored on the same message.
+    @MainActor
+    private func loadOlderPosts() {
+        guard !isLoadingOlderPosts, !didLoadAllHistory,
+              let before = currentChannelPosts.first?.id,
+              !activeChannelId.isEmpty,
+              let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        let channelId = activeChannelId
+        isLoadingOlderPosts = true
+        
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            defer { self.isLoadingOlderPosts = false }
+            guard let list = try? await ws.fetchChannelPosts(channelId: channelId, before: before) else { return }
+            let older = list.order.compactMap { list.posts[$0] }
+            guard self.activeChannelId == channelId else { return }
+            if older.count < self.postsPerPage {
+                self.didLoadAllHistory = true
+            }
+            let existingIds = Set(self.currentChannelPosts.map { $0.id })
+            let newPosts = older.filter { !existingIds.contains($0.id) }
+            guard !newPosts.isEmpty else {
+                self.rebuildTimelineContent(scrollToBottom: false)
+                return
+            }
+            
+            let anchorHeight = self.timelineDocView.frame.height
+            let anchorOffset = self.timelineScrollView.contentView.bounds.origin.y
+            
+            self.currentChannelPosts.append(contentsOf: newPosts)
+            self.currentChannelPosts.sort { $0.create_at < $1.create_at }
+            let missingUserIds = Array(Set(newPosts.map { $0.user_id }).subtracting(self.usersById.keys))
+            if !missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(missingUserIds) {
+                for user in users {
+                    self.usersById[user.id] = user
+                }
+            }
+            self.rebuildTimelineContent(scrollToBottom: false)
+            
+            let addedHeight = self.timelineDocView.frame.height - anchorHeight
+            if addedHeight > 0, anchorOffset > 0 {
+                let clip = self.timelineScrollView.contentView
+                clip.scroll(to: NSPoint(x: 0, y: anchorOffset + addedHeight))
+                self.timelineScrollView.reflectScrolledClipView(clip)
+            }
+        }
+    }
+    
     @objc private func timelineBoundsDidChange(_ notification: Notification) {
         updateTimelineHoverState()
+        if timelineScrollView.contentView.bounds.minY < 120 {
+            loadOlderPosts()
+        }
     }
 
     private func updateTimelineHoverState() {

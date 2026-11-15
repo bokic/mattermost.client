@@ -95,11 +95,11 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     dead code.
   - Done when: the `posted` event is inserted directly (with dedupe against REST results) or batched.
 
-- [ ] **No pagination / load-older** — `M`
-  - Where: `fetchChannelPosts(channelId:page:perPage:)` always runs with page 0 / 60 posts;
-    `next_post_id` and `prev_post_id` are decoded but unused.
-  - Done when: scrolling to the top loads older pages without jumping, and the timeline keeps scroll
-    position.
+- [x] **No pagination / load-older** — `M`
+  - Done: `fetchChannelPosts(..., before:)` loads the page preceding the oldest message; scrolling
+    near the top (or the "Load older messages" row) prepends it, dedupes by id, hydrates authors and
+    re-anchors the viewport by the added height. Exhaustion is detected when a page returns fewer
+    than 60 posts, and the state resets per channel.
 
 - [ ] **No read state, per-channel unread counts or mentions** — `L`
   - Progress: menu-bar dot, Dock badge and native notifications now fire for messages in channels you
