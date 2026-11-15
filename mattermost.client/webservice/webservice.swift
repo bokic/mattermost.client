@@ -963,6 +963,15 @@ final class WebService: NSObject {
         )
     }
 
+    @discardableResult
+    func patchPost(postId: String, message: String) async throws -> MMPost {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/posts/\(postId)/patch",
+            method: "PUT",
+            body: ["message": message]
+        )
+    }
+
     func fetchPost(postId: String) async throws -> MMPost {
         return try await performAuthenticatedRequest(path: "/api/v4/posts/\(postId)")
     }

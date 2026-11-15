@@ -556,9 +556,19 @@ private class TimelineScrollView: NSScrollView {
 }
 
 private class TimelineContainerView: NSView {
+    override var acceptsFirstResponder: Bool { true }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let view = super.hitTest(point)
         return (view === self) ? nil : view
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if let scrollView = subviews.compactMap({ $0 as? TimelineScrollView }).first {
+            scrollView.keyDown(with: event)
+        } else {
+            super.keyDown(with: event)
+        }
     }
 }
 
@@ -889,6 +899,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     private let timelineDocView = TimelineFlippedView()
     private var currentChannelPosts: [MMPost] = []
     private var pendingJumpPostId: String?
+    private var editingPostId: String?
     private var lastTimelineWidth: CGFloat = 0
     let timelineHeroContainer = RoundedEdgePanel()
     let heroIllustrationCircle = RoundedEdgePanel()
@@ -1758,6 +1769,95 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     private func closeSearchResults() {
         searchResultsPanel.isHidden = true
         searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+    }
+
+    // MARK: - Keyboard shortcuts
+
+    func focusGlobalSearch() {
+        if !isSearchPopoverOpen {
+            setSearchPopoverOpen(true)
+        }
+        searchPopoverInputLabel.stringValue = ""
+        makeFirstResponder(searchPopoverInputLabel)
+    }
+
+    func focusChannelSearch() {
+        guard let channel = channelsById[activeChannelId] else {
+            focusGlobalSearch()
+            return
+        }
+        if !isSearchPopoverOpen {
+            setSearchPopoverOpen(true)
+        }
+        let prefix = "in:\(channel.name) "
+        searchPopoverInputLabel.stringValue = prefix
+        makeFirstResponder(searchPopoverInputLabel)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let editor = self.searchPopoverInputLabel.currentEditor() else { return }
+            editor.selectedRange = NSRange(location: (prefix as NSString).length, length: 0)
+        }
+    }
+
+    /// Closes the topmost floating overlay. Returns false when nothing was open.
+    @discardableResult
+    private func closeTopOverlay() -> Bool {
+        if isLightboxVisible { closeLightbox(); return true }
+        if isDMPickerOpen { closeDMPicker(); return true }
+        if isEmojiPanelOpen { closeEmojiPanel(); return true }
+        if isReactionPickerOpen { closeReactionPicker(); return true }
+        if isPostActionMenuOpen { closePostActionMenu(); return true }
+        if isChannelMenuOpen { closeChannelMenu(); return true }
+        if isProductMenuOpen { setProductSwitcherMenuOpen(false); return true }
+        if isHelpMenuOpen { setHelpMenuOpen(false); return true }
+        if isStatusMenuOpen { setStatusMenuOpen(false); return true }
+        if isTeamMenuOpen { setTeamMenuOpen(false); return true }
+        if isFilterMenuOpen { setFilterMenuOpen(false); return true }
+        if isSearchPopoverOpen { setSearchPopoverOpen(false); return true }
+        if !searchResultsPanel.isHidden { closeSearchResults(); return true }
+        if isRightPanelVisible { closeRightPanel(); return true }
+        if editingPostId != nil { cancelEditing(); return true }
+        return false
+    }
+
+    private enum FocusRegion {
+        case sidebar
+        case timeline
+        case composer
+    }
+
+    private func currentFocusRegion() -> FocusRegion? {
+        let first = firstResponder
+        if first === entryView { return .composer }
+        if let editor = findChannelLabel.currentEditor(), first === editor { return .sidebar }
+        if first === chatTimelineContainer { return .timeline }
+        return nil
+    }
+
+    /// Cycles composer → sidebar → timeline with Tab (Shift+Tab reverses).
+    private func handleFocusTraversal(reverse: Bool) -> Bool {
+        let flags = NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? []
+        if flags.contains(.command) || flags.contains(.option) || flags.contains(.control) {
+            return false
+        }
+        guard let region = currentFocusRegion() else { return false }
+        let next: FocusRegion
+        switch (region, reverse) {
+        case (.composer, false): next = .sidebar
+        case (.composer, true): next = .timeline
+        case (.sidebar, false): next = .timeline
+        case (.sidebar, true): next = .composer
+        case (.timeline, false): next = .composer
+        case (.timeline, true): next = .sidebar
+        }
+        switch next {
+        case .composer:
+            makeFirstResponder(entryView)
+        case .sidebar:
+            makeFirstResponder(findChannelLabel)
+        case .timeline:
+            makeFirstResponder(chatTimelineContainer)
+        }
+        return true
     }
     
     // MARK: - Channel favorites
@@ -2887,9 +2987,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, event.keyCode == 53, isDMPickerOpen {
-            closeDMPicker()
-            return
+        if event.type == .keyDown {
+            if event.keyCode == 53, closeTopOverlay() {
+                return
+            }
+            if event.keyCode == 48, handleFocusTraversal(reverse: event.modifierFlags.contains(.shift)) {
+                return
+            }
         }
         if event.type == .leftMouseDown || event.type == .rightMouseDown {
             if let contentView = contentView {
@@ -2963,6 +3067,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 return true
             } else if chars == "0" {
                 ZoomManager.shared.resetZoom()
+                return true
+            } else if chars == "k" {
+                focusGlobalSearch()
+                return true
+            } else if chars == "f" {
+                focusChannelSearch()
                 return true
             }
         }
@@ -8790,7 +8900,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             entryView.textContainerInset = NSSize(width: 0, height: 13)
             entryView.frame = NSRect(x: 14, y: 0, width: composerW - 234, height: composerH)
         }
-        composerHelpLabel.frame = NSRect(x: chatW - 24 - 60, y: 3, width: 60, height: 18)
+        composerHelpLabel.frame = NSRect(x: chatW - 24 - 180, y: 3, width: 180, height: 18)
         composerHelpLabel.alignment = .right
         
         let toolY: CGFloat = isComposerToolbarVisible ? 8 : (composerH - 32) / 2
@@ -9142,6 +9252,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
 
         loadCustomEmojis()
+
     }
 
     
@@ -9149,6 +9260,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let normalized = itemId.lowercased()
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
+        _ = cancelEditing()
         newMessagesDividerPostId = nil
         newMessagesDividerView = nil
         newMessagesCount = 0
@@ -9396,27 +9508,67 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     
     /// Sends the composer contents, clearing the editor only once the post is
     /// accepted so a failure does not lose the user's text.
+    @discardableResult
+    private func startEditingLastMessage() -> Bool {
+        guard editingPostId == nil else { return false }
+        let myId = currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId ?? ""
+        guard !myId.isEmpty else { return false }
+        guard let post = currentChannelPosts.last(where: {
+            $0.user_id == myId
+                && ($0.delete_at ?? 0) == 0
+                && !($0.type?.hasPrefix("system_") ?? false)
+        }) else { return false }
+
+        editingPostId = post.id
+        entryView.string = post.message
+        entryView.needsDisplay = true
+        updateComposerSendState()
+        composerHelpLabel.stringValue = "Editing • Esc to cancel"
+        makeFirstResponder(entryView)
+        entryView.setSelectedRange(NSRange(location: (post.message as NSString).length, length: 0))
+        return true
+    }
+
+    @discardableResult
+    private func cancelEditing() -> Bool {
+        guard editingPostId != nil else { return false }
+        editingPostId = nil
+        entryView.string = ""
+        entryView.needsDisplay = true
+        updateComposerSendState()
+        composerHelpLabel.stringValue = "Help"
+        return true
+    }
+
     private func sendComposerMessage() {
         let message = entryView.string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !activeChannelId.isEmpty else { return }
         let channelId = activeChannelId
-        
+        let editingId = editingPostId
+
         entryView.string = ""
         entryView.needsDisplay = true
         updateComposerSendState()
-        composerHelpLabel.stringValue = "Sending…"
-        
+        composerHelpLabel.stringValue = editingId != nil ? "Saving edit…" : "Sending…"
+
         Task { @MainActor [weak self] in
             guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
             do {
-                let post = try await ws.createPost(channelId: channelId, message: message)
-                if self.activeChannelId == channelId {
-                    self.currentChannelPosts.append(post)
-                    self.rebuildTimelineContent(scrollToBottom: true)
+                if let editingId = editingId {
+                    let updated = try await ws.patchPost(postId: editingId, message: message)
+                    self.editingPostId = nil
+                    self.applyUpdatedPost(updated)
+                } else {
+                    let post = try await ws.createPost(channelId: channelId, message: message)
+                    if self.activeChannelId == channelId {
+                        self.currentChannelPosts.append(post)
+                        self.rebuildTimelineContent(scrollToBottom: true)
+                    }
                 }
                 self.composerHelpLabel.stringValue = "Help"
             } catch {
-                self.composerHelpLabel.stringValue = "Message failed to send"
+                self.editingPostId = editingId
+                self.composerHelpLabel.stringValue = editingId != nil ? "Edit failed" : "Message failed to send"
                 if self.entryView.string.isEmpty {
                     self.entryView.string = message
                     self.updateComposerSendState()
@@ -9488,6 +9640,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { return false }
             sendComposerMessage()
             return true
+        }
+        if commandSelector == #selector(NSResponder.moveUp(_:)) {
+            let shiftHeld = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+            if !shiftHeld,
+               editingPostId == nil,
+               entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return startEditingLastMessage()
+            }
+            return false
         }
         return false
     }

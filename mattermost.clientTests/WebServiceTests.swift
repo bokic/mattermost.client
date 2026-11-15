@@ -395,6 +395,14 @@ final class WebServiceTests: XCTestCase {
         )
     }
 
+    func testPostPatchURL() {
+        let ws = WebService(host: "chat.example.com", port: 8065)
+        XCTAssertEqual(
+            ws.buildURL(path: "/api/v4/posts/p1/patch")?.absoluteString,
+            "https://chat.example.com:8065/api/v4/posts/p1/patch"
+        )
+    }
+
     func testDecodeCustomEmoji() throws {
         let json = """
         {

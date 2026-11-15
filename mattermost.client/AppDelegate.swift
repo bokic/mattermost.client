@@ -390,6 +390,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(NSMenuItem.separator())
+
+        let searchItem = NSMenuItem(title: "Search", action: #selector(AppDelegate.focusGlobalSearch), keyEquivalent: "k")
+        searchItem.target = self
+        searchItem.keyEquivalentModifierMask = [.command]
+        editMenu.addItem(searchItem)
+
+        let findChannelItem = NSMenuItem(title: "Find in Channel", action: #selector(AppDelegate.focusChannelSearch), keyEquivalent: "f")
+        findChannelItem.target = self
+        findChannelItem.keyEquivalentModifierMask = [.command]
+        editMenu.addItem(findChannelItem)
         
         // View Menu (Zoom In, Zoom Out, Actual Size)
         let viewMenuItem = NSMenuItem()
@@ -443,6 +454,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         webService.reconnectIfNeeded()
     }
     
+    @objc func focusGlobalSearch() {
+        mainWindow?.focusGlobalSearch()
+    }
+
+    @objc func focusChannelSearch() {
+        mainWindow?.focusChannelSearch()
+    }
+
     @objc func zoomInAction() {
         ZoomManager.shared.zoomIn()
     }

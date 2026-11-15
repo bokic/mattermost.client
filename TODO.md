@@ -347,8 +347,24 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Verified with screenshots in Onyx (dark), Quartz (light sidebar with dark text) and the default
     Denim theme, plus preference-selection and custom-color unit tests. Theme changes made on the
     server apply on the next launch. 26 tests pass.
-- [ ] **Keyboard shortcuts**: ⌘K search, ⌘F in-channel search, `Esc` to close overlays, `↑` to edit
+- [x] **Keyboard shortcuts**: ⌘K search, ⌘F in-channel search, `Esc` to close overlays, `↑` to edit
       last message, focus traversal between sidebar/timeline/composer — `M`
+  - Added Search (⌘K) and Find in Channel (⌘F) to the Edit menu and to `performKeyEquivalent`.
+    ⌘K opens/focuses the global search popover; ⌘F prefills `in:<channel-name> ` and places the
+    caret at the end so typing continues the scoped search.
+  - `Esc` now closes the topmost overlay in order — lightbox, DM picker, emoji picker, reaction/post
+    menus, channel/product/help/status/team/filter menus, search popover/results, right panel — and
+    cancels composer editing when nothing else is open.
+  - Pressing `↑` in an empty composer loads the current user's last post into the composer for
+    editing (help label shows `Editing • Esc to cancel`). Enter saves through
+    `PUT /api/v4/posts/{id}/patch`, updates the timeline/thread in place, and Esc restores the
+    composer. Switching channels cancels an in-progress edit.
+  - `Tab` / `Shift+Tab` cycles focus composer → sidebar → timeline (sidebar focuses Find channel;
+    the timeline container forwards arrow keys to the scroll view). Search/DM/emoji fields keep
+    their normal Tab behaviour.
+  - Verified with an in-app harness: ⌘F produced `in:town-square `, ↑ loaded the last message,
+    Esc cancelled it, and the focus cycle logged composer → sidebar → timeline → composer.
+    27 tests pass.
 - [ ] **Drag & drop files** onto the composer — `M`
 - [ ] **Mentions/autocomplete** for `@user`, `#channel`, `:emoji:` while typing — `L`
 
