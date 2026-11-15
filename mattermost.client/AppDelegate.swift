@@ -8,7 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var loginWindow: LoginWindow!
     var statusBarItem: NSStatusItem!
     var statusBarMenu: NSMenu!
-    var webService = webservice()
+    var webService = WebService()
     private weak var zoomPercentMenuItem: NSMenuItem?
     private var zoomGestureStartFactor: CGFloat?
     private var zoomGestureMagnification: CGFloat = 0

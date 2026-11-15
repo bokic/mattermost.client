@@ -85,7 +85,7 @@ final class WebServiceTests: XCTestCase {
 
     // MARK: - JSON Decoding Tests
 
-    func testDecodeLoginWebService() throws {
+    func testDecodeMMUser() throws {
         let json = """
             {
                 "id": "u12345",
@@ -108,7 +108,7 @@ final class WebServiceTests: XCTestCase {
             }
             """.data(using: .utf8)!
 
-        let user = try JSONDecoder().decode(LoginWebService.self, from: json)
+        let user = try JSONDecoder().decode(MMUser.self, from: json)
         XCTAssertEqual(user.id, "u12345")
         XCTAssertEqual(user.username, "boris")
         XCTAssertEqual(user.first_name, "Boris")

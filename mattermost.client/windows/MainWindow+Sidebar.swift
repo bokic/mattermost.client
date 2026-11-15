@@ -1068,11 +1068,11 @@ extension MainWindow {
         // Row 1: Team header button + "+" button
         layoutTeamHeader(topBarY: topBarY)
 
-        teamAddButton.frame = NSRect(x: sidebarX + 216, y: topBarY - 43.5, width: 32, height: 32)
+        teamAddButton.frame = NSRect(x: sidebarX + 216, y: topBarY - 43.5, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
         teamAddIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
 
         // Row 2: Filter button + "Find channel" pill
-        filterChannelButton.frame = NSRect(x: sidebarX + 16, y: topBarY - 83, width: 28, height: 28)
+        filterChannelButton.frame = NSRect(x: sidebarX + 16, y: topBarY - 83, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         filterChannelIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
         filterMenu.frame = NSRect(x: sidebarX + 16, y: topBarY - 83 - 8 - 68, width: 180, height: 68)
 

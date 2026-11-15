@@ -361,7 +361,7 @@ enum MMWebSocketEvent {
     case other(event: String, data: [String: Any])
 }
 
-struct LoginWebService: Codable {
+struct MMUser: Codable {
     let id: String
     let create_at: Int64?
     let update_at: Int64?
@@ -381,9 +381,9 @@ struct LoginWebService: Codable {
     let remote_id: String?
     let disable_welcome_email: Bool?
     
-    let notify_props: Notify_Props?
+    let notify_props: NotifyProps?
     var props: [String: String]? = nil
-    struct Notify_Props: Codable {
+    struct NotifyProps: Codable {
         let channel: String?
         let comments: String?
         let desktop: String?
@@ -398,8 +398,8 @@ struct LoginWebService: Codable {
         let push_threads: String?
     }
     
-    let timezone: TimeZone?
-    struct TimeZone: Codable {
+    let timezone: MMTimeZone?
+    struct MMTimeZone: Codable {
         let useAutomaticTimezone: String?
         let manualTimezone: String?
         let automaticTimezone: String?
@@ -408,7 +408,6 @@ struct LoginWebService: Codable {
     let auth_data: String?
 }
 
-typealias webservice = WebService
 
 /// All REST and WebSocket state (`mToken`, the socket task, ping/reconnect
 /// timers and event callbacks) is main-actor isolated. Network work still runs
@@ -632,7 +631,7 @@ final class WebService: NSObject {
     }
 
     @discardableResult
-    func login(username: String, password: String) async throws -> LoginWebService {
+    func login(username: String, password: String) async throws -> MMUser {
         let (data, response) = try await performRequest(
             path: "/api/v4/users/login",
             method: "POST",
@@ -646,7 +645,7 @@ final class WebService: NSObject {
         updateToken(token: response.value(forHTTPHeaderField: "Token") ?? "")
 
         do {
-            let user = try JSONDecoder().decode(LoginWebService.self, from: data)
+            let user = try JSONDecoder().decode(MMUser.self, from: data)
             self.currentUserId = user.id
             UserDefaults.standard.set(user.id, forKey: "currentUserId")
             return user
@@ -665,7 +664,7 @@ final class WebService: NSObject {
                 logPayload: false
             )
             updateToken(token: token)
-            if let user = try? JSONDecoder().decode(LoginWebService.self, from: data) {
+            if let user = try? JSONDecoder().decode(MMUser.self, from: data) {
                 self.currentUserId = user.id
                 UserDefaults.standard.set(user.id, forKey: "currentUserId")
             }
@@ -687,14 +686,14 @@ final class WebService: NSObject {
 
     // MARK: - Users, Teams, Channels, Categories & Posts REST API
     
-    func fetchCurrentUser() async throws -> LoginWebService {
-        let user: LoginWebService = try await performAuthenticatedRequest(path: "/api/v4/users/me")
+    func fetchCurrentUser() async throws -> MMUser {
+        let user: MMUser = try await performAuthenticatedRequest(path: "/api/v4/users/me")
         self.currentUserId = user.id
         UserDefaults.standard.set(user.id, forKey: "currentUserId")
         return user
     }
     
-    func fetchUsersByIds(_ userIds: [String]) async throws -> [LoginWebService] {
+    func fetchUsersByIds(_ userIds: [String]) async throws -> [MMUser] {
         guard !userIds.isEmpty else { return [] }
         return try await performAuthenticatedRequest(
             path: "/api/v4/users/ids",
@@ -718,12 +717,12 @@ final class WebService: NSObject {
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
-    func fetchUserByUsername(_ username: String) async throws -> LoginWebService {
+    func fetchUserByUsername(_ username: String) async throws -> MMUser {
         return try await performAuthenticatedRequest(path: "/api/v4/users/username/\(encodedPathComponent(username))")
     }
 
     /// Team members used by the Direct Message picker.
-    func fetchTeamUsers(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [LoginWebService] {
+    func fetchTeamUsers(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMUser] {
         return try await performAuthenticatedRequest(
             path: "/api/v4/users",
             queryItems: [

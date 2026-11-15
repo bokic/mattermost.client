@@ -15,15 +15,15 @@ final class ChatViewModel {
     var webService: WebService?
     var isWebSocketConnected = false
 
-    var currentUser: LoginWebService?
+    var currentUser: MMUser?
     var userTeams: [MMTeam] = []
     var activeTeam: MMTeam?
     var activeChannelId: String = ""
 
     var channelsById: [String: MMChannel] = [:]
     var channelsByName: [String: MMChannel] = [:]
-    var usersById: [String: LoginWebService] = [:]
-    var usersByUsername: [String: LoginWebService] = [:]
+    var usersById: [String: MMUser] = [:]
+    var usersByUsername: [String: MMUser] = [:]
     var userStatusById: [String: String] = [:]
     var currentUserStatus: String = "online"
 

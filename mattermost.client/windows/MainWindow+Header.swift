@@ -142,7 +142,7 @@ extension MainWindow {
         avatarPanel.addSubview(avatarLabel)
 
         avatarImageView.imageScaling = .scaleProportionallyUpOrDown
-        avatarImageView.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
+        avatarImageView.frame = NSRect(x: 0, y: 0, width: MMMetric.avatarSmall, height: MMMetric.avatarSmall)
         avatarImageView.isHidden = true
         avatarPanel.addSubview(avatarImageView)
 
@@ -612,7 +612,7 @@ extension MainWindow {
         let closeBtn = RoundedEdgePanel()
         closeBtn.cornerRadius = MMRadius.control
         closeBtn.color = .clear
-        closeBtn.frame = NSRect(x: popoverWidth - 36, y: popoverHeight - 32, width: 24, height: 24)
+        closeBtn.frame = NSRect(x: popoverWidth - 36, y: popoverHeight - 32, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
         let closeIcon = NSImageView()
         if let xImg = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close") {
             closeIcon.image = xImg.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))

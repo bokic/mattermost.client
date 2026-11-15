@@ -840,7 +840,7 @@ extension MainWindow {
         lightboxAvatarPanel.color = Theme.shared.buttonBg
         lightboxAvatarPanel.clipContentToBounds = true
         lightboxAvatarView.imageScaling = .scaleProportionallyUpOrDown
-        lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+        lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
         lightboxAvatarPanel.addSubview(lightboxAvatarView)
         lightboxHeaderPanel.addSubview(lightboxAvatarPanel)
 
@@ -1048,12 +1048,12 @@ extension MainWindow {
         lightboxZoomBar.frame = NSRect(x: 0, y: height - headerH - zoomH, width: width, height: zoomH)
         lightboxContentPanel.frame = NSRect(x: 0, y: 0, width: width, height: max(0, height - headerH - zoomH))
 
-        lightboxAvatarPanel.frame = NSRect(x: 16, y: 16, width: 40, height: 40)
-        lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+        lightboxAvatarPanel.frame = NSRect(x: 16, y: 16, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
+        lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
         lightboxTitleLabel.frame = NSRect(x: 68, y: headerH - 16 - 24, width: max(40, width - 68 - 120), height: 24)
         lightboxSubtitleLabel.frame = NSRect(x: 68, y: headerH - 40 - 20, width: max(40, width - 68 - 120), height: 20)
-        lightboxCloseButton.frame = NSRect(x: width - 16 - 40, y: 18, width: 40, height: 40)
-        lightboxDownloadButton.frame = NSRect(x: lightboxCloseButton.frame.minX - 8 - 40, y: 18, width: 40, height: 40)
+        lightboxCloseButton.frame = NSRect(x: width - 16 - MMMetric.lightboxButton, y: 18, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
+        lightboxDownloadButton.frame = NSRect(x: lightboxCloseButton.frame.minX - 8 - MMMetric.lightboxButton, y: 18, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
 
         let zoomButtonSize: CGFloat = 28
         let zoomGap: CGFloat = 12
@@ -1459,7 +1459,7 @@ extension MainWindow {
         download.shadowOpacity = 0.08
         download.shadowRadius = 3
         download.shadowOffset = CGSize(width: 0, height: -2)
-        download.frame = NSRect(x: displaySize.width - 8 - 28, y: displaySize.height - 8 - 28, width: 28, height: 28)
+        download.frame = NSRect(x: displaySize.width - 8 - MMMetric.iconButtonSmall, y: displaySize.height - 8 - MMMetric.iconButtonSmall, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         download.isHidden = true
         let downloadIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
@@ -1563,7 +1563,7 @@ extension MainWindow {
         let downloadButton = RoundedEdgePanel()
         downloadButton.cornerRadius = MMRadius.control
         downloadButton.color = .clear
-        downloadButton.frame = NSRect(x: cardW - 45, y: 16, width: 32, height: 32)
+        downloadButton.frame = NSRect(x: cardW - 45, y: 16, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
         let downloadIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
             downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
@@ -1727,7 +1727,7 @@ extension MainWindow {
         let avatarCircle = RoundedEdgePanel()
         avatarCircle.cornerRadius = 16
         avatarCircle.clipContentToBounds = true
-        avatarCircle.frame = NSRect(x: 37, y: 14, width: 32, height: 32)
+        avatarCircle.frame = NSRect(x: 37, y: 14, width: MMMetric.avatarInline, height: MMMetric.avatarInline)
         if let avatar = userAvatarsById[currentUser?.id ?? ""] {
             avatarCircle.color = .clear
             let imageView = NSImageView(frame: NSRect(origin: .zero, size: avatarCircle.frame.size))
@@ -2532,7 +2532,7 @@ extension MainWindow {
                 userStatusById["sarah"] = "away"
             }
             if usersById["sarah"] == nil {
-                usersById["sarah"] = LoginWebService(
+                usersById["sarah"] = MMUser(
                     id: "sarah",
                     create_at: nil, update_at: nil, delete_at: nil,
                     username: "sarah.connor",

@@ -531,7 +531,7 @@ extension MainWindow {
             }
 
             let isImage = (file.mime_type ?? "").hasPrefix("image/")
-            let thumbFrame = NSRect(x: 12, y: 12, width: 40, height: 40)
+            let thumbFrame = NSRect(x: 12, y: 12, width: MMMetric.avatarLarge, height: MMMetric.avatarLarge)
             var thumbImage: NSImage?
             if isImage {
                 let thumb = RoundedEdgePanel()

@@ -43,6 +43,18 @@ enum MMMetric {
     static let rightPanelDefaultWidth: CGFloat = 400
     static let rightPanelMinWidth: CGFloat = 280
     static let searchPopoverWidth: CGFloat = 400
+
+    /// Avatar sizes used by the timeline, menus and pickers.
+    static let avatarSmall: CGFloat = 24
+    static let avatarMenu: CGFloat = 28
+    static let avatarInline: CGFloat = 32
+    static let avatarLarge: CGFloat = 40
+
+    /// Square icon-button sizes.
+    static let iconButtonRegular: CGFloat = 32
+    static let iconButtonCompact: CGFloat = 24
+    static let iconButtonSmall: CGFloat = 28
+    static let lightboxButton: CGFloat = 40
 }
 
 /// Accent colors used by native chrome that are not part of the server theme.

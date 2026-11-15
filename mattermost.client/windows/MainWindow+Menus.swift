@@ -361,7 +361,7 @@ extension MainWindow {
         headerRow.color = .clear
 
         let headerAvatar = RoundedEdgePanel()
-        headerAvatar.frame = NSRect(x: 16, y: 11, width: 28, height: 28)
+        headerAvatar.frame = NSRect(x: 16, y: 11, width: MMMetric.avatarMenu, height: MMMetric.avatarMenu)
         headerAvatar.cornerRadius = MMRadius.large
         headerAvatar.color = NSColor(red: 156 / 255, green: 171 / 255, blue: 36 / 255, alpha: 1.0)
 
@@ -993,7 +993,7 @@ extension MainWindow {
             let avatarPanel = RoundedEdgePanel()
             avatarPanel.cornerRadius = MMRadius.large
             avatarPanel.clipContentToBounds = true
-            avatarPanel.frame = NSRect(x: 8, y: 8, width: 28, height: 28)
+            avatarPanel.frame = NSRect(x: 8, y: 8, width: MMMetric.avatarMenu, height: MMMetric.avatarMenu)
             if let avatar = userAvatarsById[user.id] {
                 avatarPanel.color = .clear
                 let imageView = NSImageView(frame: NSRect(origin: .zero, size: avatarPanel.frame.size))
@@ -1049,7 +1049,7 @@ extension MainWindow {
         dmDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y + 6, 1))
     }
 
-    func startDirectMessage(with user: LoginWebService) {
+    func startDirectMessage(with user: MMUser) {
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         Task { @MainActor [weak self] in

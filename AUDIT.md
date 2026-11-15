@@ -66,13 +66,6 @@ None. Resolved findings and the previously verified feature list are preserved i
   diffing rows for large channels.
 - Avatar caches are unbounded; consider an LRU cap or `NSCache`.
 
-### Hygiene
-
-- `typealias webservice = WebService` (lowercase) and `LoginWebService` naming remain for
-  compatibility; rename when the public surface is stable.
-- A few remaining per-view magic numbers are intentional one-offs (avatar sizes, control-specific
-  padding) rather than shared tokens.
-
 ---
 
 ## Recommended Next Steps

@@ -174,7 +174,7 @@ extension MainWindow {
         updateDesktopNotificationPreferences(["desktop_sound": desktopSoundsEnabled() ? "false" : "true"])
     }
 
-    func applyServerCustomStatus(from user: LoginWebService) {
+    func applyServerCustomStatus(from user: MMUser) {
         guard let raw = user.props?["customStatus"],
               let data = raw.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {

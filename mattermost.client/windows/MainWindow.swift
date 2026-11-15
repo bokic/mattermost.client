@@ -189,7 +189,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let dmSearchField = NSSearchField()
     let dmScroll = NSScrollView()
     let dmDoc = TimelineFlippedView()
-    var dmUsers: [LoginWebService] = []
+    var dmUsers: [MMUser] = []
     var isDMPickerOpen = false
     var dmAnchorFrame: NSRect = .zero
 
@@ -418,7 +418,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var completionKind: CompletionKind = .user
     var completionSelectedIndex = 0
     var isCompletionVisible = false
-    var completionUsers: [LoginWebService] = []
+    var completionUsers: [MMUser] = []
     var completionUsersTeamId: String?
     var completionUsersLoading = false
     var composerBaseHeight: CGFloat { isComposerToolbarVisible ? MMMetric.composerToolbarHeight : MMMetric.composerHeight }
@@ -431,7 +431,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         get { viewModel.webService }
         set { viewModel.webService = newValue }
     }
-    var currentUser: LoginWebService? {
+    var currentUser: MMUser? {
         get { viewModel.currentUser }
         set { viewModel.currentUser = newValue }
     }
@@ -451,11 +451,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         get { viewModel.channelsByName }
         set { viewModel.channelsByName = newValue }
     }
-    var usersById: [String: LoginWebService] {
+    var usersById: [String: MMUser] {
         get { viewModel.usersById }
         set { viewModel.usersById = newValue }
     }
-    var usersByUsername: [String: LoginWebService] {
+    var usersByUsername: [String: MMUser] {
         get { viewModel.usersByUsername }
         set { viewModel.usersByUsername = newValue }
     }

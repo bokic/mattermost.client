@@ -639,7 +639,7 @@ extension MainWindow {
         guard let ws = webService, ws.isLogged() else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            let me: LoginWebService?
+            let me: MMUser?
             if let current = self.currentUser {
                 me = current
             } else {
