@@ -17,9 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var notificationIds: [String: [String]] = [:]
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        DebugLog.log("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
+        DebugLog.info("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
         KeychainHelper.migrateLegacyCredentials()
-        DebugLog.log("Credentials: \(KeychainHelper.usesDebugCredentialStore ? "debug UserDefaults store (plaintext)" : "macOS Keychain")")
+        DebugLog.info("Credentials: \(KeychainHelper.usesDebugCredentialStore ? "debug UserDefaults store (plaintext)" : "macOS Keychain")")
         setupMainMenu()
         installZoomGestureMonitor()
         NSWorkspace.shared.notificationCenter.addObserver(

@@ -8,17 +8,52 @@
 import Foundation
 import os
 
+enum DebugLogLevel: Int, Comparable {
+    case debug = 0
+    case info
+    case warning
+    case error
+
+    static func < (lhs: DebugLogLevel, rhs: DebugLogLevel) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    var label: String {
+        switch self {
+        case .debug: return "DEBUG"
+        case .info: return "INFO"
+        case .warning: return "WARN"
+        case .error: return "ERROR"
+        }
+    }
+}
+
 enum DebugLog {
     static var logPath: String {
-        return (NSTemporaryDirectory() as NSString).appendingPathComponent("mattermost_debug.log")
+        (NSTemporaryDirectory() as NSString).appendingPathComponent("mattermost_debug.log")
     }
-    
+
+    static var logArchivePath: String { logPath + ".1" }
+
+    /// Verbose file/stdout logging ships only in Debug builds or when explicitly
+    /// requested with `--debug-log` / the `debugFileLogging` default. Release
+    /// builds still emit warnings and errors through `Logger`.
+    static let isVerboseLoggingEnabled: Bool = {
+        #if DEBUG
+            return true
+        #else
+            return CommandLine.arguments.contains("--debug-log")
+                || UserDefaults.standard.bool(forKey: "debugFileLogging")
+        #endif
+    }()
+
     /// Raw payload logging is off unless explicitly requested at launch
     /// (`--debug-ws`) or via the `debugWebSocketLogging` default.
     /// The flag is mutable for tests, so guard it with a lock instead of leaving
     /// nonisolated shared mutable state behind.
-    private static let sensitiveLoggingState = OSAllocatedUnfairLock(initialState:
-        CommandLine.arguments.contains("--debug-ws")
+    private static let sensitiveLoggingState = OSAllocatedUnfairLock(
+        initialState:
+            CommandLine.arguments.contains("--debug-ws")
             || UserDefaults.standard.bool(forKey: "debugWebSocketLogging")
     )
 
@@ -26,30 +61,78 @@ enum DebugLog {
         get { sensitiveLoggingState.withLock { $0 } }
         set { sensitiveLoggingState.withLock { $0 = newValue } }
     }
-    
-    /// Logs message/user payloads only when frame debugging is enabled.
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "mattermost.client", category: "App")
+    private static let fileLock = NSLock()
+    private static let maxLogBytes = 1_000_000
+
+    /// Logs only when sensitive/frame logging is enabled.
     static func logSensitive(_ message: @autoclosure () -> String) {
         guard isSensitiveLoggingEnabled else { return }
-        log(message())
+        log(.debug, message())
     }
-    
-    static func log(_ message: String) {
-        let ts = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(ts)] \(message)\n"
+
+    static func log(_ message: @autoclosure () -> String) {
+        log(.debug, message())
+    }
+
+    static func info(_ message: @autoclosure () -> String) {
+        log(.info, message())
+    }
+
+    static func warning(_ message: @autoclosure () -> String) {
+        log(.warning, message())
+    }
+
+    static func error(_ message: @autoclosure () -> String) {
+        log(.error, message())
+    }
+
+    static func log(_ level: DebugLogLevel, _ message: String) {
+        switch level {
+        case .debug: logger.debug("\(message, privacy: .private)")
+        case .info: logger.info("\(message, privacy: .private)")
+        case .warning: logger.warning("\(message, privacy: .private)")
+        case .error: logger.error("\(message, privacy: .private)")
+        }
+
+        guard shouldWriteToFile(level, verbose: isVerboseLoggingEnabled) else { return }
+
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] [\(level.label)] \(message)\n"
+
         print("[STATUS_LOG] \(line)", terminator: "")
         fflush(stdout)
-        NSLog("[STATUS_LOG] %@", message)
-        
-        if let data = line.data(using: .utf8) {
-            let path = logPath
-            if let fileHandle = FileHandle(forWritingAtPath: path) {
-                fileHandle.seekToEndOfFile()
-                fileHandle.write(data)
-                try? fileHandle.close()
-            } else {
-                try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
-            }
+        NSLog("[STATUS_LOG] %@", "[\(level.label)] \(message)")
+
+        guard let data = line.data(using: .utf8) else { return }
+        fileLock.lock()
+        defer { fileLock.unlock() }
+        rotateIfNeeded()
+        if let fileHandle = FileHandle(forWritingAtPath: logPath) {
+            fileHandle.seekToEndOfFile()
+            fileHandle.write(data)
+            try? fileHandle.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: logPath), options: .atomic)
         }
+    }
+
+    /// Release builds persist warnings/errors; verbose levels need an explicit opt-in.
+    static func shouldWriteToFile(_ level: DebugLogLevel, verbose: Bool) -> Bool {
+        verbose || level >= .warning
+    }
+
+    private static func rotateIfNeeded() {
+        let manager = FileManager.default
+        guard let attributes = try? manager.attributesOfItem(atPath: logPath),
+            let size = attributes[.size] as? NSNumber,
+            size.intValue > maxLogBytes
+        else { return }
+
+        try? manager.removeItem(atPath: logArchivePath)
+        try? manager.moveItem(atPath: logPath, toPath: logArchivePath)
     }
 }
 
@@ -471,7 +554,7 @@ final class WebService: NSObject {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
             if logStatusPath {
-                DebugLog.log("HTTP \(method) \(path) network error: \(error.localizedDescription)")
+                DebugLog.error("HTTP \(method) \(path) network error: \(error.localizedDescription)")
             }
             throw WebServiceError.networkError(error)
         }
@@ -1061,7 +1144,7 @@ final class WebService: NSObject {
     var onReactionChanged: ((String) -> Void)?
     
     private func notifySocketState(_ connected: Bool, _ message: String) {
-        DebugLog.log("WS STATE notify connected=\(connected) msg=\(message)")
+        DebugLog.info("WS STATE notify connected=\(connected) msg=\(message)")
         isWebSocketConnected = connected
         DispatchQueue.main.async { [weak self] in
             self?.onWebSocketStateChanged?(connected, message)
@@ -1131,7 +1214,7 @@ final class WebService: NSObject {
         // Exponential backoff with jitter: 1s, 2s, 4s … capped at 30s.
         let delay = min(30.0, pow(2.0, Double(reconnectAttempts))) + Double.random(in: 0...1)
         reconnectAttempts += 1
-        DebugLog.log("WS RECONNECT in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempts))")
+        DebugLog.warning("WS RECONNECT in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempts))")
         
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -1167,13 +1250,13 @@ final class WebService: NSObject {
                 let wsMessage = URLSessionWebSocketTask.Message.string(jsonString)
                 webSocketTask?.send(wsMessage) { [weak self] error in
                     if let error = error {
-                        DebugLog.log("WS SEND ERROR [seq=\(currentSeq)]: \(error.localizedDescription)")
+                        DebugLog.error("WS SEND ERROR [seq=\(currentSeq)]: \(error.localizedDescription)")
                         self?.logger.error("WebSocket send error: \(error.localizedDescription)")
                     }
                 }
             }
         } catch {
-            DebugLog.log("WS SEND SERIALIZATION ERROR for action=\(action)")
+            DebugLog.error("WS SEND SERIALIZATION ERROR for action=\(action)")
             logger.error("Failed to serialize WebSocket message")
         }
     }
@@ -1240,7 +1323,7 @@ final class WebService: NSObject {
 
     private func handleWebSocketFailure(_ error: Error, task: URLSessionWebSocketTask) {
         guard task === webSocketTask else { return }
-        DebugLog.log("WS RECV FAILURE: \(error.localizedDescription)")
+        DebugLog.error("WS RECV FAILURE: \(error.localizedDescription)")
         logger.error("WebSocket receive error: \(error.localizedDescription)")
         onWebSocketDisconnected?(error)
         notifySocketState(false, "Reconnecting to Mattermost…")
@@ -1375,7 +1458,7 @@ final class WebService: NSObject {
         if let event = parsedEvent {
             DebugLog.logSensitive("WS DISPATCH EVENT: \(event)")
         } else if !didConnect {
-            DebugLog.log("WS UNPARSED MSG: \(text)")
+            DebugLog.warning("WS UNPARSED MSG: \(text)")
         }
         
         if didConnect {

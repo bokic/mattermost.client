@@ -545,8 +545,14 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     dumps are git-ignored because they contain live message text.
   - Verified both the JS bridge and the full dump against the live server (1440×783 viewport, 170
     tree nodes, 31 measured elements).
-- [ ] **Logging strategy**: keep `DebugLog` for development, add levels and rotation, and stop
-  shipping verbose logs. — `S`
+- [x] **Logging strategy** — `S`
+  - `DebugLog` now has `debug`/`info`/`warning`/`error` levels, forwards to `os.Logger` with private
+    interpolation, and uses error/warning for transport failures and reconnect events.
+  - Verbose stdout/file logging only runs in Debug builds or with `--debug-log` /
+    `debugFileLogging`; Release builds persist only warnings and errors through unified logging.
+  - The temp log rotates at 1 MB into a single `.1` archive; raw payload logging remains gated
+    behind `--debug-ws`/`debugWebSocketLogging`.
+  - Added tests for level filtering, error labels and rotation (51 tests total).
 
 ---
 

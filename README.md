@@ -88,9 +88,12 @@ On first launch, enter your Mattermost server URL and your user credentials. HTT
 
 ### Debugging
 
-Raw WebSocket frames and HTTP bodies are not logged by default. Launch with
-`--debug-ws` (or set the `debugWebSocketLogging` default to `true`) to include them in the
-diagnostic log under the sandbox's temporary directory.
+`DebugLog` has debug/info/warning/error levels. Verbose stdout and file logging run in Debug builds
+and rotate at 1 MB into a single `.1` archive; Release builds only persist warnings/errors through
+unified logging. Launch a Release build with `--debug-log` (or set `debugFileLogging`) to enable the
+verbose log. Raw WebSocket frames and HTTP bodies are additionally gated: pass `--debug-ws` (or set
+`debugWebSocketLogging`) to include them in the diagnostic log under the sandbox's temporary
+directory.
 
 ### Run Unit Tests
 

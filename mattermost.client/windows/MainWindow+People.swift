@@ -105,11 +105,11 @@ extension MainWindow {
                     let updated = try await ws.updateUserStatus(userId: targetUserId, status: statStr, dndEndTime: dndEndTime)
                     DebugLog.log("Successfully updated user status on backend for \(targetUserId) to \(updated.status)")
                 } catch {
-                    DebugLog.log("Failed to update user status on server: \(error)")
+                    DebugLog.error("Failed to update user status on server: \(error)")
                 }
             }
         } else {
-            DebugLog.log("selectUserStatus: ws is not logged or nil!")
+            DebugLog.warning("selectUserStatus: ws is not logged or nil!")
         }
     }
 
@@ -379,7 +379,7 @@ extension MainWindow {
                         }
                     }
                 } catch {
-                    DebugLog.log("refreshUserStatuses REST fetch error: \(error)")
+                    DebugLog.error("refreshUserStatuses REST fetch error: \(error)")
                 }
             }
         }
