@@ -1,7 +1,8 @@
 # TODO — `mattermost.client`
 
-_Reviewed: 2026-11-15 · Revision: `acc4262` (tag `0.8.0` + 1; TODO-only commit after `c0c32c6`) · Scope: 26 application Swift files (14,005 lines),
-8 unit-test files (1,048 lines), `tools/hud_measure.swift` (99 lines), Xcode project, build/release scripts, CI, README/AUDIT._
+_Reviewed: 2026-11-15 · Revision: `e74d2ee` (tag `0.8.0` + fixes) · Scope: 26 application Swift files (15,617 lines),
+8 unit-test files (1,049 lines), `RELEASE.md`, `tools/hud_measure.swift`, Xcode project,
+build/release scripts, CI, README/AUDIT._
 
 **Verified baseline at this revision**
 
@@ -9,18 +10,18 @@ _Reviewed: 2026-11-15 · Revision: `acc4262` (tag `0.8.0` + 1; TODO-only commit 
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
 | `./test.sh` | **54/54 pass** |
-| `./lint.sh` | **Passes** (`swift-format --strict` on the 15-file migrated allowlist) |
+| `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 14.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
-| Release signing | **Ad-hoc** (`CODE_SIGN_IDENTITY = -`), `ENABLE_HARDENED_RUNTIME = NO`, not notarized |
+| Release signing | **Automated Developer ID/hardened-runtime/notarization pipeline**; ad-hoc DMG in CI; a real notarized build still needs the certificate and notary credentials |
 
 Priority legend: **P0** release blocker · **P1** correctness/data loss/reliability ·
 **P2** security/privacy · **P3** web parity/UX · **P4** architecture/performance ·
 **P5** quality/tooling/docs.
 Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
-Application source is unchanged from `c0c32c6`; line references therefore refer to that
-source revision. The long list of previously completed work is preserved in
+Line references below reflect the original audit revision and may drift as files change.
+The long list of previously completed work is preserved in
 [Completed baseline](#completed-baseline) at the end.
 
 ---
