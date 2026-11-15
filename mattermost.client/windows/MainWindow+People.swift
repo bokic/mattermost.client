@@ -274,19 +274,17 @@ extension MainWindow {
         guard !userId.isEmpty, userAvatarsById[userId] == nil, userAvatarFetchTasks[userId] == nil else { return }
         guard let ws = webService, ws.isLogged() else { return }
 
-        userAvatarFetchTasks[userId] = Task { @MainActor [weak self] () -> NSImage? in
+        userAvatarFetchTasks[userId] = Task { @MainActor [weak self] in
             defer { self?.userAvatarFetchTasks.removeValue(forKey: userId) }
             do {
                 let data = try await ws.fetchUserImage(userId: userId)
                 if let img = NSImage(data: data) {
                     self?.userAvatarsById[userId] = img
                     self?.onAvatarLoaded(userId: userId, image: img)
-                    return img
                 }
             } catch {
-                NSLog("Failed to fetch user image for \(userId): \(error.localizedDescription)")
+                DebugLog.warning("Failed to fetch user image for \(userId): \(error.localizedDescription)")
             }
-            return nil
         }
     }
 

@@ -428,7 +428,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         set { viewModel.currentUserStatus = newValue }
     }
     var userAvatarsById: [String: NSImage] = [:]
-    var userAvatarFetchTasks: [String: Task<NSImage?, Never>] = [:]
+    var userAvatarFetchTasks: [String: Task<Void, Never>] = [:]
     var composerSendIconView: NSImageView?
     var composerSendEnabled = false
     var lastTypingSentAt: Date?
