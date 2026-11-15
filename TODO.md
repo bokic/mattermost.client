@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **122/122 pass** |
+| `./test.sh` | **124/124 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -31,15 +31,6 @@ completed baseline remains at the end.
 ### Message rendering
 
 ### Navigation and sidebar
-
-- [ ] **No channel context menu or unread/mute filtering** — `M`
-  - Channel rows only left-click (`MainWindow+Sidebar.swift:702-728`); there is no
-    right-click/ellipsis menu, no mute/notification submenu, no mark read/unread, no
-    "Unread" filter (only All/Favorites), and no muted-channel styling.
-  - `MMSidebarCategory.muted` is decoded (`webservice.swift:211`) but never rendered, and the
-    channel menu (`MainWindow+Menus.swift:1029-1056`) has no mute action.
-  - Add a context menu sharing the channel-menu actions plus mute, mark read, copy link and
-    leave.
 
 - [ ] **Sidebar/team-menu state and styling have several parity bugs** — `M`
   - Native favorites are stored only in the legacy `favorite_channel` preference while the
@@ -303,7 +294,9 @@ history is in git; the original long-form checklist lives in prior commits of th
 - **Sidebar/teams:** scrollable channel sidebar with pinned team/filter header, server
   categories, persisted collapse state and category order, create/rename/delete/move
   category menus, custom-category channel adding, favorites persisted as user preferences,
-  unread/mention state from paged memberships, live Find channel filter, add/browse/join
+  unread/mention state from paged memberships, All/Unread/Favorites filters, muted-channel
+  styling and badge suppression, channel right-click menus with notifications/mute,
+  mark-read/unread, favorites, copy-link and leave, live Find channel filter, add/browse/join
   channels, invite email, create team + switch, DM creation, channel menu
   (info/pins/files/favorite/copy/leave).
 - **Status:** custom status with duration, DND expiry normalization, status menu/checkmarks,
@@ -326,7 +319,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 122 tests today; keep the count rising
+./test.sh       # 124 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

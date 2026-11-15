@@ -756,6 +756,10 @@ extension MainWindow {
     }
 
     func isChannelMuted(_ channelId: String) -> Bool {
+        if mutedChannelIds.contains(channelId) { return true }
+        if let desktop = channelDesktopNotificationByChannel[channelId] {
+            return desktop.lowercased() == "none"
+        }
         guard let props = membershipsByChannel[channelId]?.notify_props else { return false }
         return props.desktop?.lowercased() == "none"
             || props.mark_unread?.lowercased() == "mention"

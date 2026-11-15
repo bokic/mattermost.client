@@ -1219,6 +1219,19 @@ final class WebService: NSObject {
     }
 
     /// Marks every channel in a team as read for the current user.
+    func updateChannelNotifyProps(
+        channelId: String,
+        userId: String,
+        props: [String: String]
+    ) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/channels/\(channelId)/members/\(userId)/notify_props",
+            method: "PUT",
+            jsonBody: props,
+            accept: nil
+        )
+    }
+
     func markAllChannelsRead(userId: String, teamId: String) async throws {
         _ = try await performRequest(
             path: "/api/v4/users/\(userId)/teams/\(teamId)/read",

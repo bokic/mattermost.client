@@ -764,7 +764,7 @@ extension MainWindow {
         filterMenu.shadowOffset = CGSize(width: 0, height: -4)
         filterMenu.isHidden = true
 
-        let makeRow: (String, CGFloat, Bool) -> (RoundedEdgePanel, NSImageView) = { [weak self] title, y, favorites in
+        let makeRow: (String, CGFloat, Bool, Bool) -> (RoundedEdgePanel, NSImageView) = { [weak self] title, y, favorites, unreadOnly in
             let row = RoundedEdgePanel()
             row.frame = NSRect(x: 6, y: y, width: 168, height: 28)
             row.cornerRadius = MMRadius.control
@@ -792,6 +792,7 @@ extension MainWindow {
             row.onClick = { [weak self] in
                 guard let self = self else { return }
                 self.sidebarFavoritesOnly = favorites
+                self.sidebarUnreadOnly = unreadOnly
                 self.setFilterMenuOpen(false)
                 self.updateFilterMenuAppearance()
                 self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
@@ -799,12 +800,15 @@ extension MainWindow {
             return (row, check)
         }
 
-        let all = makeRow("All channels", 70, false)
+        let all = makeRow("All channels", 102, false, false)
         filterMenu.addSubview(all.0)
         filterAllCheck = all.1
-        let favorites = makeRow("Favorites", 38, true)
+        let favorites = makeRow("Favorites", 70, true, false)
         filterMenu.addSubview(favorites.0)
         filterFavoritesCheck = favorites.1
+        let unread = makeRow("Unread", 38, false, true)
+        filterMenu.addSubview(unread.0)
+        filterUnreadCheck = unread.1
 
         let newCategory = RoundedEdgePanel()
         newCategory.frame = NSRect(x: 6, y: 6, width: 168, height: 28)
@@ -838,8 +842,9 @@ extension MainWindow {
     }
 
     func updateFilterMenuAppearance() {
-        filterAllCheck?.isHidden = sidebarFavoritesOnly
+        filterAllCheck?.isHidden = sidebarFavoritesOnly || sidebarUnreadOnly
         filterFavoritesCheck?.isHidden = !sidebarFavoritesOnly
+        filterUnreadCheck?.isHidden = !sidebarUnreadOnly
     }
 
     func setupChannelMenu() {
@@ -1124,6 +1129,14 @@ extension MainWindow {
             ("checkmark.circle.fill", L10n.string("Mark All as Read"), { [weak self] in
                 self?.closeChannelMenu()
                 self?.markAllChannelsRead()
+            }),
+            (isChannelMuted(activeChannelId) ? "speaker.slash" : "speaker", isChannelMuted(activeChannelId) ? "Unmute Channel" : "Mute Channel", { [weak self] in
+                guard let self = self else { return }
+                self.closeChannelMenu()
+                self.setChannelNotificationPreference(
+                    channelId: self.activeChannelId,
+                    desktop: self.isChannelMuted(self.activeChannelId) ? "default" : "none"
+                )
             }),
             (isChannelFavorited ? "star.slash" : "star", favoriteTitle, { [weak self] in
                 guard let self = self else { return }

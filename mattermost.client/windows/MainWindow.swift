@@ -194,8 +194,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let sidebarDoc = TimelineFlippedView()
     var isFilterMenuOpen = false
     var sidebarFavoritesOnly = false
+    var sidebarUnreadOnly = false
     var filterAllCheck: NSImageView?
     var filterFavoritesCheck: NSImageView?
+    var filterUnreadCheck: NSImageView?
+    var mutedChannelIds: Set<String> = []
+    var channelDesktopNotificationByChannel: [String: String] = [:]
 
     let avatarButtonPanel = RoundedEdgePanel()
     let avatarPanel = RoundedEdgePanel()

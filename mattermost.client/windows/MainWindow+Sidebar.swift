@@ -111,6 +111,8 @@ extension MainWindow {
             var unread: [String: Int] = [:]
             var mentions: [String: Int] = [:]
             var viewed: [String: Int64] = [:]
+            var muted: Set<String> = []
+            var desktopNotifications: [String: String] = [:]
             for membership in memberships {
                 let total = Int(self.channelsById[membership.channel_id]?.total_msg_count ?? 0)
                 unread[membership.channel_id] = max(0, total - (membership.msg_count ?? 0))
@@ -118,10 +120,17 @@ extension MainWindow {
                 if let when = membership.last_viewed_at {
                     viewed[membership.channel_id] = when
                 }
+                let desktop = membership.notify_props?.desktop?.lowercased() ?? "default"
+                desktopNotifications[membership.channel_id] = desktop
+                if desktop == "none" || membership.notify_props?.mark_unread?.lowercased() == "mention" {
+                    muted.insert(membership.channel_id)
+                }
             }
             self.unreadByChannel = unread
             self.mentionsByChannel = mentions
             self.lastViewedAtByChannel = viewed
+            self.mutedChannelIds = muted
+            self.channelDesktopNotificationByChannel = desktopNotifications
             (NSApp.delegate as? AppDelegate)?.syncUnreadCounts(unread)
             self.updateSidebarBadges()
             self.updateNewMessagesBaseline()
@@ -134,6 +143,12 @@ extension MainWindow {
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         for item in allItems {
+            if item.id != "threads", isChannelMuted(item.id) {
+                item.badgePanel.isHidden = true
+                item.badgeLabel.stringValue = ""
+                item.badgePanel.setNeedsAppearanceUpdate()
+                continue
+            }
             let unread = item.id == "threads" ? totalUnreadThreads : (unreadByChannel[item.id] ?? 0)
             let mentions = item.id == "threads" ? 0 : (mentionsByChannel[item.id] ?? 0)
             item.badgePanel.frame = NSRect(x: MMMetric.sidebarWidth - 16 - 34, y: 6, width: 34, height: 20)
@@ -825,6 +840,12 @@ extension MainWindow {
         row.onHoverChanged = { [weak self] _ in
             self?.updateSidebarSelectionAppearance()
         }
+        if isSelectable, channelsById[id] != nil {
+            row.onRightClick = { [weak self, weak row] in
+                guard let self = self, let row = row else { return }
+                self.showChannelContextMenu(channelId: id, from: row)
+            }
+        }
         row.onClick = { [weak self] in
             guard let self = self else { return }
             if id == "threads" {
@@ -915,11 +936,16 @@ extension MainWindow {
                     item.iconView.contentTintColor = nil
                 }
             } else {
+                let muted = item.id != "threads" && isChannelMuted(item.id)
                 item.row.color = .clear
                 item.label.font = MMFont.font(ofSize: 14, weight: .regular)
-                item.label.textColor = defaultText
+                item.label.textColor = muted
+                    ? Theme.shared.sidebarText.withAlphaComponent(0.42)
+                    : defaultText
                 if !item.isBotBadge {
-                    item.iconView.contentTintColor = defaultIcon
+                    item.iconView.contentTintColor = muted
+                        ? Theme.shared.sidebarText.withAlphaComponent(0.42)
+                        : defaultIcon
                 } else {
                     item.iconView.contentTintColor = nil
                 }
@@ -1115,6 +1141,9 @@ extension MainWindow {
         func matches(_ title: String) -> Bool {
             query.isEmpty || title.lowercased().contains(query)
         }
+        func hasUnread(_ id: String) -> Bool {
+            (unreadByChannel[id] ?? 0) > 0 || (mentionsByChannel[id] ?? 0) > 0
+        }
 
         // Row 3: Scrollable navigation content below the pinned filter row.
         sidebarScroll.frame = NSRect(
@@ -1125,8 +1154,12 @@ extension MainWindow {
         )
 
         var currentY: CGFloat = 4
+        var hasVisibleUnreadContent = false
         if let threads = threadsSidebarItem {
-            if matches(threads.label.stringValue) && !sidebarFavoritesOnly {
+            if matches(threads.label.stringValue)
+                && !sidebarFavoritesOnly
+                && (!sidebarUnreadOnly || totalUnreadThreads > 0) {
+                hasVisibleUnreadContent = hasVisibleUnreadContent || sidebarUnreadOnly
                 threads.row.isHidden = false
                 threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
                 threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
@@ -1149,8 +1182,12 @@ extension MainWindow {
         }
         sidebarEmptyStateLabel.isHidden = true
         if let favorites = favoritesCategory {
-            let visibleFavorites = favorites.items.filter { matches($0.label.stringValue) }
-            if !visibleFavorites.isEmpty || query.isEmpty {
+            let visibleFavorites = favorites.items.filter {
+                matches($0.label.stringValue)
+                    && (!sidebarUnreadOnly || hasUnread($0.id))
+            }
+            if !visibleFavorites.isEmpty || (query.isEmpty && !sidebarUnreadOnly) {
+                if !visibleFavorites.isEmpty { hasVisibleUnreadContent = true }
                 favorites.headerRow.isHidden = false
                 favorites.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
                 favorites.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
@@ -1161,7 +1198,9 @@ extension MainWindow {
                 favorites.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
                 currentY += 32
                 for item in favorites.items {
-                    if !matches(item.label.stringValue) || isFavoritesCollapsed {
+                    if !matches(item.label.stringValue)
+                        || isFavoritesCollapsed
+                        || (sidebarUnreadOnly && !hasUnread(item.id)) {
                         item.row.isHidden = true
                         continue
                     }
@@ -1196,14 +1235,18 @@ extension MainWindow {
             let visibleItems = category.items.filter {
                 matches($0.label.stringValue)
                     && !favoriteChannelIds.contains($0.id)
+                    && (!sidebarUnreadOnly || hasUnread($0.id))
             }
-            // A favorites-only filter has nothing to show in the regular categories.
-            if sidebarFavoritesOnly || (!query.isEmpty && visibleItems.isEmpty) {
+            // Favorites-only and unread-only filters hide empty categories.
+            if sidebarFavoritesOnly
+                || (!query.isEmpty && visibleItems.isEmpty)
+                || (sidebarUnreadOnly && visibleItems.isEmpty) {
                 category.headerRow.isHidden = true
                 category.items.forEach { $0.row.isHidden = true }
                 continue
             }
             category.headerRow.isHidden = false
+            if !visibleItems.isEmpty { hasVisibleUnreadContent = true }
             category.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
             category.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
             category.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
@@ -1213,7 +1256,8 @@ extension MainWindow {
             for item in category.items {
                 if !matches(item.label.stringValue)
                     || favoriteChannelIds.contains(item.id)
-                    || (sidebarFavoritesOnly && !favoriteChannelIds.contains(item.id)) {
+                    || (sidebarFavoritesOnly && !favoriteChannelIds.contains(item.id))
+                    || (sidebarUnreadOnly && !hasUnread(item.id)) {
                     item.row.isHidden = true
                 } else if category.isCollapsed && item.id != selectedSidebarItemId {
                     item.row.isHidden = true
@@ -1228,6 +1272,20 @@ extension MainWindow {
                 }
             }
             currentY += 8
+        }
+
+        if sidebarUnreadOnly && !hasVisibleUnreadContent {
+            sidebarEmptyStateLabel.stringValue = query.isEmpty
+                ? "No unread channels"
+                : "No unread channels match your filter"
+            sidebarEmptyStateLabel.isHidden = false
+            sidebarEmptyStateLabel.frame = NSRect(
+                x: sidebarX + 17,
+                y: currentY,
+                width: sidebarWidth - 34,
+                height: 18
+            )
+            currentY += 28
         }
 
         sidebarDoc.frame = NSRect(
