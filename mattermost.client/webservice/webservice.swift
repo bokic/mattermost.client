@@ -285,6 +285,14 @@ struct MMPostMetadata: Codable {
     let reactions: [MMReaction]?
 }
 
+struct MMLinkMetadata: Codable {
+    let url: String?
+    let title: String?
+    let description: String?
+    let image_url: String?
+    let site_name: String?
+}
+
 struct MMPostProps: Codable {
     var username: String? = nil
     var channel_display_name: String? = nil
@@ -831,6 +839,19 @@ final class WebService: NSObject {
             accept: "application/json",
             logPayload: false
         ).0
+    }
+
+    /// Asks the Mattermost server for Open Graph metadata. The server performs
+    /// the outbound request, which keeps link previews private by default.
+    func fetchLinkMetadata(url: URL) async -> MMLinkMetadata? {
+        guard let (data, _) = try? await performRequest(
+            path: "/api/v4/link_metadata",
+            method: "POST",
+            jsonBody: ["url": url.absoluteString],
+            accept: "application/json",
+            logPayload: false
+        ) else { return nil }
+        return try? JSONDecoder().decode(MMLinkMetadata.self, from: data)
     }
 
     func checkToken(token: String) async -> Bool {

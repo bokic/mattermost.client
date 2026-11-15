@@ -1652,6 +1652,26 @@ extension MainWindow {
                 }
             ),
             RightPanelRow(
+                title: linkPreviewsEnabled ? "Disable link previews" : "Enable link previews",
+                subtitle: linkPreviewsEnabled
+                    ? "Linked pages are summarized in the timeline"
+                    : "Off by default; enabling contacts linked sites or the server",
+                meta: "Privacy",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.linkPreviewsEnabled.toggle()
+                    UserDefaults.standard.set(
+                        self.linkPreviewsEnabled,
+                        forKey: "linkPreviewsEnabled"
+                    )
+                    if self.linkPreviewsEnabled {
+                        self.linkPreviewFailures.removeAll()
+                    }
+                    self.rebuildTimelineContent(scrollToBottom: false)
+                    self.loadSettingsPanel()
+                }
+            ),
+            RightPanelRow(
                 title: "Export diagnostics",
                 subtitle: "Redacted log and build information for support",
                 meta: "Support",

@@ -589,6 +589,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     var userAvatarsById = BoundedImageCache()
     var markdownCodeBlockBuffers: [String: String] = [:]
+    var linkPreviewsEnabled = UserDefaults.standard.bool(forKey: "linkPreviewsEnabled")
+    var linkPreviewsByURL: [String: LinkPreviewMetadata] = [:]
+    var linkPreviewLoading: Set<String> = []
+    var linkPreviewFailures: Set<String> = []
+    var linkPreviewImages = BoundedImageCache(countLimit: 100)
+    var linkPreviewImageLoading: Set<String> = []
     var userAvatarFetchTasks: [String: Task<Void, Never>] = [:]
     var composerSendIconView: NSImageView?
     var composerSendEnabled = false

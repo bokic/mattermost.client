@@ -1982,6 +1982,14 @@ extension MainWindow {
         let showsReplyFooter = showsThreadFooter
             && (post.root_id ?? "").isEmpty
             && replyCount > 0
+        let linkPreviewURL = (!isSystem && !isDeleted && linkPreviewsEnabled)
+            ? LinkPreviewParser.firstURL(in: bodyText)
+            : nil
+        if let linkPreviewURL = linkPreviewURL {
+            ensureLinkPreview(for: linkPreviewURL)
+        }
+        let linkPreview = linkPreviewURL.flatMap { linkPreviewsByURL[$0.absoluteString] }
+        let linkPreviewHeight = linkPreview.map { linkPreviewCardHeight(for: $0) } ?? 0
         let isEdited = !isDeleted && (post.edit_at != nil && post.edit_at! > 0)
         let editDate = isEdited ? Date(timeIntervalSince1970: TimeInterval(post.edit_at!) / 1000.0) : nil
 
@@ -2061,6 +2069,13 @@ extension MainWindow {
                 giphyView.frame.origin = CGPoint(x: 79, y: contentY)
                 row.addSubview(giphyView)
                 contentY += gifH + 6
+            }
+
+            if let linkPreview = linkPreview {
+                let card = createLinkPreviewCard(for: linkPreview, maxWidth: bodyMaxW)
+                card.frame.origin = CGPoint(x: 79, y: contentY)
+                row.addSubview(card)
+                contentY += linkPreviewHeight + 6
             }
 
             if !isDeleted {
@@ -2144,6 +2159,7 @@ extension MainWindow {
         var stackHeight: CGFloat = 0
         if hasDisplayableText { stackHeight += bodyH + 3 }
         for (_, gifH) in gifViews { stackHeight += gifH + 6 }
+        if linkPreview != nil { stackHeight += linkPreviewHeight + 6 }
         if attachmentsView != nil { stackHeight += attachmentsHeight + 2 }
         stackHeight += reactionsHeight
         if showsReplyFooter { stackHeight += 30 }
@@ -2328,6 +2344,13 @@ extension MainWindow {
             giphyView.frame.origin = CGPoint(x: contentX, y: stackTop)
             row.addSubview(giphyView)
             stackTop += gifH + 6
+        }
+
+        if let linkPreview = linkPreview {
+            let card = createLinkPreviewCard(for: linkPreview, maxWidth: bodyMaxW)
+            card.frame.origin = CGPoint(x: contentX, y: stackTop)
+            row.addSubview(card)
+            stackTop += linkPreviewHeight + 6
         }
 
         if let attachmentsView = attachmentsView {

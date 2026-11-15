@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **104/104 pass** |
+| `./test.sh` | **110/110 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -29,10 +29,6 @@ completed baseline remains at the end.
 ## P3 — Web-parity backlog
 
 ### Message rendering
-
-- [ ] **No link previews** — `M`
-  - Mattermost renders Open Graph previews for URLs. The native client leaves bare links.
-    Add a metadata fetch (opt-in/privacy aware), card layout, and image proxy/caching.
 
 - [ ] **Reaction UX is limited and partly broken** — `M`
   - The reaction picker is 16 hardcoded emoji (`MainWindow.swift:681-686`,
@@ -334,7 +330,8 @@ history is in git; the original long-form checklist lives in prior commits of th
   clickable reply-count thread footers refreshed from live reply/thread events,
   props-backed system messages, role/is_bot-based bot detection, offline-by-default
   presence and calendar-day date separators including future dates,
-  attachments/image cards/lightbox, reactions chips with add/remove, hover toolbar,
+  attachments/image cards/lightbox, opt-in Open Graph link-preview cards with cached
+  images, reactions chips with add/remove, hover toolbar,
   block-level Markdown (headings, ordered/nested lists, blockquotes, tables, rules),
   fenced code with language labels, syntax highlighting and copy links, inline
   markdown/mentions/channels/emoji/images, full Mattermost emoji catalog, Giphy rendering.
@@ -364,7 +361,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 104 tests today; keep the count rising
+./test.sh       # 110 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```
