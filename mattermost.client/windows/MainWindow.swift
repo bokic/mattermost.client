@@ -166,6 +166,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var isStatusMenuOpen = false
     private var isDndSubMenuOpen = false
     private var selectedStatusIndex = 0
+    private weak var customStatusMenuRow: RoundedEdgePanel?
+    private var customStatusText: String = UserDefaults.standard.string(forKey: "customStatusText") ?? ""
+    private var customStatusEmoji: String = UserDefaults.standard.string(forKey: "customStatusEmoji") ?? ""
     private var statusCheckViews: [NSImageView] = []
     
     // Left Channel Sidebar views
@@ -225,6 +228,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var unreadByChannel: [String: Int] = [:]
     private var mentionsByChannel: [String: Int] = [:]
     private var lastViewedAtByChannel: [String: Int64] = [:]
+    private var dndEndTimeByUser: [String: Int64] = [:]
     private var newMessagesBaseline: Int64 = 0
     private var newMessagesDividerPostId: String?
     private var isLoadingOlderPosts = false
@@ -374,6 +378,20 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
         updateViews()
         applyZoomFactor(ZoomManager.shared.currentZoomFactor)
+        if CommandLine.arguments.contains("--custom-status-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in self?.showCustomStatusDialog() }
+        }
+        if CommandLine.arguments.contains("--statusmenu-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in self?.setStatusMenuOpen(true) }
+        }
+        if CommandLine.arguments.contains("--custom-set-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                self?.applyCustomStatus(emoji: "coffee", text: "Focusing", durationIndex: 1)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in
+                self?.setStatusMenuOpen(true)
+            }
+        }
         if CommandLine.arguments.contains("--view-test") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                 guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
@@ -798,6 +816,139 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         } else {
             DebugLog.log("selectUserStatus: ws is not logged or nil!")
         }
+    }
+    
+    // MARK: - Custom status & DND expiry
+    
+    private func updateCustomStatusUI() {
+        guard let row = customStatusMenuRow else { return }
+        let label = row.subviews.compactMap { $0 as? NSTextField }.first
+        if customStatusText.isEmpty {
+            label?.stringValue = "Set custom status"
+        } else {
+            let glyph = customStatusEmoji.isEmpty ? "" : emojiGlyph(for: customStatusEmoji) + " "
+            label?.stringValue = glyph + customStatusText
+        }
+    }
+    
+    private func showCustomStatusDialog() {
+        let alert = NSAlert()
+        alert.messageText = "Set a custom status"
+        alert.informativeText = "Let people know what you are up to."
+        alert.addButton(withTitle: "Set status")
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 92))
+        let emojiField = NSTextField(frame: NSRect(x: 0, y: 62, width: 56, height: 24))
+        emojiField.placeholderString = "🙂"
+        emojiField.stringValue = customStatusEmoji
+        let textField = NSTextField(frame: NSRect(x: 64, y: 62, width: 256, height: 24))
+        textField.placeholderString = "Status"
+        textField.stringValue = customStatusText
+        let durationPopup = NSPopUpButton(frame: NSRect(x: 0, y: 24, width: 320, height: 26), pullsDown: false)
+        durationPopup.addItems(withTitles: ["Don't clear", "30 minutes", "1 hour", "4 hours", "Today", "This week"])
+        container.addSubview(emojiField)
+        container.addSubview(textField)
+        container.addSubview(durationPopup)
+        alert.accessoryView = container
+        
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self else { return }
+            if response == .alertFirstButtonReturn {
+                self.applyCustomStatus(
+                    emoji: emojiField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                    text: textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                    durationIndex: durationPopup.indexOfSelectedItem
+                )
+            } else if response == .alertSecondButtonReturn {
+                self.unsetCustomStatus()
+            }
+        }
+    }
+    
+    private func applyCustomStatus(emoji: String, text: String, durationIndex: Int) {
+        guard !text.isEmpty else {
+            unsetCustomStatus()
+            return
+        }
+        let durations = ["dont_clear", "thirty_minutes", "one_hour", "four_hours", "today", "this_week"]
+        let index = max(0, min(durationIndex, durations.count - 1))
+        let expiresAt = customStatusExpiry(for: index)
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.setCustomStatus(emoji: emoji, text: text, duration: durations[index], expiresAt: expiresAt)
+                self.customStatusEmoji = emoji
+                self.customStatusText = text
+                UserDefaults.standard.set(emoji, forKey: "customStatusEmoji")
+                UserDefaults.standard.set(text, forKey: "customStatusText")
+                self.updateCustomStatusUI()
+            } catch {
+                self.showInfoAlert("Could not set custom status: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func unsetCustomStatus() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            _ = try? await ws.clearCustomStatus()
+            self.customStatusEmoji = ""
+            self.customStatusText = ""
+            UserDefaults.standard.removeObject(forKey: "customStatusEmoji")
+            UserDefaults.standard.removeObject(forKey: "customStatusText")
+            self.updateCustomStatusUI()
+        }
+    }
+    
+    /// RFC3339 expiry for the selected duration, or nil when it should not clear.
+    private func customStatusExpiry(for index: Int) -> String? {
+        let now = Date()
+        let target: Date?
+        switch index {
+        case 1: target = now.addingTimeInterval(30 * 60)
+        case 2: target = now.addingTimeInterval(60 * 60)
+        case 3: target = now.addingTimeInterval(4 * 60 * 60)
+        case 4:
+            let start = Calendar.current.startOfDay(for: now)
+            target = Calendar.current.date(byAdding: .day, value: 1, to: start)?.addingTimeInterval(-1)
+        case 5: target = now.addingTimeInterval(7 * 24 * 60 * 60)
+        default: target = nil
+        }
+        guard let date = target else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+    
+    /// DND reverts to online once `dnd_end_time` has passed.
+    private func normalizedStatus(_ status: String, dndEndTime: Int64?) -> String {
+        guard status.lowercased() == "dnd", let end = dndEndTime, end > 0 else { return status }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        return end <= nowMs ? "online" : status
+    }
+    
+    private func normalizedStatusForKnownUser(_ status: String, userId: String) -> String {
+        normalizedStatus(status, dndEndTime: dndEndTimeByUser[userId])
+    }
+    
+    private func applyCurrentUserStatus(_ status: String) {
+        currentUserStatus = status
+        let idx = indexForStatus(status)
+        selectedStatusIndex = idx
+        for (i, checkView) in statusCheckViews.enumerated() {
+            checkView.isHidden = (i != idx)
+        }
+        let color = statusColor(for: status)
+        statusDotPanel.color = color
+        statusDotPanel.setNeedsAppearanceUpdate()
+        updateStatusCheck(in: statusDotPanel, status: status)
+        menuAvatarStatusDot?.color = color
+        menuAvatarStatusDot?.setNeedsAppearanceUpdate()
     }
     
     private func updateChatWidgetUserStatus(userId: String, status: String) {
@@ -1689,6 +1840,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self?.setDndSubMenuOpen(false)
             }
         }
+        customStatusRow.onClick = { [weak self] in
+            self?.setStatusMenuOpen(false)
+            self?.showCustomStatusDialog()
+        }
+        customStatusMenuRow = customStatusRow
         statusMenu.addSubview(customStatusRow)
         
         // Top divider
@@ -1851,6 +2007,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         contentView?.addSubview(statusMenu)
         setupDndSubMenu()
+        updateCustomStatusUI()
     }
     
     private func setupDndSubMenu() {
@@ -2420,8 +2577,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                     let statuses = try await ws.fetchUserStatuses(userIds: knownIds)
                     DebugLog.log("refreshUserStatuses: received REST statuses: \(statuses.map { "\($0.user_id)=\($0.status)" }.joined(separator: ", "))")
                     for st in statuses {
-                        self?.userStatusById[st.user_id] = st.status
-                        self?.updateChatWidgetUserStatus(userId: st.user_id, status: st.status)
+                        guard let self = self else { continue }
+                        if let end = st.dnd_end_time, end > 0 {
+                            self.dndEndTimeByUser[st.user_id] = end
+                        }
+                        let status = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
+                        self.userStatusById[st.user_id] = status
+                        self.updateChatWidgetUserStatus(userId: st.user_id, status: status)
+                        if st.user_id == self.currentUser?.id, status != st.status {
+                            self.applyCurrentUserStatus(status)
+                        }
                     }
                 } catch {
                     DebugLog.log("refreshUserStatuses REST fetch error: \(error)")
@@ -4941,7 +5106,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             "wave": "👋", "clap": "👏", "pray": "🙏", "rocket": "🚀",
             "white_check_mark": "✅", "x": "❌", "thinking_face": "🤔",
             "cry": "😢", "sob": "😭", "sunglasses": "😎", "100": "💯",
-            "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐"
+            "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐",
+            "coffee": "☕", "computer": "💻", "palm_tree": "🌴", "beer": "🍺",
+            "pizza": "🍕", "cake": "🎂", "sunny": "☀️", "rainbow": "🌈",
+            "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔"
         ]
         if let glyph = map[name.lowercased()] { return glyph }
         // Already a unicode emoji?
@@ -6042,29 +6210,23 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             DebugLog.log("ws.onMultipleStatusesReceived: \(statuses)")
             guard let self = self else { return }
             for (userId, status) in statuses {
-                self.userStatusById[userId] = status
-                self.updateChatWidgetUserStatus(userId: userId, status: status)
+                let normalized = self.normalizedStatusForKnownUser(status, userId: userId)
+                self.userStatusById[userId] = normalized
+                self.updateChatWidgetUserStatus(userId: userId, status: normalized)
+                if userId == self.currentUser?.id, normalized != status {
+                    self.applyCurrentUserStatus(normalized)
+                }
             }
         }
         
         ws.onStatusChanged = { [weak self] userId, status in
             DebugLog.log("ws.onStatusChanged: userId=\(userId), status=\(status)")
             guard let self = self else { return }
-            self.userStatusById[userId] = status
-            self.updateChatWidgetUserStatus(userId: userId, status: status)
+            let normalized = self.normalizedStatusForKnownUser(status, userId: userId)
+            self.userStatusById[userId] = normalized
+            self.updateChatWidgetUserStatus(userId: userId, status: normalized)
             if let myId = self.currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId, myId == userId {
-                let idx = self.indexForStatus(status)
-                self.selectedStatusIndex = idx
-                for (i, checkView) in self.statusCheckViews.enumerated() {
-                    checkView.isHidden = (i != idx)
-                }
-                self.currentUserStatus = status
-                let color = self.statusColor(for: status)
-                self.statusDotPanel.color = color
-                self.statusDotPanel.setNeedsAppearanceUpdate()
-                self.updateStatusCheck(in: self.statusDotPanel, status: status)
-                self.menuAvatarStatusDot?.color = color
-                self.menuAvatarStatusDot?.setNeedsAppearanceUpdate()
+                self.applyCurrentUserStatus(normalized)
             }
         }
         
@@ -6138,19 +6300,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self.loadFavoriteChannels()
                 
                 if let statuses = try? await ws.fetchUserStatuses(userIds: [me.id]), let myStatus = statuses.first {
-                    self.currentUserStatus = myStatus.status
-                    self.userStatusById[me.id] = myStatus.status
-                    let idx = self.indexForStatus(myStatus.status)
-                    self.selectedStatusIndex = idx
-                    for (i, checkView) in self.statusCheckViews.enumerated() {
-                        checkView.isHidden = (i != idx)
+                    if let end = myStatus.dnd_end_time, end > 0 {
+                        self.dndEndTimeByUser[me.id] = end
                     }
-                    let color = self.statusColor(for: myStatus.status)
-                    self.statusDotPanel.color = color
-                    self.statusDotPanel.setNeedsAppearanceUpdate()
-                    self.updateStatusCheck(in: self.statusDotPanel, status: myStatus.status)
-                    self.menuAvatarStatusDot?.color = color
-                    self.menuAvatarStatusDot?.setNeedsAppearanceUpdate()
+                    let status = self.normalizedStatus(myStatus.status, dndEndTime: myStatus.dnd_end_time)
+                    self.userStatusById[me.id] = status
+                    self.applyCurrentUserStatus(status)
+                    self.updateChatWidgetUserStatus(userId: me.id, status: status)
                 }
                 
                 let teams = try await ws.fetchTeams()
@@ -6249,7 +6405,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             if !allUserIds.isEmpty,
                let fetchedStatuses = try? await ws.fetchUserStatuses(userIds: allUserIds) {
                 for st in fetchedStatuses {
-                    self.userStatusById[st.user_id] = st.status
+                    if let end = st.dnd_end_time, end > 0 {
+                        self.dndEndTimeByUser[st.user_id] = end
+                    }
+                    self.userStatusById[st.user_id] = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
                 }
             }
             // Discard results for a channel that is no longer open.

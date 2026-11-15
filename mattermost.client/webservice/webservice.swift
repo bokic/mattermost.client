@@ -713,6 +713,36 @@ final class WebService: NSObject {
         )
     }
     
+    func setCustomStatus(emoji: String, text: String, duration: String, expiresAt: String?) async throws {
+        var body: [String: Any] = [
+            "emoji": emoji,
+            "text": text,
+            "duration": duration
+        ]
+        if let expiresAt = expiresAt {
+            body["expires_at"] = expiresAt
+        }
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/users/me/status/custom",
+            method: "PUT",
+            body: body
+        )
+    }
+    
+    func clearCustomStatus() async throws {
+        guard let url = buildURL(path: "/api/v4/users/me/status/custom") else {
+            throw WebServiceError.invalidHostname
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
+        }
+    }
+    
     func fetchChannelMemberships(userId: String, teamId: String, page: Int = 0, perPage: Int = 200) async throws -> [MMChannelMembership] {
         return try await performAuthenticatedRequest(
             path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/members",

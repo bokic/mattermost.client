@@ -10,7 +10,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Product Switcher**: Custom grid app switcher (`E82F`) and Mattermost logo with `TEAM EDITION` badge, opening an interactive menu (*Channels*, *System Console*, *Integrations*, *App Marketplace*, *Download Apps*, *About Mattermost*).
 - **Search Popover**: Centered search bar with quick popover offering *Messages* / *Files* tabs, bordered search input, and filter hint pills (`from:`, `in:`, `on:`).
 - **Help Menu**: Quick help (`?`) popup menu linking to Mattermost guides, resources, and shortcuts.
-- **User Status & Profile**: User avatar with online dot and dropdown menu (*@username*, *Set custom status*, *Online*, *Away*, *Do not disturb* with *Clear after:* submenu, *Offline*, *Profile*, *Log out*).
+- **User Status & Profile**: User avatar with presence dot and dropdown menu (*@username*, custom status editor with emoji/text/expiry — shown in the menu, *Online*, *Away*, *Do not disturb* with *Clear after:* submenu, *Offline*, *Profile*, *Log out*). Expired DND automatically reverts to online.
 - **Action Shortcuts**: Mentions (`@`), Saved posts (bookmark) and Settings (gear) each open the right-hand panel — recent mentions, flagged posts, and app actions (zoom reset, reconnect, account info, logout).
 
 ### 2. Left Channel Sidebar (`#1E325C`)

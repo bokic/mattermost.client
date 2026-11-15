@@ -122,10 +122,16 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Remaining: interactive reactions (add/remove), file thumbnails beyond the preview endpoint, and
     `props`-driven custom attributes.
 
-- [ ] **Custom status is inert; DND expiry is not refreshed** — `S`
-  - Where: status menu "Set custom status" row only closes the menu; `dnd_end_time` is sent but not
-    re-evaluated after wake.
-  - Done when: custom status editor works and expired DND reverts automatically.
+- [x] **Custom status is inert; DND expiry is not refreshed** — `S`
+  - Done: the status menu opens a custom-status sheet (emoji, text, duration: don't clear / 30m / 1h /
+    4h / today / this week) that calls `PUT /users/me/status/custom` with the server's duration enum
+    and an RFC3339 `expires_at`; Clear calls DELETE. The current status is shown in the menu row and
+    persisted locally.
+  - DND expiry: `dnd_end_time` is cached per user from REST responses, and both REST and WebSocket
+    status updates normalize expired DND to online — updating the header dot, menu checkmarks and
+    timeline presence dots. The 15 s status poll acts as a backstop.
+  - Remaining: custom status isn't re-fetched on launch (the server exposes no GET endpoint), so it
+    is restored from local storage.
 
 - [x] **Sample posts are injected when logged out** — `S`  
   _Done: demo content only renders with an explicit `--demo` flag._
