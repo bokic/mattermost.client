@@ -406,6 +406,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var composerDraftsByChannelId: [String: ComposerDraft] = [:]
     var threadDraftsByRootId: [String: String] = [:]
     var teamSwitchToken = 0
+    var lastRightPanelContentWidth: CGFloat = 0
     var channelScrollPositions: [String: ChannelScrollPosition] = [:]
     var typingIndicatorWorkItem: DispatchWorkItem?
     var threadTypingIndicatorWorkItem: DispatchWorkItem?

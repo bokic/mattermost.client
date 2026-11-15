@@ -167,6 +167,7 @@ extension MainWindow {
         if rightPanelMode == .thread { saveThreadDraft() }
         isRightPanelVisible = false
         rightPanel.isHidden = true
+        lastRightPanelContentWidth = 0
         layoutRightChatPanel()
     }
 

@@ -522,6 +522,12 @@ extension MainWindow {
                 width: panelWidth,
                 height: max(0, panelHeight - 56 - replyBarHeight)
             )
+            if abs(panelWidth - lastRightPanelContentWidth) > 1 {
+                lastRightPanelContentWidth = panelWidth
+                DispatchQueue.main.async { [weak self] in
+                    self?.reloadRightPanelIfNeeded()
+                }
+            }
             threadReplyPanel.isHidden = !isThreadMode
             if isThreadMode {
                 threadReplyPanel.frame = NSRect(x: 8, y: 8, width: panelWidth - 16, height: 36)

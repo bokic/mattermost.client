@@ -340,7 +340,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when `"G"` channels render in Direct Messages with group icons/member counts, proper
     hero copy, and autocomplete support.
 
-- [ ] **The RHS overlays the timeline instead of reflowing it** — `M`
+- [x] **The RHS overlays the timeline instead of reflowing it** — `M`
   - The timeline is always sized to the full `chatW` (`MainWindow+Layout.swift:640-653`)
     while the panel is a sibling overlay, so opening Threads/Members/etc. covers the right
     side of messages (the web client shrinks the center column).
