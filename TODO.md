@@ -503,7 +503,7 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Added `ChatViewModel.swift`, `TimelineSupport.swift` and `ZoomManager.swift` to the test target,
     and made `test.sh` build for the host architecture so it matches the app module built by
     `build.sh`.
-  - Suite grew from 27 to 48 tests; all pass and the workspace still renders correctly.
+  - Suite grew from 27 to 48 tests (51 after the logging tests); all pass and the workspace still renders correctly.
 - [x] **Add CI** (GitHub Actions) — `S`
   - Added `.github/workflows/ci.yml` with a `build-test` job (toolchain version, `./build.sh`,
     `./test.sh`) and a `lint` job (`./lint.sh`) on `macos-15`.
@@ -560,7 +560,7 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ```bash
 ./build.sh                 # must succeed with no new warnings
-./test.sh                  # 48 tests: URL/JSON/WebSocket, model, timeline, zoom, errors
+./test.sh                  # 51 tests: URL/JSON/WebSocket, model, timeline, zoom, errors, logging
 ./run.sh                   # manual smoke test
 ```
 

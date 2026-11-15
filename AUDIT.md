@@ -47,7 +47,7 @@ accessibility/localization, and some test-target and performance cleanup.
 | 13 | Medium | 3,464-line `MainWindow` god class | **Fixed** — 746-line window shell plus focused extensions and `ChatViewModel` |
 | 14 | Medium | Unsynchronized mutable state in `WebService` | **Fixed** — `@MainActor` isolation, explicit callback hops, task-identity stale guards, Swift 6 |
 | 15 | Medium | No accessibility/dark-mode support | **Partial** — server themes (including dark palettes) are applied app-wide; VoiceOver labels/roles are still missing |
-| 16 | Medium | Duplicate source in the test target; only 12 tests | **Partial** — 48 tests now cover URL/JSON/WebSocket, model state, pagination, date separators, zoom and errors; the test target still compiles a copy of shared sources |
+| 16 | Medium | Duplicate source in the test target; only 12 tests | **Partial** — 51 tests now cover URL/JSON/WebSocket, model state, pagination, date separators, zoom and errors; the test target still compiles a copy of shared sources |
 
 Other fixed items from the original audit: README capability claims, dead prototype views,
 unused label references, the headermap build warning, missing CI/lint, magic radii/metrics,
@@ -123,7 +123,7 @@ duplicated HTTP request building, and duplicated zoom plumbing.
 
 ```bash
 ./build.sh     # clean build, zero warnings
-./test.sh      # 48 tests
+./test.sh      # 51 tests
 ./lint.sh      # swift-format --strict on migrated files
 ```
 
