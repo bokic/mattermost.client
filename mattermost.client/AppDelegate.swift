@@ -27,9 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard ThemeManager.shared.usesSystemAppearance else { return }
-            ThemeManager.shared.reapply()
-            self?.mainWindow?.refreshServerTheme(teamId: self?.mainWindow?.activeTeam?.id)
+            MainActor.assumeIsolated {
+                guard ThemeManager.shared.usesSystemAppearance else { return }
+                ThemeManager.shared.reapply()
+                self?.mainWindow?.refreshServerTheme(teamId: self?.mainWindow?.activeTeam?.id)
+            }
         }
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
