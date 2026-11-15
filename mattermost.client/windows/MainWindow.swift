@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 
 class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFieldDelegate {
     let viewModel = ChatViewModel()
+    var zoomController: WindowZoomController?
 
     let mainPanel = RoundedEdgePanel()
     let chatPanel = RoundedEdgePanel()
@@ -553,7 +554,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         setupTopGlobalBar()
 
         updateViews()
-        applyZoomFactor(ZoomManager.shared.currentZoomFactor)
+        zoomController = WindowZoomController(window: self, onLayout: { [weak self] in
+            self?.updateViews()
+        })
+        zoomController?.applyCurrentZoom()
         if CommandLine.arguments.contains("--custom-status-test") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in self?.showCustomStatusDialog() }
         }
@@ -580,8 +584,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         self.makeKeyAndOrderFront(nil)
 
-        NotificationCenter.default.addObserver(self, selector: #selector(windowDidResize), name: NSWindow.didResizeNotification, object: self)
-        NotificationCenter.default.addObserver(self, selector: #selector(zoomDidChangeNotification), name: .zoomFactorDidChange, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
         bindWebServiceAndLoadData()
     }
@@ -670,18 +672,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if zoomController?.handleKeyEquivalent(event) == true {
+            return true
+        }
         if event.modifierFlags.contains(.command) {
             let chars = event.charactersIgnoringModifiers ?? ""
-            if chars == "+" || chars == "=" {
-                ZoomManager.shared.zoomIn()
-                return true
-            } else if chars == "-" {
-                ZoomManager.shared.zoomOut()
-                return true
-            } else if chars == "0" {
-                ZoomManager.shared.resetZoom()
-                return true
-            } else if chars == "k" {
+            if chars == "k" {
                 focusGlobalSearch()
                 return true
             } else if chars == "f" {

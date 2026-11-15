@@ -48,7 +48,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 
 ### 5. macOS System Integration
 - **Status Bar Item**: System menu bar icon with click-to-toggle window visibility.
-- **Dynamic UI Zoom & Scaling**: Native macOS View menu and keyboard shortcuts (`⌘+` / `⌘=` to zoom in, `⌘-` to zoom out, `⌘0` to reset to actual size), plus trackpad pinch-to-zoom and `⌘`+scroll wheel. A stored zoom level always wins; when none is saved the app defers to the OS display scale and renders at actual size. A transient HUD shows the current percentage for two seconds after each change.
+- **Dynamic UI Zoom & Scaling**: Native macOS View menu and keyboard shortcuts (`⌘+` / `⌘=` to zoom in, `⌘-` to zoom out, `⌘0` to reset to actual size), plus trackpad pinch-to-zoom and `⌘`+scroll wheel. A shared `WindowZoomController` owns the scaling for both the login and main windows: it rewrites `contentView.bounds` to `frame / zoomFactor`, re-applies on resize, forwards zoom shortcuts, and shows the HUD. A stored zoom level always wins; when none is saved the app defers to the OS display scale and renders at actual size.
 - **Window Frame**: Opens at the web client's viewport (1440×783, clamped to the screen) and remembers the last frame via `NSWindow` autosave.
 - **Unread Badges & Notifications**: Incoming messages for channels you are not looking at bump a blue dot on the menu-bar icon, set the Dock badge, and post a native macOS notification; opening the channel (or returning to the app) clears them.
 - **App Sandbox & Credentials**: Release builds store the bearer token and account password in the macOS Keychain as generic-password items scoped to this app. Debug builds (`#if DEBUG`) use a plaintext UserDefaults store instead so rebuilds do not trigger macOS Keychain authorization prompts. Plaintext values written by older builds are migrated and deleted at launch.
@@ -117,6 +117,8 @@ Build a Release configuration and create a standalone `.dmg` installer:
   `MainWindow+Header`, `+Sidebar`, `+Timeline`, `+Composer`, `+Menus`, `+RightPanel`, `+People`,
   `+Layout` and `+LiveData` (REST/WebSocket glue).
 - `MainWindowSupport.swift` holds shared custom views, drag-and-drop helpers and the emoji catalog.
+- `WindowZoomController` owns app-level zoom for every window (bounds scaling, resize/zoom
+  observers, shortcuts and HUD), with the coordinate-space model documented in the file.
 
 ## Project Structure
 

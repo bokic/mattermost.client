@@ -656,25 +656,6 @@ extension MainWindow {
         }
     }
 
-    @objc func windowDidResize(_ notification: Notification) {
-        let factor = ZoomManager.shared.currentZoomFactor
-        if let cv = contentView, factor > 0 {
-            cv.bounds = NSRect(x: 0, y: 0, width: cv.frame.width / factor, height: cv.frame.height / factor)
-        }
-        updateViews()
-    }
-
-    func applyZoomFactor(_ factor: CGFloat) {
-        guard let cv = contentView, factor > 0 else { return }
-        cv.bounds = NSRect(x: 0, y: 0, width: cv.frame.width / factor, height: cv.frame.height / factor)
-        updateViews()
-    }
-
-    @objc func zoomDidChangeNotification(_ notification: Notification) {
-        applyZoomFactor(ZoomManager.shared.currentZoomFactor)
-        ZoomHUD.shared.show(factor: ZoomManager.shared.currentZoomFactor, in: self)
-    }
-
     func updateViews() {
         let size = contentView!.bounds.size
         let topBarHeight: CGFloat = 44

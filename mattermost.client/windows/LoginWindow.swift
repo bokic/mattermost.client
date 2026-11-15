@@ -57,6 +57,7 @@ class LoginWindow: NSWindow {
     var passwordLabel: NSSecureTextField!
     var connectButton: NSButton!
     var errorLabel: NSTextField!
+    var zoomController: WindowZoomController?
 
     override init(contentRect rect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: rect, styleMask: style, backing: backingStoreType, defer: flag)
@@ -104,37 +105,14 @@ class LoginWindow: NSWindow {
         contentView?.addSubview(errorLabel)
         contentView?.addSubview(connectButton)
 
-        applyZoomFactor(ZoomManager.shared.currentZoomFactor)
+        zoomController = WindowZoomController(window: self)
+        zoomController?.applyCurrentZoom()
         self.makeKeyAndOrderFront(nil)
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(windowDidResize), name: NSWindow.didResizeNotification, object: self)
-        NotificationCenter.default.addObserver(self, selector: #selector(zoomDidChangeNotification), name: .zoomFactorDidChange, object: nil)
-    }
-    
-    func applyZoomFactor(_ factor: CGFloat) {
-        guard let cv = contentView, factor > 0 else { return }
-        cv.bounds = NSRect(x: 0, y: 0, width: cv.frame.width / factor, height: cv.frame.height / factor)
-        cv.needsDisplay = true
-    }
-    
-    @objc private func zoomDidChangeNotification(_ notification: Notification) {
-        applyZoomFactor(ZoomManager.shared.currentZoomFactor)
-        ZoomHUD.shared.show(factor: ZoomManager.shared.currentZoomFactor, in: self)
     }
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.command) {
-            let chars = event.charactersIgnoringModifiers ?? ""
-            if chars == "+" || chars == "=" {
-                ZoomManager.shared.zoomIn()
-                return true
-            } else if chars == "-" {
-                ZoomManager.shared.zoomOut()
-                return true
-            } else if chars == "0" {
-                ZoomManager.shared.resetZoom()
-                return true
-            }
+        if zoomController?.handleKeyEquivalent(event) == true {
+            return true
         }
         return super.performKeyEquivalent(with: event)
     }
@@ -197,10 +175,4 @@ class LoginWindow: NSWindow {
         }
     }
     
-    @objc func windowDidResize(_ notification: Notification) {
-        let factor = ZoomManager.shared.currentZoomFactor
-        if let cv = contentView, factor > 0 {
-            cv.bounds = NSRect(x: 0, y: 0, width: cv.frame.width / factor, height: cv.frame.height / factor)
-        }
-    }
 }

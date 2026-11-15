@@ -411,9 +411,18 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     no behavior was intentionally changed.
   - Verified: the app builds and runs against the live server, all 27 unit tests pass, and the
     normal workspace view renders unchanged.
-- [ ] **Extract shared window/zoom plumbing** — zoom is duplicated in `MainWindow` and `LoginWindow`
-  and implemented by rewriting `contentView.bounds`; factor it into one controller and document the
-  scaling model. — `M`
+- [x] **Extract shared window/zoom plumbing** — `M`
+  - Added `WindowZoomController`, used by both `MainWindow` and `LoginWindow`. It owns the
+    `contentView.bounds` rewrite, observes `NSWindow.didResizeNotification` and
+    `.zoomFactorDidChange`, applies the current factor, calls the owner's layout closure, shows the
+    zoom HUD and handles ⌘+/⌘=/⌘-/⌘0.
+  - Removed the duplicated `applyZoomFactor`/`windowDidResize`/`zoomDidChangeNotification` methods
+    and observers from both window classes; only the controller rewrites bounds now.
+  - Documented the scaling model in `WindowZoomController.swift`: the OS display scale is separate;
+    the window frame stays in points while contentView `bounds = frame / zoomFactor`, so logical
+    layout points map to `zoomFactor` screen points. Layout code consumes `bounds.size`.
+  - Verified at 125% zoom: the full workspace reflows correctly, then reset to 100%. Build and all
+    27 tests pass.
 - [ ] **Actor-isolate `WebService`** (`mToken`, `webSocketTask`, reconnect timer) and enable Swift 6
   strict concurrency. — `M`
 - [ ] **Inject `WebService`** instead of repeated `NSApp.delegate as? AppDelegate` lookups. — `M`
