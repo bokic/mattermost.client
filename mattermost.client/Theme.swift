@@ -354,11 +354,19 @@ final class ThemeManager {
     static let shared = ThemeManager()
 
     private(set) var theme: MMTheme = .denim
+    /// True when the active server theme is "System" (or absent), in which case
+    /// native controls should follow `NSApp.effectiveAppearance` instead of a
+    /// forced light/dark appearance.
+    private(set) var usesSystemAppearance = true
+    private var lastPreferences: [[String: String]] = []
+    private var lastTeamId: String?
 
     private init() {}
 
     /// Applies the theme preference for the active team, falling back to the global one.
     func apply(preferences: [[String: String]], teamId: String?) {
+        lastPreferences = preferences
+        lastTeamId = teamId
         let themePreferences = preferences.filter { $0["category"] == "theme" }
         let teamKey = teamId ?? ""
         let preference = themePreferences.first { $0["name"] == teamKey }
@@ -366,9 +374,26 @@ final class ThemeManager {
         guard let raw = preference?["value"],
               let data = raw.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            theme = .denim
+            applySystemTheme()
             return
         }
+        if (json["type"] as? String)?.lowercased() == "system" {
+            applySystemTheme()
+            return
+        }
+        usesSystemAppearance = false
         theme = MMTheme(json: json)
+    }
+
+    /// Re-resolves a System theme after the macOS appearance changes.
+    func reapply() {
+        apply(preferences: lastPreferences, teamId: lastTeamId)
+    }
+
+    private func applySystemTheme() {
+        usesSystemAppearance = true
+        let appearance = NSApplication.shared.effectiveAppearance
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        theme = isDark ? .onyx : .denim
     }
 }

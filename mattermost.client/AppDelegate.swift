@@ -22,6 +22,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         DebugLog.info("Credentials: \(KeychainHelper.usesDebugCredentialStore ? "debug UserDefaults store (plaintext)" : "macOS Keychain")")
         setupMainMenu()
         installZoomGestureMonitor()
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard ThemeManager.shared.usesSystemAppearance else { return }
+            ThemeManager.shared.reapply()
+            self?.mainWindow?.refreshServerTheme(teamId: self?.mainWindow?.activeTeam?.id)
+        }
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(systemDidWake),
@@ -351,7 +360,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                     teamId = teams.first(where: { $0.id == savedTeamId })?.id ?? teams.first?.id
                 }
                 ThemeManager.shared.apply(preferences: preferences, teamId: teamId)
-                NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+                if ThemeManager.shared.usesSystemAppearance {
+                    NSApp.appearance = nil
+                } else {
+                    NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+                }
             }
             self.createMainWindow()
         }

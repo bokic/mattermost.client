@@ -42,6 +42,7 @@ class RoundedEdgePanel: NSView {
             setAccessibilityElement(onClick != nil)
             if onClick != nil {
                 setAccessibilityRole(.button)
+                focusRingType = .default
             }
             needsLayout = true
         }
@@ -50,6 +51,9 @@ class RoundedEdgePanel: NSView {
     /// Optional VoiceOver label; when nil the panel derives one from its first
     /// text label or image description.
     var accessibilityTitle: String?
+
+    /// Optional VoiceOver help text (for example “Opens the channel menu”).
+    var accessibilityHelp: String?
 
     private(set) var isHovered: Bool = false
 
@@ -157,6 +161,9 @@ class RoundedEdgePanel: NSView {
         }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
+        if let accessibilityHelp = accessibilityHelp, !accessibilityHelp.isEmpty {
+            setAccessibilityHelp(accessibilityHelp)
+        }
         if let accessibilityTitle = accessibilityTitle, !accessibilityTitle.isEmpty {
             setAccessibilityLabel(accessibilityTitle)
             return
@@ -167,11 +174,13 @@ class RoundedEdgePanel: NSView {
                 return
             }
             if let imageView = subview as? NSImageView,
-               let description = imageView.accessibilityLabel(), !description.isEmpty {
+               let description = imageView.image?.accessibilityDescription ?? imageView.accessibilityLabel(),
+               !description.isEmpty {
                 setAccessibilityLabel(description)
                 return
             }
         }
+        setAccessibilityLabel("Button")
     }
 
     /// Clickable panels are usually filled with `NSImageView`/label children. AppKit's

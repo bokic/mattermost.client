@@ -13,7 +13,7 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Check | Result |
 |---|---|
 | Clean build (`./build.sh`) | **Succeeds** |
-| Unit tests (`./test.sh`) | **54/54 pass** |
+| Unit tests (`./test.sh`) | **55/55 pass** |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
 | Deployment target | **macOS 14.0** (app and tests) |
@@ -33,8 +33,7 @@ performance.
 
 | # | Severity | Finding | Status |
 |---|---|---|---|
-| 15 | Medium | Accessibility and system dark-mode support | **Partial** — clickable panels expose button roles/labels, Space/Return activation and a focus ring; a full VoiceOver audit and system-appearance preference are still missing |
-| 16 | Medium | Duplicate source in the test target; limited coverage | **Partial** — 54 tests cover URL/JSON/WebSocket, model state, pagination, date separators, zoom, logging and errors; the test target still compiles copies of shared sources and has no coverage gate |
+| 16 | Medium | Duplicate source in the test target; limited coverage | **Partial** — 55 tests cover URL/JSON/WebSocket, model state, pagination, date separators, zoom, logging and errors; the test target still compiles copies of shared sources and has no coverage gate |
 
 Resolved findings and the previously verified feature list are preserved in git history.
 
@@ -53,12 +52,9 @@ Resolved findings and the previously verified feature list are preserved in git 
 
 ### Accessibility & localization
 
-- Custom `NSView` controls have basic button roles/labels and keyboard activation, but there has
-  been no VoiceOver, Full Keyboard Access or Increase Contrast audit. Some controls still have no
-  explicit label/help text.
+- Custom `NSView` controls now expose button roles/labels, help text, Space/Return activation and a
+  focus ring; run a VoiceOver/Full Keyboard Access/Increase Contrast audit to close remaining gaps.
 - UI strings remain hardcoded English; only dates/number formatting follow the system locale.
-- Dark mode follows the server theme rather than the system `effectiveAppearance`. Consider a
-  system-appearance preference for servers that have no theme preference.
 
 ### Tests
 
@@ -97,7 +93,7 @@ Resolved findings and the previously verified feature list are preserved in git 
 
 ```bash
 ./build.sh     # clean build, zero warnings
-./test.sh      # 54 tests
+./test.sh      # 55 tests
 ./lint.sh      # swift-format --strict on migrated files
 ```
 

@@ -765,6 +765,8 @@ extension MainWindow {
             iconView?.contentTintColor = isHovered ? Theme.shared.sidebarText : defaultTint
         }
         panel.onClick = onClick
+        panel.accessibilityTitle = accessibilityDescription
+        panel.accessibilityHelp = accessibilityDescription
         contentView?.addSubview(panel)
     }
 }

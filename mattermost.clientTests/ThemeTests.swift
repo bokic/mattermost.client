@@ -68,4 +68,18 @@ final class ThemeTests: XCTestCase {
         // Unknown team falls back to the global preference (Denim).
         ThemeManager.shared.apply(preferences: [], teamId: nil)
     }
+
+    func testSystemThemeFollowsSystemAppearance() {
+        let preferences: [[String: String]] = [
+            ["category": "theme", "name": "", "value": #"{"type":"System"}"#]
+        ]
+        ThemeManager.shared.apply(preferences: preferences, teamId: nil)
+        XCTAssertTrue(ThemeManager.shared.usesSystemAppearance)
+
+        ThemeManager.shared.apply(
+            preferences: [["category": "theme", "name": "", "value": #"{"type":"Denim"}"#]],
+            teamId: nil
+        )
+        XCTAssertFalse(ThemeManager.shared.usesSystemAppearance)
+    }
 }

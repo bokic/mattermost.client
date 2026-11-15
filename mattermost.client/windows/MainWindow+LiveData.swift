@@ -648,7 +648,11 @@ extension MainWindow {
             guard let userId = me?.id,
                   let preferences = try? await ws.fetchUserPreferences(userId: userId) else { return }
             ThemeManager.shared.apply(preferences: preferences, teamId: teamId)
-            NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+            if ThemeManager.shared.usesSystemAppearance {
+                NSApp.appearance = nil
+            } else {
+                NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+            }
             self.backgroundColor = Theme.shared.sidebarTeamBarBg
             self.mainPanel.color = Theme.shared.sidebarBg
             self.chatPanel.color = Theme.shared.centerBg
