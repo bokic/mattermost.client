@@ -132,7 +132,8 @@ extension MainWindow {
                 linkPreviewImageLoading.insert(key)
                 Task { @MainActor [weak imageView] in
                     defer { self.linkPreviewImageLoading.remove(key) }
-                    if let image = await LinkPreviewService.fetchImage(url: imageURL) {
+                    if let data = await LinkPreviewService.fetchImageData(url: imageURL),
+                       let image = NSImage(data: data) {
                         self.linkPreviewImages[key] = image
                         imageView?.image = image
                     }

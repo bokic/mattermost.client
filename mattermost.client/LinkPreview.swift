@@ -172,7 +172,7 @@ enum LinkPreviewService {
         }
     }
 
-    static func fetchImage(url: URL) async -> NSImage? {
+    static func fetchImageData(url: URL) async -> Data? {
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         let configuration = URLSessionConfiguration.ephemeral
@@ -185,6 +185,6 @@ enum LinkPreviewService {
               (200...299).contains(http.statusCode),
               data.count <= 4 * 1024 * 1024
         else { return nil }
-        return NSImage(data: data)
+        return data
     }
 }
