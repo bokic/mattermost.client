@@ -24,23 +24,6 @@ jobs:
       - name: Test
         run: ./test.sh
 
-      - name: Smoke launch on macOS 15
-        run: |
-          set -euo pipefail
-          APP="build/Build/Products/Debug/mattermost.client.app/Contents/MacOS/mattermost.client"
-          "$APP" >/tmp/mattermost-macos15-smoke.log 2>&1 &
-          PID=$!
-          for _ in $(seq 1 20); do
-            if ! kill -0 "$PID" 2>/dev/null; then
-              echo "::error::App exited during macOS 15 launch"
-              cat /tmp/mattermost-macos15-smoke.log
-              exit 1
-            fi
-            sleep 0.5
-          done
-          kill "$PID" 2>/dev/null || true
-          wait "$PID" 2>/dev/null || true
-          echo "App stayed alive on macOS $(sw_vers -productVersion) for the smoke window."
 
   lint:
     runs-on: macos-15

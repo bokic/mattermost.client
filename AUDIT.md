@@ -43,8 +43,8 @@ None. Resolved findings and the previously verified feature list are preserved i
   `notarytool` submission/stapling and checksums, and `RELEASE.md` documents the process. A real
   notarized artifact still has to be produced with the Developer ID certificate and notary
   credentials and verified with `spctl` on a clean machine.
-- CI builds, tests and smoke-launches the app on macOS 15; a notarized Release DMG still needs
-  verification on a clean machine.
+- CI builds and tests the app on macOS 15; a notarized Release DMG still needs verification on a
+  clean machine.
 
 ---
 
