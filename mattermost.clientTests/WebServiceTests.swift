@@ -395,8 +395,25 @@ final class WebServiceTests: XCTestCase {
         )
     }
 
-    func testDecodeFileSearchResult() throws {
+    func testDecodeCustomEmoji() throws {
         let json = """
+        {
+            "id": "emoji123",
+            "name": "party_parrot",
+            "creator_id": "u12345",
+            "create_at": 1794702804589,
+            "update_at": 1794702804589,
+            "delete_at": 0
+        }
+        """.data(using: .utf8)!
+
+        let emoji = try JSONDecoder().decode(MMEmoji.self, from: json)
+        XCTAssertEqual(emoji.id, "emoji123")
+        XCTAssertEqual(emoji.name, "party_parrot")
+        XCTAssertEqual(emoji.creator_id, "u12345")
+    }
+
+    func testDecodeFileSearchResult() throws {        let json = """
         {
             "order": ["file_image", "file_text"],
             "file_infos": {

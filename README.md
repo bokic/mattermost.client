@@ -35,7 +35,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Threads**: Right-hand thread view with the root post, grouped replies, and an inline reply composer.
 - **Rich Text**: Bold/italic/strike, fenced and inline code with tinted backgrounds, highlighted `@mentions`, clickable `~channel` links, expanded `:emoji:` shortcodes, inline images and external links.
 - **Localized Dates**: Timestamps, date separators and panel rows use the system locale and 24-hour setting, with relative Today/Yesterday labels.
-- **Message Composer**: Single-row composer matching the web client (2 pt translucent border, 4 pt radius, 50 pt editor plus a 24 pt `Help` footer), with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), an emoji picker, `NSOpenPanel` attachment upload (`POST /files` + `file_ids`), and a 48×32 *Send* button.
+- **Message Composer**: Single-row composer matching the web client (2 pt translucent border, 4 pt radius, 50 pt editor plus a 24 pt `Help` footer), with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), a web-style emoji picker (categories, search, persisted recents and server custom emojis), `NSOpenPanel` attachment upload (`POST /files` + `file_ids`), and a 48×32 *Send* button.
 - **Typography**: Bundles Open Sans (SIL OFL 1.1, see `mattermost.client/OpenSans-OFL.txt`) and registers it at launch so text metrics match the web client instead of falling back to the system font.
 
 ### 4. Live REST API v4 & Real-Time WebSockets

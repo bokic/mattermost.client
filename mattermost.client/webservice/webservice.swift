@@ -151,6 +151,12 @@ struct MMFileSearchResult: Decodable {
     let prev_file_info_id: String?
 }
 
+struct MMEmoji: Decodable {
+    let id: String
+    let name: String
+    let creator_id: String?
+}
+
 struct MMReaction: Codable {
     let user_id: String?
     let post_id: String?
@@ -980,6 +986,31 @@ final class WebService: NSObject {
             ]
         )
         return result.order.compactMap { result.file_infos[$0] }
+    }
+
+    /// Custom emoji uploaded to the server.
+    func fetchCustomEmojis(page: Int = 0, perPage: Int = 200) async throws -> [MMEmoji] {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/emoji",
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage)),
+                URLQueryItem(name: "sort", value: "name")
+            ]
+        )
+    }
+
+    func fetchEmojiImage(emojiId: String) async throws -> Data {
+        guard let url = buildURL(path: "/api/v4/emoji/\(emojiId)/image") else {
+            throw WebServiceError.invalidHostname
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
+        }
+        return data
     }
 
     // MARK: - Reactions

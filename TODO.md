@@ -314,7 +314,22 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Also fixed the welcome hero description to wrap instead of truncating long DM intros.
   - Verified DM creation end-to-end against the live server (test1234) and the picker/search UI;
     22 tests pass.
-- [ ] **Emoji picker** (server emoji list + recent) — `M`
+- [x] **Emoji picker** (server emoji list + recent) — `M`
+  - Replaced the fixed 40-emoji palette with a web-metric picker: 350×440pt white panel,
+    4pt radius, 1pt `rgba(63,67,80,0.2)` border and an `0 8px 24px` shadow.
+  - Added a search field and a category bar with Recent plus Smileys & Emotion, People & Body,
+    Animals & Nature, Food & Drink, Travel & Places, Activities, Objects, Symbols and Flags.
+    Categories render as 9×36pt grids with 36pt cells, 12pt uppercase headers and the web's
+    blue-selected / 64%-gray idle category styling.
+  - Recent emojis are stored in `UserDefaults` (`recentEmojis`, newest first, max 18) and appear
+    as the first category once something has been selected.
+  - Custom server emoji are loaded from `GET /api/v4/emoji` and their images from
+    `/api/v4/emoji/{id}/image`; they appear in a Custom category and insert `:name:` shortcodes.
+    Custom emoji now render as 18pt inline attachments in message bodies.
+  - Search filters all standard and custom emoji by shortcode; the selected emoji is inserted into
+    the composer and recorded as recent, and the panel closes.
+  - Verified with screenshots of the Smileys, People, Recent and search states. This server has no
+    custom emoji, so the Custom category is hidden until the API returns results. 23 tests pass.
 - [ ] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`
 - [ ] **Keyboard shortcuts**: ⌘K search, ⌘F in-channel search, `Esc` to close overlays, `↑` to edit
       last message, focus traversal between sidebar/timeline/composer — `M`

@@ -123,6 +123,429 @@ private class FileTypeIconView: NSView {
     }
 }
 
+private struct EmojiEntry {
+    let name: String
+    let glyph: String
+    let category: String
+    let isCustom: Bool
+    var emojiId: String?
+}
+
+/// Bundled standard emoji used by the composer picker, grouped like the web client.
+private enum EmojiCatalog {
+    static let categories: [(title: String, symbol: String)] = [
+        ("Recent", "clock"),
+        ("Smileys & Emotion", "face.smiling"),
+        ("People & Body", "hand.wave"),
+        ("Animals & Nature", "pawprint"),
+        ("Food & Drink", "fork.knife"),
+        ("Travel & Places", "car"),
+        ("Activities", "soccerball"),
+        ("Objects", "lightbulb"),
+        ("Symbols", "heart"),
+        ("Flags", "flag"),
+        ("Custom", "star.square")
+    ]
+
+    static let entries: [EmojiEntry] = {
+        let data: [(String, String, String)] = [
+            // Smileys & Emotion
+            ("grinning", "😀", "Smileys & Emotion"),
+            ("smiley", "😃", "Smileys & Emotion"),
+            ("smile", "😄", "Smileys & Emotion"),
+            ("grin", "😁", "Smileys & Emotion"),
+            ("laughing", "😆", "Smileys & Emotion"),
+            ("sweat_smile", "😅", "Smileys & Emotion"),
+            ("rofl", "🤣", "Smileys & Emotion"),
+            ("joy", "😂", "Smileys & Emotion"),
+            ("slightly_smiling_face", "🙂", "Smileys & Emotion"),
+            ("upside_down_face", "🙃", "Smileys & Emotion"),
+            ("wink", "😉", "Smileys & Emotion"),
+            ("blush", "😊", "Smileys & Emotion"),
+            ("innocent", "😇", "Smileys & Emotion"),
+            ("smiling_face_with_3_hearts", "🥰", "Smileys & Emotion"),
+            ("heart_eyes", "😍", "Smileys & Emotion"),
+            ("star_struck", "🤩", "Smileys & Emotion"),
+            ("kissing_heart", "😘", "Smileys & Emotion"),
+            ("yum", "😋", "Smileys & Emotion"),
+            ("stuck_out_tongue", "😛", "Smileys & Emotion"),
+            ("zany_face", "🤪", "Smileys & Emotion"),
+            ("face_with_raised_eyebrow", "🤨", "Smileys & Emotion"),
+            ("monocle_face", "🧐", "Smileys & Emotion"),
+            ("nerd_face", "🤓", "Smileys & Emotion"),
+            ("sunglasses", "😎", "Smileys & Emotion"),
+            ("partying_face", "🥳", "Smileys & Emotion"),
+            ("smirk", "😏", "Smileys & Emotion"),
+            ("unamused", "😒", "Smileys & Emotion"),
+            ("pleading_face", "🥺", "Smileys & Emotion"),
+            ("cry", "😢", "Smileys & Emotion"),
+            ("sob", "😭", "Smileys & Emotion"),
+            ("scream", "😱", "Smileys & Emotion"),
+            ("thinking_face", "🤔", "Smileys & Emotion"),
+            ("sleeping", "😴", "Smileys & Emotion"),
+            ("mask", "😷", "Smileys & Emotion"),
+            ("nauseated_face", "🤢", "Smileys & Emotion"),
+            ("hot_face", "🥵", "Smileys & Emotion"),
+            ("cold_face", "🥶", "Smileys & Emotion"),
+            ("exploding_head", "🤯", "Smileys & Emotion"),
+            ("cowboy_hat_face", "🤠", "Smileys & Emotion"),
+            ("ghost", "👻", "Smileys & Emotion"),
+            ("alien", "👽", "Smileys & Emotion"),
+            ("robot", "🤖", "Smileys & Emotion"),
+            ("poop", "💩", "Smileys & Emotion"),
+            ("clown_face", "🤡", "Smileys & Emotion"),
+
+            // People & Body
+            ("wave", "👋", "People & Body"),
+            ("raised_hand", "✋", "People & Body"),
+            ("raised_back_of_hand", "🤚", "People & Body"),
+            ("vulcan_salute", "🖖", "People & Body"),
+            ("ok_hand", "👌", "People & Body"),
+            ("pinched_fingers", "🤌", "People & Body"),
+            ("victory", "✌️", "People & Body"),
+            ("crossed_fingers", "🤞", "People & Body"),
+            ("love_you_gesture", "🤟", "People & Body"),
+            ("metal", "🤘", "People & Body"),
+            ("call_me_hand", "🤙", "People & Body"),
+            ("point_left", "👈", "People & Body"),
+            ("point_right", "👉", "People & Body"),
+            ("point_up", "☝️", "People & Body"),
+            ("point_down", "👇", "People & Body"),
+            ("thumbsup", "👍", "People & Body"),
+            ("thumbsdown", "👎", "People & Body"),
+            ("fist", "✊", "People & Body"),
+            ("facepunch", "👊", "People & Body"),
+            ("clap", "👏", "People & Body"),
+            ("raised_hands", "🙌", "People & Body"),
+            ("open_hands", "👐", "People & Body"),
+            ("handshake", "🤝", "People & Body"),
+            ("pray", "🙏", "People & Body"),
+            ("writing_hand", "✍️", "People & Body"),
+            ("nail_care", "💅", "People & Body"),
+            ("muscle", "💪", "People & Body"),
+            ("ear", "👂", "People & Body"),
+            ("nose", "👃", "People & Body"),
+            ("brain", "🧠", "People & Body"),
+            ("eyes", "👀", "People & Body"),
+            ("eye", "👁️", "People & Body"),
+            ("tongue", "👅", "People & Body"),
+            ("lips", "👄", "People & Body"),
+            ("baby", "👶", "People & Body"),
+            ("boy", "👦", "People & Body"),
+            ("girl", "👧", "People & Body"),
+            ("man", "👨", "People & Body"),
+            ("woman", "👩", "People & Body"),
+            ("older_man", "👴", "People & Body"),
+            ("older_woman", "👵", "People & Body"),
+            ("shrug", "🤷", "People & Body"),
+            ("princess", "👸", "People & Body"),
+            ("superhero", "🦸", "People & Body"),
+            ("mage", "🧙", "People & Body"),
+            ("fairy", "🧚", "People & Body"),
+            ("santa", "🎅", "People & Body"),
+            ("runner", "🏃", "People & Body"),
+            ("dancer", "💃", "People & Body"),
+
+            // Animals & Nature
+            ("dog", "🐶", "Animals & Nature"),
+            ("cat", "🐱", "Animals & Nature"),
+            ("mouse", "🐭", "Animals & Nature"),
+            ("hamster", "🐹", "Animals & Nature"),
+            ("rabbit", "🐰", "Animals & Nature"),
+            ("fox_face", "🦊", "Animals & Nature"),
+            ("bear", "🐻", "Animals & Nature"),
+            ("panda_face", "🐼", "Animals & Nature"),
+            ("koala", "🐨", "Animals & Nature"),
+            ("tiger", "🐯", "Animals & Nature"),
+            ("lion", "🦁", "Animals & Nature"),
+            ("cow", "🐮", "Animals & Nature"),
+            ("pig", "🐷", "Animals & Nature"),
+            ("frog", "🐸", "Animals & Nature"),
+            ("monkey", "🐵", "Animals & Nature"),
+            ("see_no_evil", "🙈", "Animals & Nature"),
+            ("hear_no_evil", "🙉", "Animals & Nature"),
+            ("speak_no_evil", "🙊", "Animals & Nature"),
+            ("unicorn", "🦄", "Animals & Nature"),
+            ("bee", "🐝", "Animals & Nature"),
+            ("butterfly", "🦋", "Animals & Nature"),
+            ("snail", "🐌", "Animals & Nature"),
+            ("bug", "🐛", "Animals & Nature"),
+            ("ant", "🐜", "Animals & Nature"),
+            ("lady_beetle", "🐞", "Animals & Nature"),
+            ("turtle", "🐢", "Animals & Nature"),
+            ("snake", "🐍", "Animals & Nature"),
+            ("octopus", "🐙", "Animals & Nature"),
+            ("fish", "🐟", "Animals & Nature"),
+            ("tropical_fish", "🐠", "Animals & Nature"),
+            ("dolphin", "🐬", "Animals & Nature"),
+            ("whale", "🐳", "Animals & Nature"),
+            ("shark", "🦈", "Animals & Nature"),
+            ("crocodile", "🐊", "Animals & Nature"),
+            ("leopard", "🐆", "Animals & Nature"),
+            ("zebra", "🦓", "Animals & Nature"),
+            ("gorilla", "🦍", "Animals & Nature"),
+            ("elephant", "🐘", "Animals & Nature"),
+            ("eagle", "🦅", "Animals & Nature"),
+            ("owl", "🦉", "Animals & Nature"),
+            ("parrot", "🦜", "Animals & Nature"),
+            ("penguin", "🐧", "Animals & Nature"),
+            ("bird", "🐦", "Animals & Nature"),
+            ("duck", "🦆", "Animals & Nature"),
+            ("swan", "🦢", "Animals & Nature"),
+            ("flamingo", "🦩", "Animals & Nature"),
+            ("peacock", "🦚", "Animals & Nature"),
+            ("turkey", "🦃", "Animals & Nature"),
+            ("rooster", "🐓", "Animals & Nature"),
+            ("hatching_chick", "🐣", "Animals & Nature"),
+
+            // Food & Drink
+            ("apple", "🍎", "Food & Drink"),
+            ("green_apple", "🍏", "Food & Drink"),
+            ("pear", "🍐", "Food & Drink"),
+            ("tangerine", "🍊", "Food & Drink"),
+            ("lemon", "🍋", "Food & Drink"),
+            ("cherries", "🍒", "Food & Drink"),
+            ("grapes", "🍇", "Food & Drink"),
+            ("watermelon", "🍉", "Food & Drink"),
+            ("strawberry", "🍓", "Food & Drink"),
+            ("peach", "🍑", "Food & Drink"),
+            ("melon", "🍈", "Food & Drink"),
+            ("banana", "🍌", "Food & Drink"),
+            ("pineapple", "🍍", "Food & Drink"),
+            ("mango", "🥭", "Food & Drink"),
+            ("avocado", "🥑", "Food & Drink"),
+            ("tomato", "🍅", "Food & Drink"),
+            ("eggplant", "🍆", "Food & Drink"),
+            ("potato", "🥔", "Food & Drink"),
+            ("carrot", "🥕", "Food & Drink"),
+            ("corn", "🌽", "Food & Drink"),
+            ("hot_pepper", "🌶️", "Food & Drink"),
+            ("cucumber", "🥒", "Food & Drink"),
+            ("broccoli", "🥦", "Food & Drink"),
+            ("mushroom", "🍄", "Food & Drink"),
+            ("bread", "🍞", "Food & Drink"),
+            ("cheese", "🧀", "Food & Drink"),
+            ("egg", "🥚", "Food & Drink"),
+            ("bacon", "🥓", "Food & Drink"),
+            ("hamburger", "🍔", "Food & Drink"),
+            ("fries", "🍟", "Food & Drink"),
+            ("pizza", "🍕", "Food & Drink"),
+            ("hotdog", "🌭", "Food & Drink"),
+            ("taco", "🌮", "Food & Drink"),
+            ("burrito", "🌯", "Food & Drink"),
+            ("cake", "🍰", "Food & Drink"),
+            ("birthday", "🎂", "Food & Drink"),
+            ("cookie", "🍪", "Food & Drink"),
+            ("doughnut", "🍩", "Food & Drink"),
+            ("icecream", "🍦", "Food & Drink"),
+            ("coffee", "☕", "Food & Drink"),
+            ("tea", "🍵", "Food & Drink"),
+            ("beer", "🍺", "Food & Drink"),
+            ("beers", "🍻", "Food & Drink"),
+            ("wine_glass", "🍷", "Food & Drink"),
+            ("cocktail", "🍸", "Food & Drink"),
+            ("tropical_drink", "🍹", "Food & Drink"),
+            ("milk_glass", "🥛", "Food & Drink"),
+
+            // Travel & Places
+            ("car", "🚗", "Travel & Places"),
+            ("taxi", "🚕", "Travel & Places"),
+            ("bus", "🚌", "Travel & Places"),
+            ("train", "🚆", "Travel & Places"),
+            ("airplane", "✈️", "Travel & Places"),
+            ("rocket", "🚀", "Travel & Places"),
+            ("ship", "🚢", "Travel & Places"),
+            ("boat", "⛵", "Travel & Places"),
+            ("anchor", "⚓", "Travel & Places"),
+            ("bicycle", "🚲", "Travel & Places"),
+            ("motorcycle", "🏍️", "Travel & Places"),
+            ("traffic_light", "🚦", "Travel & Places"),
+            ("construction", "🚧", "Travel & Places"),
+            ("house", "🏠", "Travel & Places"),
+            ("office", "🏢", "Travel & Places"),
+            ("school", "🏫", "Travel & Places"),
+            ("hospital", "🏥", "Travel & Places"),
+            ("bank", "🏦", "Travel & Places"),
+            ("hotel", "🏨", "Travel & Places"),
+            ("tent", "⛺", "Travel & Places"),
+            ("camping", "🏕️", "Travel & Places"),
+            ("mountain", "⛰️", "Travel & Places"),
+            ("beach", "🏖️", "Travel & Places"),
+            ("desert", "🏜️", "Travel & Places"),
+            ("island", "🏝️", "Travel & Places"),
+            ("sunrise", "🌅", "Travel & Places"),
+            ("cityscape", "🏙️", "Travel & Places"),
+            ("bridge", "🌉", "Travel & Places"),
+            ("statue_of_liberty", "🗽", "Travel & Places"),
+            ("ferris_wheel", "🎡", "Travel & Places"),
+            ("roller_coaster", "🎢", "Travel & Places"),
+            ("carousel_horse", "🎠", "Travel & Places"),
+
+            // Activities
+            ("soccer", "⚽", "Activities"),
+            ("basketball", "🏀", "Activities"),
+            ("football", "🏈", "Activities"),
+            ("baseball", "⚾", "Activities"),
+            ("tennis", "🎾", "Activities"),
+            ("volleyball", "🏐", "Activities"),
+            ("rugby_football", "🏉", "Activities"),
+            ("golf", "🏌️", "Activities"),
+            ("trophy", "🏆", "Activities"),
+            ("medal", "🏅", "Activities"),
+            ("dart", "🎯", "Activities"),
+            ("bowling", "🎳", "Activities"),
+            ("video_game", "🎮", "Activities"),
+            ("game_die", "🎲", "Activities"),
+            ("chess_pawn", "♟️", "Activities"),
+            ("art", "🎨", "Activities"),
+            ("musical_note", "🎵", "Activities"),
+            ("notes", "🎶", "Activities"),
+            ("guitar", "🎸", "Activities"),
+            ("violin", "🎻", "Activities"),
+            ("drum", "🥁", "Activities"),
+            ("microphone", "🎤", "Activities"),
+            ("headphones", "🎧", "Activities"),
+            ("ticket", "🎫", "Activities"),
+            ("popcorn", "🍿", "Activities"),
+            ("circus_tent", "🎪", "Activities"),
+            ("magic_wand", "🪄", "Activities"),
+            ("puzzle", "🧩", "Activities"),
+
+            // Objects
+            ("computer", "💻", "Objects"),
+            ("desktop_computer", "🖥️", "Objects"),
+            ("keyboard", "⌨️", "Objects"),
+            ("printer", "🖨️", "Objects"),
+            ("phone", "☎️", "Objects"),
+            ("iphone", "📱", "Objects"),
+            ("camera", "📷", "Objects"),
+            ("video_camera", "📹", "Objects"),
+            ("tv", "📺", "Objects"),
+            ("radio", "📻", "Objects"),
+            ("bulb", "💡", "Objects"),
+            ("flashlight", "🔦", "Objects"),
+            ("hammer", "🔨", "Objects"),
+            ("wrench", "🔧", "Objects"),
+            ("screwdriver", "🪛", "Objects"),
+            ("gear", "⚙️", "Objects"),
+            ("lock", "🔒", "Objects"),
+            ("unlock", "🔓", "Objects"),
+            ("key", "🔑", "Objects"),
+            ("door", "🚪", "Objects"),
+            ("couch", "🛋️", "Objects"),
+            ("bed", "🛏️", "Objects"),
+            ("toilet", "🚽", "Objects"),
+            ("shower", "🚿", "Objects"),
+            ("bathtub", "🛁", "Objects"),
+            ("soap", "🧼", "Objects"),
+            ("broom", "🧹", "Objects"),
+            ("basket", "🧺", "Objects"),
+            ("package", "📦", "Objects"),
+            ("mailbox", "📫", "Objects"),
+            ("calendar", "📅", "Objects"),
+            ("clipboard", "📋", "Objects"),
+            ("file_folder", "📁", "Objects"),
+            ("books", "📚", "Objects"),
+            ("bookmark", "🔖", "Objects"),
+            ("pencil2", "✏️", "Objects"),
+            ("paperclip", "📎", "Objects"),
+            ("scissors", "✂️", "Objects"),
+            ("hourglass", "⌛", "Objects"),
+            ("watch", "⌚", "Objects"),
+            ("alarm_clock", "⏰", "Objects"),
+            ("thermometer", "🌡️", "Objects"),
+            ("pill", "💊", "Objects"),
+            ("microscope", "🔬", "Objects"),
+            ("telescope", "🔭", "Objects"),
+            ("satellite", "📡", "Objects"),
+            ("battery", "🔋", "Objects"),
+            ("electric_plug", "🔌", "Objects"),
+            ("magnet", "🧲", "Objects"),
+
+            // Symbols
+            ("heart", "❤️", "Symbols"),
+            ("orange_heart", "🧡", "Symbols"),
+            ("yellow_heart", "💛", "Symbols"),
+            ("green_heart", "💚", "Symbols"),
+            ("blue_heart", "💙", "Symbols"),
+            ("purple_heart", "💜", "Symbols"),
+            ("black_heart", "🖤", "Symbols"),
+            ("white_heart", "🤍", "Symbols"),
+            ("broken_heart", "💔", "Symbols"),
+            ("two_hearts", "💕", "Symbols"),
+            ("sparkling_heart", "💖", "Symbols"),
+            ("heartpulse", "💗", "Symbols"),
+            ("heartbeat", "💓", "Symbols"),
+            ("cupid", "💘", "Symbols"),
+            ("gift_heart", "💝", "Symbols"),
+            ("star", "⭐", "Symbols"),
+            ("star2", "🌟", "Symbols"),
+            ("sparkles", "✨", "Symbols"),
+            ("zap", "⚡", "Symbols"),
+            ("boom", "💥", "Symbols"),
+            ("fire", "🔥", "Symbols"),
+            ("snowflake", "❄️", "Symbols"),
+            ("droplet", "💧", "Symbols"),
+            ("ocean", "🌊", "Symbols"),
+            ("rainbow", "🌈", "Symbols"),
+            ("sunny", "☀️", "Symbols"),
+            ("cloud", "☁️", "Symbols"),
+            ("umbrella", "☔", "Symbols"),
+            ("snowman", "⛄", "Symbols"),
+            ("comet", "☄️", "Symbols"),
+            ("earth_americas", "🌎", "Symbols"),
+            ("earth_africa", "🌍", "Symbols"),
+            ("earth_asia", "🌏", "Symbols"),
+            ("full_moon", "🌕", "Symbols"),
+            ("new_moon", "🌑", "Symbols"),
+            ("crescent_moon", "🌙", "Symbols"),
+            ("sun_with_face", "🌞", "Symbols"),
+            ("warning", "⚠️", "Symbols"),
+            ("no_entry", "⛔", "Symbols"),
+            ("white_check_mark", "✅", "Symbols"),
+            ("x", "❌", "Symbols"),
+            ("heavy_check_mark", "✔️", "Symbols"),
+            ("ballot_box_with_check", "☑️", "Symbols"),
+            ("question", "❓", "Symbols"),
+            ("exclamation", "❗", "Symbols"),
+            ("100", "💯", "Symbols"),
+            ("sos", "🆘", "Symbols"),
+            ("recycle", "♻️", "Symbols"),
+            ("arrow_up", "⬆️", "Symbols"),
+            ("arrow_down", "⬇️", "Symbols"),
+            ("arrow_left", "⬅️", "Symbols"),
+            ("arrow_right", "➡️", "Symbols"),
+
+            // Flags
+            ("checkered_flag", "🏁", "Flags"),
+            ("triangular_flag_on_post", "🚩", "Flags"),
+            ("crossed_flags", "🎌", "Flags"),
+            ("flag_us", "🇺🇸", "Flags"),
+            ("flag_gb", "🇬🇧", "Flags"),
+            ("flag_de", "🇩🇪", "Flags"),
+            ("flag_fr", "🇫🇷", "Flags"),
+            ("flag_it", "🇮🇹", "Flags"),
+            ("flag_es", "🇪🇸", "Flags"),
+            ("flag_jp", "🇯🇵", "Flags"),
+            ("flag_cn", "🇨🇳", "Flags"),
+            ("flag_ru", "🇷🇺", "Flags"),
+            ("flag_in", "🇮🇳", "Flags"),
+            ("flag_au", "🇦🇺", "Flags"),
+            ("flag_ca", "🇨🇦", "Flags"),
+            ("flag_br", "🇧🇷", "Flags"),
+            ("flag_mx", "🇲🇽", "Flags"),
+            ("flag_kr", "🇰🇷", "Flags"),
+            ("flag_eu", "🇪🇺", "Flags"),
+            ("flag_un", "🇺🇳", "Flags")
+        ]
+        return data.map { EmojiEntry(name: $0.0, glyph: $0.1, category: $0.2, isCustom: false) }
+    }()
+
+    static let entriesByName: [String: EmojiEntry] = {
+        Dictionary(uniqueKeysWithValues: entries.map { ($0.name, $0) })
+    }()
+}
+
 private class TimelineScrollView: NSScrollView {
     var onScrollWheel: (() -> Void)?
 
@@ -306,6 +729,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     // Composer emoji picker
     let emojiPanel = RoundedEdgePanel()
     private var isEmojiPanelOpen = false
+    let emojiSearchField = NSSearchField()
+    let emojiScroll = NSScrollView()
+    let emojiDoc = TimelineFlippedView()
+    let emojiCategoryBar = NSView()
+    private var customEmojiEntries: [EmojiEntry] = []
+    private var customEmojiImages: [String: NSImage] = [:]
+    private var recentEmojiNames: [String] = []
+    private var emojiSelectedCategory = "Recent"
+    private var isCustomEmojiLoaded = false
+    private var emojiCategoryBarButtons: [String: RoundedEdgePanel] = [:]
     
     // Sidebar filter menu
     let filterMenu = RoundedEdgePanel()
@@ -4595,60 +5028,265 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     private func setupEmojiPanel() {
-        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
         emojiPanel.color = .white
-        emojiPanel.cornerRadius = 8
+        emojiPanel.cornerRadius = 4
         emojiPanel.borderWidth = 1
-        emojiPanel.borderColor = dividerColor
+        emojiPanel.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
         emojiPanel.shadowColor = .black
-        emojiPanel.shadowOpacity = 0.18
-        emojiPanel.shadowRadius = 12
-        emojiPanel.shadowOffset = CGSize(width: 0, height: -4)
+        emojiPanel.shadowOpacity = 0.12
+        emojiPanel.shadowRadius = 24
+        emojiPanel.shadowOffset = CGSize(width: 0, height: -8)
+        emojiPanel.clipContentToBounds = true
         emojiPanel.isHidden = true
-        
-        let emojis: [String] = [
-            "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣",
-            "😊", "😇", "🙂", "😉", "😍", "🥰", "😘", "😋",
-            "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🥳", "😏",
-            "😒", "😞", "😔", "😟", "😕", "🙁", "😣", "😖",
-            "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "👍"
-        ]
-        let cell: CGFloat = 32
+        emojiPanel.appearance = NSAppearance(named: .aqua)
+
+        emojiSearchField.placeholderString = "Search"
+        emojiSearchField.font = MMFont.font(ofSize: 13)
+        emojiSearchField.delegate = self
+        emojiSearchField.sendsSearchStringImmediately = true
+        emojiSearchField.appearance = NSAppearance(named: .aqua)
+        emojiPanel.addSubview(emojiSearchField)
+
+        emojiCategoryBar.frame = NSRect(x: 0, y: 366, width: 350, height: 28)
+        emojiPanel.addSubview(emojiCategoryBar)
+
+        emojiScroll.drawsBackground = false
+        emojiScroll.hasVerticalScroller = true
+        emojiScroll.autohidesScrollers = true
+        emojiScroll.documentView = emojiDoc
+        emojiScroll.frame = NSRect(x: 0, y: 0, width: 350, height: 358)
+        emojiPanel.addSubview(emojiScroll)
+
+        recentEmojiNames = UserDefaults.standard.stringArray(forKey: "recentEmojis") ?? []
+        buildEmojiCategoryBar()
+        emojiPanel.frame = NSRect(x: 0, y: 0, width: 350, height: 440)
+    }
+
+    private func buildEmojiCategoryBar() {
+        emojiCategoryBar.subviews.forEach { $0.removeFromSuperview() }
+        emojiCategoryBarButtons.removeAll()
+
+        let titles = EmojiCatalog.categories.filter { category in
+            if category.title == "Recent" { return !recentEmojiNames.isEmpty }
+            if category.title == "Custom" { return !customEmojiEntries.isEmpty }
+            return true
+        }
+
+        let buttonSize: CGFloat = 24
         let gap: CGFloat = 4
-        let margin: CGFloat = 8
-        for (index, emoji) in emojis.enumerated() {
-            let column = index % 8
-            let row = index / 8
+        let margin: CGFloat = 10
+        var x = margin
+        for category in titles {
             let button = RoundedEdgePanel()
             button.cornerRadius = 4
             button.color = .clear
-            button.frame = NSRect(
-                x: margin + CGFloat(column) * (cell + gap),
-                y: margin + CGFloat(4 - row) * (cell + gap),
-                width: cell,
-                height: cell
-            )
-            let label = NSTextField(labelWithString: emoji)
-            label.font = MMFont.font(ofSize: 20)
+            button.frame = NSRect(x: x, y: 2, width: buttonSize, height: buttonSize)
+            let icon = NSImageView()
+            if let image = NSImage(systemSymbolName: category.symbol, accessibilityDescription: category.title) {
+                icon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+            }
+            icon.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+            button.addSubview(icon)
+            let title = category.title
+            button.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.emojiSelectedCategory = title
+                self.updateEmojiCategorySelection()
+                self.renderEmojiGrid()
+            }
+            button.onHoverChanged = { [weak self, weak button] isHovered in
+                guard let self = self, let button = button else { return }
+                if self.emojiSelectedCategory != title, isHovered {
+                    button.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.06)
+                } else if self.emojiSelectedCategory != title {
+                    button.color = .clear
+                }
+                button.setNeedsAppearanceUpdate()
+            }
+            emojiCategoryBar.addSubview(button)
+            emojiCategoryBarButtons[title] = button
+            x += buttonSize + gap
+        }
+
+        if !titles.contains(where: { $0.title == emojiSelectedCategory }) {
+            emojiSelectedCategory = titles.first?.title ?? "Smileys & Emotion"
+        }
+        updateEmojiCategorySelection()
+    }
+
+    private func updateEmojiCategorySelection() {
+        let selectedBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        let idle = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+        for (title, button) in emojiCategoryBarButtons {
+            let isSelected = title == emojiSelectedCategory
+            button.color = isSelected
+                ? NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
+                : .clear
+            button.subviews.compactMap { $0 as? NSImageView }.forEach {
+                $0.contentTintColor = isSelected ? selectedBlue : idle
+            }
+            button.setNeedsAppearanceUpdate()
+        }
+    }
+
+    private func emojiEntriesForSelection() -> (title: String, entries: [EmojiEntry]) {
+        let query = emojiSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !query.isEmpty {
+            let all = EmojiCatalog.entries + customEmojiEntries
+            return ("Search Results", all.filter { $0.name.lowercased().contains(query) })
+        }
+        switch emojiSelectedCategory {
+        case "Recent":
+            let entries = recentEmojiNames.compactMap { name in
+                EmojiCatalog.entriesByName[name] ?? customEmojiEntries.first(where: { $0.name == name })
+            }
+            return ("Recent", entries)
+        case "Custom":
+            return ("Custom", customEmojiEntries)
+        default:
+            return (emojiSelectedCategory, EmojiCatalog.entries.filter { $0.category == emojiSelectedCategory })
+        }
+    }
+
+    private func renderEmojiGrid() {
+        let width = max(emojiScroll.bounds.width, 350)
+        emojiDoc.subviews.forEach { $0.removeFromSuperview() }
+
+        let selection = emojiEntriesForSelection()
+        let header = NSTextField(labelWithString: selection.title.uppercased())
+        header.font = MMFont.font(ofSize: 12, weight: .semibold)
+        header.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.48)
+        header.isEditable = false
+        header.isSelectable = false
+        header.frame = NSRect(x: 12, y: 0, width: max(0, width - 24), height: 36)
+        emojiDoc.addSubview(header)
+
+        if selection.entries.isEmpty {
+            let label = NSTextField(labelWithString: "No emoji found")
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
             label.alignment = .center
             label.isEditable = false
             label.isSelectable = false
-            label.frame = NSRect(x: 0, y: 4, width: cell, height: 24)
-            button.addSubview(label)
+            label.frame = NSRect(x: 12, y: 56, width: max(0, width - 24), height: 20)
+            emojiDoc.addSubview(label)
+            emojiDoc.frame = NSRect(x: 0, y: 0, width: width, height: 100)
+            return
+        }
+
+        let columns = 9
+        let cell: CGFloat = 36
+        let margin: CGFloat = 12
+        for (index, entry) in selection.entries.enumerated() {
+            let column = index % columns
+            let row = index / columns
+            let button = RoundedEdgePanel()
+            button.cornerRadius = 3
+            button.color = .clear
+            button.frame = NSRect(
+                x: margin + CGFloat(column) * cell,
+                y: 36 + CGFloat(row) * cell,
+                width: cell,
+                height: cell
+            )
+            if entry.isCustom {
+                if let id = entry.emojiId, let image = customEmojiImages[id] {
+                    let imageView = NSImageView(frame: NSRect(x: 7, y: 7, width: 22, height: 22))
+                    imageView.image = image
+                    imageView.imageScaling = .scaleProportionallyUpOrDown
+                    button.addSubview(imageView)
+                } else {
+                    let placeholder = NSTextField(labelWithString: "🖼️")
+                    placeholder.font = MMFont.font(ofSize: 18)
+                    placeholder.alignment = .center
+                    placeholder.isEditable = false
+                    placeholder.isSelectable = false
+                    placeholder.frame = NSRect(x: 0, y: 7, width: cell, height: 22)
+                    button.addSubview(placeholder)
+                }
+            } else {
+                let label = NSTextField(labelWithString: entry.glyph)
+                label.font = MMFont.font(ofSize: 22)
+                label.alignment = .center
+                label.isEditable = false
+                label.isSelectable = false
+                label.frame = NSRect(x: 0, y: 6, width: cell, height: 26)
+                button.addSubview(label)
+            }
             button.onHoverChanged = { [weak button] isHovered in
                 button?.color = isHovered
-                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
                     : .clear
                 button?.setNeedsAppearanceUpdate()
             }
             button.onClick = { [weak self] in
-                self?.insertEmoji(emoji)
+                self?.selectEmoji(entry)
             }
-            emojiPanel.addSubview(button)
+            emojiDoc.addSubview(button)
         }
-        emojiPanel.frame = NSRect(x: 0, y: 0, width: 300, height: 192)
+
+        let rows = (selection.entries.count + columns - 1) / columns
+        emojiDoc.frame = NSRect(x: 0, y: 0, width: width, height: CGFloat(rows) * cell + 44)
+        emojiScroll.contentView.scroll(to: .zero)
+        emojiScroll.reflectScrolledClipView(emojiScroll.contentView)
     }
-    
+
+    private func selectEmoji(_ entry: EmojiEntry) {
+        recentEmojiNames.removeAll { $0 == entry.name }
+        recentEmojiNames.insert(entry.name, at: 0)
+        if recentEmojiNames.count > 18 {
+            recentEmojiNames.removeLast(recentEmojiNames.count - 18)
+        }
+        UserDefaults.standard.set(recentEmojiNames, forKey: "recentEmojis")
+
+        if entry.isCustom {
+            insertEmoji(":\(entry.name):")
+        } else {
+            insertEmoji(entry.glyph)
+        }
+    }
+
+    private func loadCustomEmojis() {
+        guard !isCustomEmojiLoaded,
+              let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        isCustomEmojiLoaded = true
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let emojis = try? await ws.fetchCustomEmojis() else {
+                self.isCustomEmojiLoaded = false
+                return
+            }
+            var entries: [EmojiEntry] = []
+            for emoji in emojis {
+                let entry = EmojiEntry(
+                    name: emoji.name,
+                    glyph: ":\(emoji.name):",
+                    category: "Custom",
+                    isCustom: true,
+                    emojiId: emoji.id
+                )
+                entries.append(entry)
+                if let data = try? await ws.fetchEmojiImage(emojiId: emoji.id),
+                   let image = NSImage(data: data) {
+                    self.customEmojiImages[emoji.id] = image
+                }
+            }
+            self.customEmojiEntries = entries.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            if self.isEmojiPanelOpen {
+                self.buildEmojiCategoryBar()
+                self.renderEmojiGrid()
+            }
+            if !self.customEmojiImages.isEmpty {
+                if self.isRightPanelVisible && self.rightPanelMode == .thread {
+                    self.renderThreadPanel()
+                }
+                self.rebuildTimelineContent()
+            }
+        }
+    }
+
     private func toggleEmojiPanel() {
         if isEmojiPanelOpen {
             closeEmojiPanel()
@@ -4656,22 +5294,34 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         guard !activeChannelId.isEmpty else { return }
         let buttonFrame = chatEntryPanel.convert(composerEmojiButton.frame, to: chatPanel)
-        let width: CGFloat = 300
-        let height: CGFloat = 192
+        let width: CGFloat = 350
+        let height: CGFloat = 440
         let x = min(max(8, buttonFrame.midX - width / 2), max(8, chatPanel.bounds.width - width - 8))
         let y = min(chatEntryPanel.frame.maxY + 8, chatPanel.bounds.height - height - 8)
         emojiPanel.frame = NSRect(x: x, y: y, width: width, height: height)
+        emojiSearchField.stringValue = ""
+        emojiSearchField.frame = NSRect(x: 12, y: height - 44, width: width - 24, height: 26)
+        emojiScroll.frame = NSRect(x: 0, y: 0, width: width, height: height - 82)
+        emojiCategoryBar.frame = NSRect(x: 0, y: height - 74, width: width, height: 28)
         emojiPanel.removeFromSuperview()
         chatPanel.addSubview(emojiPanel)
         emojiPanel.isHidden = false
         isEmojiPanelOpen = true
+        if emojiSelectedCategory == "Recent" && recentEmojiNames.isEmpty {
+            emojiSelectedCategory = "Smileys & Emotion"
+        }
+        buildEmojiCategoryBar()
+        renderEmojiGrid()
+        loadCustomEmojis()
+        makeFirstResponder(emojiSearchField)
     }
-    
+
     private func closeEmojiPanel() {
         emojiPanel.isHidden = true
         isEmojiPanelOpen = false
+        emojiSearchField.stringValue = ""
     }
-    
+
     private func insertEmoji(_ emoji: String) {
         let range = entryView.selectedRange()
         entryView.insertText(emoji, replacementRange: range)
@@ -4680,7 +5330,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         closeEmojiPanel()
         makeFirstResponder(entryView)
     }
-    
+
     private func attachFiles() {
         guard !activeChannelId.isEmpty else { return }
         let panel = NSOpenPanel()
@@ -6878,6 +7528,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     /// Maps common Mattermost emoji shortcodes to glyphs for reaction chips.
     private func emojiGlyph(for name: String) -> String {
+        if let entry = EmojiCatalog.entriesByName[name.lowercased()] { return entry.glyph }
         if let glyph = Self.emojiGlyphs[name.lowercased()] { return glyph }
         // Already a unicode emoji?
         if name.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) { return name }
@@ -7775,6 +8426,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             for match in matches.reversed() where !isCode(match.range) {
                 let token = (result.string as NSString).substring(with: match.range)
                 let name = String(token.dropFirst().dropLast())
+                if let entry = customEmojiEntries.first(where: { $0.name.lowercased() == name.lowercased() }),
+                   let id = entry.emojiId,
+                   let image = customEmojiImages[id] {
+                    let attachment = NSTextAttachment()
+                    attachment.image = image
+                    attachment.bounds = NSRect(x: 0, y: -3, width: 18, height: 18)
+                    result.replaceCharacters(in: match.range, with: NSAttributedString(attachment: attachment))
+                    continue
+                }
                 let glyph = emojiGlyph(for: name)
                 guard glyph != ":" + name + ":" else { continue }
                 result.replaceCharacters(in: match.range, with: glyph)
@@ -8481,6 +9141,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 NSLog("Failed to load initial Mattermost workspace data: \(error.localizedDescription)")
             }
         }
+
+        loadCustomEmojis()
     }
 
     
@@ -8787,6 +9449,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     
     func controlTextDidChange(_ notification: Notification) {
+        if (notification.object as? NSTextField) === emojiSearchField {
+            renderEmojiGrid()
+            return
+        }
         if (notification.object as? NSTextField) === dmSearchField {
             renderDMUsers()
             return
