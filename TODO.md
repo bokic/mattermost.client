@@ -53,12 +53,14 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Done when: token + stored password are cleared, WebSocket disconnects, in-memory state resets,
     and `LoginWindow` is shown.
 
-- [ ] **Sidebar actions are decorative** — `M`
-  - Where: `Add Channels` and `Invite Members` rows are `isSelectable: false` (no-op onClick);
-    the team `+` and filter button have no `onClick` at all.
-  - Progress: the `Find channel` pill is now an editable field that filters sidebar rows live.
-  - Remaining: channel browser/join, invite dialog, team creation, filter options popover.
-  - Done when: channel browser/join, invite dialog, team creation and channel filtering work.
+- [x] **Sidebar actions are decorative** — `M`
+  - Done: `Add Channels` opens a Browse Channels panel with joined/joinable state and join support
+    (`POST /channels/{id}/members`); `Invite Members` and the hero invite button open an email
+    invite sheet (`POST /teams/{id}/invite/email`); the team `+` opens a create-team sheet
+    (`POST /teams`) that refreshes and switches to the new team; the filter button opens an
+    All channels / Favorites menu; the Find channel field filters live.
+  - Remaining: private-channel join requests, shareable invite links, richer filters
+    (unread/mentions), team leaving.
 
 - [ ] **Composer action buttons are mock** — `S`
   - Where: attachment/emoji buttons are visual only; GIF inserts a hard-coded local post

@@ -668,6 +668,41 @@ final class WebService: NSObject {
         )
     }
     
+    func fetchPublicChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/channels",
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
+        )
+    }
+    
+    func createTeam(name: String, displayName: String) async throws -> MMTeam {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams",
+            method: "POST",
+            body: ["name": name, "display_name": displayName, "type": "O"]
+        )
+    }
+    
+    func sendTeamInvite(teamId: String, email: String) async throws {
+        guard let url = buildURL(path: "/api/v4/teams/\(teamId)/invite/email") else {
+            throw WebServiceError.invalidHostname
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["user_email": email])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw WebServiceError.httpStatus(code: code, message: message)
+        }
+    }
+    
     func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
         struct ThreadsResponse: Decodable { let threads: [MMThread] }
         let response: ThreadsResponse = try await performAuthenticatedRequest(

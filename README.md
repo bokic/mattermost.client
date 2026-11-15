@@ -14,8 +14,9 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Action Shortcuts**: Mentions (`@`), Saved posts (bookmark) and Settings (gear) each open the right-hand panel — recent mentions, flagged posts, and app actions (zoom reset, reconnect, account info, logout).
 
 ### 2. Left Channel Sidebar (`#1E325C`)
-- **Team Header**: Dropdown team selector header (*None ⌄*) with quick-create (`+`) action.
-- **Sidebar Navigation**: 264 pt sidebar laid out to the web client's metrics — 32 pt rows, 19 pt leading padding, filter button plus `Find channel` pill, and `Threads` row.
+- **Team Header**: Dropdown team selector header (*None ⌄*) with a `+` action that creates a team and switches to it.
+- **Sidebar Navigation**: 264 pt sidebar laid out to the web client's metrics — 32 pt rows, 19 pt leading padding, a filter menu (All channels / Favorites), a live `Find channel` filter, and a `Threads` row.
+- **Channel Actions**: `Add Channels` opens a Browse Channels list with join support; `Invite Members` sends email invitations.
 - **Collapsible Categories**: Custom categories (e.g. `MOJ_CAT`), `CHANNELS`, and `DIRECT MESSAGES`. Favoriting a channel (★) moves it into a `FAVORITES` branch at the top and removes it from its original category; unfavoriting returns it.
 - **Active Channel Highlight**: Blue 4 pt accent pill (`#5D89EA`) at the row's leading edge over an 8% white highlight, matching the web client.
 

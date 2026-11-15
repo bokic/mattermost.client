@@ -109,10 +109,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let rightPanelCloseButton = RoundedEdgePanel()
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
-    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings }
+    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse }
     private var rightPanelMode: RightPanelMode = .threads
     private var isRightPanelVisible = false
     private var threadItems: [MMThread] = []
+    
+    // Sidebar filter menu
+    let filterMenu = RoundedEdgePanel()
+    private var isFilterMenuOpen = false
+    private var sidebarFavoritesOnly = false
+    private var filterAllCheck: NSImageView?
+    private var filterFavoritesCheck: NSImageView?
     
     let avatarButtonPanel = RoundedEdgePanel()
     let avatarPanel = RoundedEdgePanel()
@@ -1881,6 +1888,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 if isTeamMenuOpen && !teamDropdownMenu.frame.contains(point) && !teamHeaderButton.frame.contains(point) {
                     setTeamMenuOpen(false)
                 }
+                if isFilterMenuOpen {
+                    let mainPoint = mainPanel.convert(event.locationInWindow, from: nil)
+                    if !filterMenu.frame.contains(mainPoint) && !filterChannelButton.frame.contains(mainPoint) {
+                        setFilterMenuOpen(false)
+                    }
+                }
             }
         }
         super.sendEvent(event)
@@ -1974,6 +1987,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.teamAddButton.setNeedsAppearanceUpdate()
             self.teamAddIconView.contentTintColor = isHovered ? .white : mutedTint
         }
+        teamAddButton.onClick = { [weak self] in
+            self?.showCreateTeamDialog()
+        }
         mainPanel.addSubview(teamAddButton)
         
         // 2. Filter & Find Channel Row
@@ -1989,6 +2005,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.filterChannelButton.color = NSColor(white: 1.0, alpha: isHovered ? 0.15 : 0.08)
             self.filterChannelButton.setNeedsAppearanceUpdate()
             self.filterChannelIconView.contentTintColor = isHovered ? .white : mutedTint
+        }
+        filterChannelButton.onClick = { [weak self] in
+            guard let self = self else { return }
+            self.setFilterMenuOpen(!self.isFilterMenuOpen)
         }
         mainPanel.addSubview(filterChannelButton)
         
@@ -2018,6 +2038,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.findChannelLabel.textColor = isHovered ? .white : mutedTint
         }
         mainPanel.addSubview(findChannelPanel)
+        setupFilterMenu()
         
         // 3. Threads Navigation Row
         let threadsItem = createSidebarItem(
@@ -2612,6 +2633,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self.showRightPanel(mode: .threads)
                 return
             }
+            if id == "add-channels" {
+                self.showRightPanel(mode: .browse)
+                return
+            }
+            if id == "invite-members" {
+                self.showInviteDialog()
+                return
+            }
             if isSelectable {
                 self.selectedSidebarItemId = id
                 self.updateSidebarSelectionAppearance()
@@ -2852,6 +2881,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         // Row 2: Filter button + "Find channel" pill
         filterChannelButton.frame = NSRect(x: sidebarX + 16, y: topBarY - 83, width: 28, height: 28)
         filterChannelIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
+        filterMenu.frame = NSRect(x: sidebarX + 16, y: topBarY - 83 - 8 - 68, width: 180, height: 68)
         
         findChannelPanel.frame = NSRect(x: sidebarX + 48, y: topBarY - 83, width: 200, height: 28)
         findChannelIconView.frame = NSRect(x: 2, y: 5, width: 18, height: 18)
@@ -2865,7 +2895,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         // Row 3: Threads item
         var currentY = topBarY - 126
         if let threads = threadsSidebarItem {
-            if matches(threads.label.stringValue) {
+            if matches(threads.label.stringValue) && !sidebarFavoritesOnly {
                 threads.row.isHidden = false
                 threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
                 threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
@@ -2913,7 +2943,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         // the locally derived FAVORITES branch above)
         for category in sidebarCategories where !category.id.lowercased().contains("favorites") {
             let visibleItems = category.items.filter {
-                matches($0.label.stringValue) && !favoriteChannelIds.contains($0.id)
+                matches($0.label.stringValue)
+                    && !favoriteChannelIds.contains($0.id)
+                    && (!sidebarFavoritesOnly || favoriteChannelIds.contains($0.id))
             }
             if !query.isEmpty && visibleItems.isEmpty {
                 category.headerRow.isHidden = true
@@ -2928,7 +2960,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             currentY -= 32
             
             for item in category.items {
-                if !matches(item.label.stringValue) || favoriteChannelIds.contains(item.id) {
+                if !matches(item.label.stringValue)
+                    || favoriteChannelIds.contains(item.id)
+                    || (sidebarFavoritesOnly && !favoriteChannelIds.contains(item.id)) {
                     item.row.isHidden = true
                 } else if category.isCollapsed && item.id != selectedSidebarItemId {
                     item.row.isHidden = true
@@ -2944,6 +2978,76 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
             currentY -= 8
         }
+    }
+    
+    private func setupFilterMenu() {
+        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        let textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        
+        filterMenu.color = .white
+        filterMenu.cornerRadius = 6
+        filterMenu.borderWidth = 1
+        filterMenu.borderColor = dividerColor
+        filterMenu.shadowColor = .black
+        filterMenu.shadowOpacity = 0.18
+        filterMenu.shadowRadius = 10
+        filterMenu.shadowOffset = CGSize(width: 0, height: -4)
+        filterMenu.isHidden = true
+        
+        let makeRow: (String, CGFloat, Bool) -> (RoundedEdgePanel, NSImageView) = { title, y, favorites in
+            let row = RoundedEdgePanel()
+            row.frame = NSRect(x: 6, y: y, width: 168, height: 28)
+            row.cornerRadius = 4
+            row.color = .clear
+            let label = NSTextField(labelWithString: title)
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = textColor
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 10, y: 5, width: 120, height: 18)
+            row.addSubview(label)
+            let check = NSImageView()
+            if let image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Selected") {
+                check.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))
+                check.contentTintColor = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+            }
+            check.frame = NSRect(x: 146, y: 7, width: 14, height: 14)
+            row.addSubview(check)
+            row.onHoverChanged = { [weak row] isHovered in
+                row?.color = isHovered
+                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    : .clear
+                row?.setNeedsAppearanceUpdate()
+            }
+            row.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.sidebarFavoritesOnly = favorites
+                self.setFilterMenuOpen(false)
+                self.updateFilterMenuAppearance()
+                self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
+            }
+            return (row, check)
+        }
+        
+        let all = makeRow("All channels", 36, false)
+        filterMenu.addSubview(all.0)
+        filterAllCheck = all.1
+        let favorites = makeRow("Favorites", 6, true)
+        filterMenu.addSubview(favorites.0)
+        filterFavoritesCheck = favorites.1
+        
+        mainPanel.addSubview(filterMenu)
+        updateFilterMenuAppearance()
+    }
+    
+    private func setFilterMenuOpen(_ open: Bool) {
+        isFilterMenuOpen = open
+        filterMenu.isHidden = !open
+    }
+    
+    private func updateFilterMenuAppearance() {
+        filterAllCheck?.isHidden = sidebarFavoritesOnly
+        filterFavoritesCheck?.isHidden = !sidebarFavoritesOnly
     }
     
     private func setupRightChatPanel() {
@@ -3177,6 +3281,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             guard let self = self else { return }
             self.heroInviteButton.color = isHovered ? brandBlueHover : brandBlue
             self.heroInviteButton.setNeedsAppearanceUpdate()
+        }
+        heroInviteButton.onClick = { [weak self] in
+            self?.showInviteDialog()
         }
         timelineHeroContainer.addSubview(heroInviteButton)
         
@@ -3439,6 +3546,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .settings:
             rightPanelTitle.stringValue = "Settings"
             loadSettingsPanel()
+        case .browse:
+            rightPanelTitle.stringValue = "Browse Channels"
+            loadBrowseChannels()
         }
     }
     
@@ -3464,6 +3574,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .mentions: loadMentions()
         case .saved: loadSavedPosts()
         case .settings: loadSettingsPanel()
+        case .browse: loadBrowseChannels()
         }
     }
     
@@ -3696,6 +3807,149 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             )
         ]
         renderRightPanel(empty: "", rows: rows)
+    }
+    
+    private func loadBrowseChannels() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else {
+            renderRightPanel(empty: "Sign in to browse channels", rows: [])
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let channels = try? await ws.fetchPublicChannels(teamId: team.id) else {
+                self.renderRightPanel(empty: "Could not load channels", rows: [])
+                return
+            }
+            let joinedIds = Set(self.channelsById.keys)
+            let rows = channels
+                .filter { $0.type == "O" }
+                .sorted { $0.display_name.localizedCaseInsensitiveCompare($1.display_name) == .orderedAscending }
+                .map { channel -> RightPanelRow in
+                    let isJoined = joinedIds.contains(channel.id)
+                    let subtitle = (channel.purpose ?? channel.header ?? "").isEmpty
+                        ? "Public channel" : (channel.purpose ?? channel.header ?? "")
+                    return RightPanelRow(
+                        title: channel.display_name,
+                        subtitle: subtitle,
+                        meta: isJoined ? "Joined" : "Click to join",
+                        action: { [weak self] in
+                            if isJoined {
+                                self?.openChannel(withId: channel.id)
+                                self?.closeRightPanel()
+                            } else {
+                                self?.joinChannel(channel)
+                            }
+                        }
+                    )
+                }
+            self.renderRightPanel(empty: "No public channels", rows: rows)
+        }
+    }
+    
+    private func joinChannel(_ channel: MMChannel) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.joinChannel(channelId: channel.id, userId: userId)
+                self.channelsById[channel.id] = channel
+                self.channelsByName[channel.name.lowercased()] = channel
+                self.channelsByName[channel.display_name.lowercased()] = channel
+                if let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
+                }
+                self.loadBrowseChannels()
+            } catch {
+                NSLog("Failed to join channel \(channel.name): \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func showInviteDialog() {
+        guard let team = activeTeam else { return }
+        let alert = NSAlert()
+        alert.messageText = "Invite people to \(team.display_name)"
+        alert.informativeText = "Send an email invitation to join this team."
+        alert.addButton(withTitle: "Send Invite")
+        alert.addButton(withTitle: "Cancel")
+        
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "name@example.com"
+        alert.accessoryView = field
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            let email = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard email.contains("@"), email.contains(".") else {
+                self.showInfoAlert("Enter a valid email address.")
+                return
+            }
+            guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            Task { @MainActor in
+                do {
+                    try await ws.sendTeamInvite(teamId: team.id, email: email)
+                    self.showInfoAlert("Invitation sent to \(email).")
+                } catch {
+                    self.showInfoAlert("Could not send invite: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func showCreateTeamDialog() {
+        let alert = NSAlert()
+        alert.messageText = "Create a team"
+        alert.informativeText = "Teams group channels and members."
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
+        
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 56))
+        let displayField = NSTextField(frame: NSRect(x: 0, y: 30, width: 280, height: 24))
+        displayField.placeholderString = "Display name (e.g. Engineering)"
+        let nameField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        nameField.placeholderString = "URL name (e.g. engineering)"
+        container.addSubview(displayField)
+        container.addSubview(nameField)
+        alert.accessoryView = container
+        
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            var displayName = displayField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            var name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if displayName.isEmpty { displayName = name }
+            if name.isEmpty {
+                name = displayName.lowercased()
+                    .replacingOccurrences(of: " ", with: "-")
+                    .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+            }
+            guard !name.isEmpty else {
+                self.showInfoAlert("Enter a team name.")
+                return
+            }
+            guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            Task { @MainActor in
+                do {
+                    let team = try await ws.createTeam(name: name, displayName: displayName)
+                    if let teams = try? await ws.fetchTeams() {
+                        self.userTeams = teams
+                    }
+                    self.switchActiveTeam(to: team)
+                } catch {
+                    self.showInfoAlert("Could not create team: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func showInfoAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Mattermost"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: self)
     }
     
     private struct RightPanelRow {
