@@ -486,6 +486,7 @@ extension MainWindow {
         setupNewMessagesPill()
         setupChannelMenu()
         setupDMPicker()
+        setupProfilePopover()
         rebuildTimelineContent(scrollToBottom: true)
     }
 

@@ -1061,9 +1061,20 @@ extension MainWindow {
                     subtitle: fullName,
                     meta: "\(role) · \(status.capitalized)",
                     action: { [weak self] in
-                        guard let self = self, let user = self.usersById[member.user_id] else { return }
-                        self.startDirectMessage(with: user)
-                        self.closeRightPanel()
+                        guard let self = self else { return }
+                        if let user = self.usersById[member.user_id] {
+                            self.showUserProfile(user: user)
+                        } else {
+                            self.showUserProfile(userId: member.user_id)
+                        }
+                    },
+                    secondaryActionTitle: "Message",
+                    secondaryAction: { [weak self] in
+                        guard let self = self else { return }
+                        if let user = self.usersById[member.user_id] {
+                            self.startDirectMessage(with: user)
+                            self.closeRightPanel()
+                        }
                     }
                 ))
             }
@@ -1478,7 +1489,7 @@ extension MainWindow {
 
     func renderMentionsPanel() {
         let dateFormatter = Self.localizedDateTimeFormatter
-        renderPostRows(mentionPosts, empty: "No recent mentions") { post in
+        renderPostRows(mentionPosts, empty: "No recent mentions", showProfileSecondaryAction: true) { post in
             let author = self.usersById[post.user_id]?.username ?? "Unknown"
             let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
             let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
@@ -1569,6 +1580,7 @@ extension MainWindow {
     func renderPostRows(
         _ posts: [MMPost],
         empty: String,
+        showProfileSecondaryAction: Bool = false,
         subtitle: (MMPost) -> String
     ) {
         guard !posts.isEmpty else {
@@ -1577,6 +1589,7 @@ extension MainWindow {
         }
         let rows = posts.map { post -> RightPanelRow in
             let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
+            let hasUser = showProfileSecondaryAction && !post.user_id.isEmpty
             return RightPanelRow(
                 title: snippet.isEmpty ? "(attachment)" : snippet,
                 subtitle: subtitle(post),
@@ -1586,7 +1599,11 @@ extension MainWindow {
                     self.pendingJumpPostId = post.id
                     self.openChannel(withId: post.channel_id)
                     self.closeRightPanel()
-                }
+                },
+                secondaryActionTitle: hasUser ? "Profile" : "",
+                secondaryAction: hasUser ? { [weak self] in
+                    self?.showUserProfile(userId: post.user_id)
+                } : nil
             )
         }
         renderRightPanel(empty: empty, rows: rows)

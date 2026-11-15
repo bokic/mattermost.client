@@ -248,6 +248,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var isDMPickerOpen = false
     var dmAnchorFrame: NSRect = .zero
 
+    // User profile popover
+    let profilePopoverPanel = RoundedEdgePanel()
+    var isProfilePopoverOpen = false
+    var profileAnchorFrame: NSRect = .zero
+    var activeProfileUserId: String?
+
     // Help popup menu
     let helpMenu = RoundedEdgePanel()
     var isHelpMenuOpen = false
@@ -819,6 +825,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 }
                 if isDMPickerOpen && !dmPickerPanel.frame.contains(point) && !dmAnchorFrame.contains(point) {
                     closeDMPicker()
+                }
+                if isProfilePopoverOpen && !profilePopoverPanel.frame.contains(point) && (profileAnchorFrame.isEmpty || !profileAnchorFrame.contains(point)) {
+                    closeProfilePopover()
                 }
                 if isCompletionVisible {
                     let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)

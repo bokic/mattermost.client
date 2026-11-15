@@ -2509,6 +2509,12 @@ extension MainWindow {
             initialLabel.frame = NSRect(x: 0, y: (avatarSize - 20) / 2, width: avatarSize, height: 20)
             avatarCircle.addSubview(initialLabel)
         }
+        if !post.user_id.isEmpty {
+            avatarCircle.onClick = { [weak self, weak avatarCircle] in
+                guard let self = self else { return }
+                self.showUserProfile(userId: post.user_id, from: avatarCircle)
+            }
+        }
         row.addSubview(avatarCircle)
 
         let isCurrentUser = (post.user_id == currentUser?.id) || (!authorName.isEmpty && authorName == currentUser?.username) || (post.user_id == "usr" || post.user_id == "sample_usr")
@@ -2532,8 +2538,21 @@ extension MainWindow {
             max(60, width - contentX - 8 - reservedTrailing)
         )
         let authorH = max(20, ceil(authorSize.height))
-        authorLabel.frame = NSRect(x: contentX, y: headerTopY + (headerH - authorH) / 2, width: authorW, height: authorH)
-        row.addSubview(authorLabel)
+        let authorButton = RoundedEdgePanel()
+        authorButton.color = .clear
+        authorButton.frame = NSRect(x: contentX, y: headerTopY + (headerH - authorH) / 2, width: authorW, height: authorH)
+        authorLabel.frame = NSRect(x: 0, y: 0, width: authorW, height: authorH)
+        authorButton.addSubview(authorLabel)
+        if !post.user_id.isEmpty {
+            authorButton.onClick = { [weak self, weak authorButton] in
+                guard let self = self else { return }
+                self.showUserProfile(userId: post.user_id, from: authorButton)
+            }
+            authorButton.onHoverChanged = { [weak authorLabel] isHovered in
+                authorLabel?.textColor = isHovered ? Theme.shared.buttonBg : darkText
+            }
+        }
+        row.addSubview(authorButton)
 
         var headerRightX = contentX + authorW + 8
         if isBotUser {

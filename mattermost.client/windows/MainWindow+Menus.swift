@@ -554,6 +554,15 @@ extension MainWindow {
                 self?.setDndSubMenuOpen(false)
             }
         }
+        profileRow.onClick = { [weak self] in
+            guard let self = self else { return }
+            self.setStatusMenuOpen(false)
+            if let user = self.currentUser ?? self.usersById[self.webService?.currentUserId ?? ""] {
+                self.showUserProfile(user: user, from: self.avatarButtonPanel)
+            } else if let userId = self.webService?.currentUserId, !userId.isEmpty {
+                self.showUserProfile(userId: userId, from: self.avatarButtonPanel)
+            }
+        }
         statusMenu.addSubview(profileRow)
 
         // Bottom divider

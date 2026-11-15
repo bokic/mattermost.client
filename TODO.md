@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **131/131 pass** |
+| `./test.sh` | **139/139 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -31,13 +31,6 @@ completed baseline remains at the end.
 ### Message rendering
 
 ### Navigation and sidebar
-
-- [ ] **Profile is a no-op; there is no user profile view** — `M`
-  - The status menu's Profile row (`MainWindow+Menus.swift:487-506`) does nothing. There is
-    no profile popover/sheet (avatar, title, timezone, local time, status, DM button), and
-    member rows are not clickable (`MainWindow+RightPanel.swift:368-373`).
-  - Add a profile view reused by members, mentions, search authors and the current user;
-    add "Message" and "Copy username".
 
 ### Composer and account
 

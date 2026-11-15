@@ -921,6 +921,10 @@ final class WebService: NSObject {
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
+    func fetchUser(userId: String) async throws -> MMUser {
+        return try await performAuthenticatedRequest(path: "/api/v4/users/\(encodedPathComponent(userId))")
+    }
+
     func fetchUserByUsername(_ username: String) async throws -> MMUser {
         return try await performAuthenticatedRequest(path: "/api/v4/users/username/\(encodedPathComponent(username))")
     }

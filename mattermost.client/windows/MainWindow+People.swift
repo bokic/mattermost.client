@@ -451,6 +451,11 @@ extension MainWindow {
             avatarPanel.setNeedsAppearanceUpdate()
         }
 
+        // 1b. Profile popover avatar if open for this user
+        if isProfilePopoverOpen && activeProfileUserId == userId {
+            updateProfilePopoverAvatar(image: image)
+        }
+
         // 2. Sidebar items representing this user
         for catIndex in sidebarCategories.indices {
             for itemIndex in sidebarCategories[catIndex].items.indices {
@@ -596,5 +601,455 @@ extension MainWindow {
                 }
             }
         }
+    }
+
+    // MARK: - User Profile View
+
+    func setupProfilePopover() {
+        profilePopoverPanel.color = Theme.shared.centerBg
+        profilePopoverPanel.cornerRadius = MMRadius.panel
+        profilePopoverPanel.borderWidth = 1
+        profilePopoverPanel.borderColor = Theme.shared.divider
+        profilePopoverPanel.shadowColor = .black
+        profilePopoverPanel.shadowOpacity = 0.22
+        profilePopoverPanel.shadowRadius = 14
+        profilePopoverPanel.shadowOffset = CGSize(width: 0, height: -4)
+        profilePopoverPanel.isHidden = true
+        profilePopoverPanel.appearance = NSAppearance(named: Theme.shared.isDark ? .darkAqua : .aqua)
+        contentView?.addSubview(profilePopoverPanel)
+    }
+
+    func showUserProfile(user: MMUser, from sourceView: NSView? = nil) {
+        if isProfilePopoverOpen && activeProfileUserId == user.id {
+            closeProfilePopover()
+            return
+        }
+        if isStatusMenuOpen { setStatusMenuOpen(false) }
+        if isProductMenuOpen { setProductSwitcherMenuOpen(false) }
+        if isHelpMenuOpen { setHelpMenuOpen(false) }
+        if isTeamMenuOpen { setTeamMenuOpen(false) }
+        if isChannelMenuOpen { closeChannelMenu() }
+        if isDMPickerOpen { closeDMPicker() }
+
+        if profilePopoverPanel.superview == nil {
+            setupProfilePopover()
+        }
+
+        activeProfileUserId = user.id
+        renderUserProfileContent(for: user)
+        positionProfilePopover(from: sourceView)
+
+        profilePopoverPanel.isHidden = false
+        contentView?.addSubview(profilePopoverPanel)
+        isProfilePopoverOpen = true
+    }
+
+    func showUserProfile(userId: String, from sourceView: NSView? = nil) {
+        if let user = usersById[userId] {
+            showUserProfile(user: user, from: sourceView)
+            return
+        }
+        guard let ws = webService, ws.isLogged() else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let user = try await ws.fetchUser(userId: userId)
+                self.usersById[user.id] = user
+                self.usersByUsername[user.username.lowercased()] = user
+                self.showUserProfile(user: user, from: sourceView)
+            } catch {
+                DebugLog.warning("Could not fetch user for profile: \(error)")
+            }
+        }
+    }
+
+    func closeProfilePopover() {
+        guard isProfilePopoverOpen else { return }
+        profilePopoverPanel.isHidden = true
+        isProfilePopoverOpen = false
+        activeProfileUserId = nil
+        profileAnchorFrame = .zero
+    }
+
+    func updateProfilePopoverAvatar(image: NSImage) {
+        for subview in profilePopoverPanel.subviews {
+            if let circle = subview as? RoundedEdgePanel, circle.bounds.width == 60 {
+                circle.color = .clear
+                circle.subviews.forEach { $0.removeFromSuperview() }
+                let iv = NSImageView(frame: circle.bounds)
+                iv.image = image
+                iv.imageScaling = .scaleProportionallyUpOrDown
+                circle.addSubview(iv)
+                circle.setNeedsAppearanceUpdate()
+                break
+            }
+        }
+    }
+
+    func positionProfilePopover(from sourceView: NSView?) {
+        guard let contentView = contentView else { return }
+        let panelWidth = profilePopoverPanel.frame.width
+        let panelHeight = profilePopoverPanel.frame.height
+        let containerBounds = contentView.bounds
+        let margin: CGFloat = 12
+
+        if let sourceView = sourceView, sourceView.window != nil {
+            let anchorInWindow = sourceView.convert(sourceView.bounds, to: nil)
+            let anchor = contentView.convert(anchorInWindow, from: nil)
+            profileAnchorFrame = anchor
+
+            var x: CGFloat
+            if anchor.maxX + panelWidth + margin <= containerBounds.maxX {
+                x = anchor.maxX + 8
+            } else if anchor.minX - panelWidth - 8 >= margin {
+                x = anchor.minX - panelWidth - 8
+            } else {
+                x = min(max(margin, anchor.midX - panelWidth / 2), containerBounds.maxX - panelWidth - margin)
+            }
+
+            var y: CGFloat
+            if anchor.maxY - panelHeight >= margin {
+                y = anchor.maxY - panelHeight
+            } else {
+                y = min(max(margin, anchor.minY), containerBounds.maxY - panelHeight - margin)
+            }
+
+            x = min(max(margin, x), containerBounds.maxX - panelWidth - margin)
+            y = min(max(margin, y), containerBounds.maxY - panelHeight - margin)
+            profilePopoverPanel.frame = NSRect(x: x, y: y, width: panelWidth, height: panelHeight)
+        } else {
+            profileAnchorFrame = .zero
+            let x = round((containerBounds.width - panelWidth) / 2)
+            let y = round((containerBounds.height - panelHeight) / 2)
+            profilePopoverPanel.frame = NSRect(x: max(margin, x), y: max(margin, y), width: panelWidth, height: panelHeight)
+        }
+    }
+
+    func renderUserProfileContent(for user: MMUser) {
+        profilePopoverPanel.subviews.forEach { $0.removeFromSuperview() }
+
+        let width: CGFloat = 320
+        let padding: CGFloat = 16
+
+        // 1. Close button (xmark) in upper right
+        let closeButton = RoundedEdgePanel()
+        closeButton.cornerRadius = 11
+        closeButton.color = .clear
+        let closeSize: CGFloat = 22
+        let closeIcon = NSImageView(frame: NSRect(x: 4, y: 4, width: 14, height: 14))
+        if let xmarkImg = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close") {
+            closeIcon.image = xmarkImg.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+            closeIcon.contentTintColor = Theme.shared.centerTextMuted
+        }
+        closeButton.addSubview(closeIcon)
+        closeButton.onHoverChanged = { [weak closeButton] isHovered in
+            closeButton?.color = isHovered ? Theme.shared.centerHover : .clear
+            closeButton?.setNeedsAppearanceUpdate()
+        }
+        closeButton.onClick = { [weak self] in
+            self?.closeProfilePopover()
+        }
+        closeButton.accessibilityTitle = "Close"
+        profilePopoverPanel.addSubview(closeButton)
+
+        // 2. Avatar
+        let avatarSize: CGFloat = 60
+        let avatarCircle = RoundedEdgePanel()
+        avatarCircle.cornerRadius = avatarSize / 2
+        avatarCircle.color = MMPalette.avatarColor(for: user.id.isEmpty ? user.username : user.id)
+        avatarCircle.frame = NSRect(x: padding, y: 0, width: avatarSize, height: avatarSize)
+
+        if let cachedImg = userAvatarsById[user.id] {
+            avatarCircle.color = .clear
+            let iv = NSImageView(frame: avatarCircle.bounds)
+            iv.image = cachedImg
+            iv.imageScaling = .scaleProportionallyUpOrDown
+            avatarCircle.addSubview(iv)
+        } else {
+            let initial = (user.first_name?.first ?? user.username.first).map { String($0).uppercased() } ?? "U"
+            let initialLabel = NSTextField(labelWithString: initial)
+            initialLabel.font = MMFont.font(ofSize: 22, weight: .semibold)
+            initialLabel.textColor = .white
+            initialLabel.alignment = .center
+            initialLabel.isEditable = false
+            initialLabel.isSelectable = false
+            initialLabel.frame = NSRect(x: 0, y: (avatarSize - 28) / 2, width: avatarSize, height: 28)
+            avatarCircle.addSubview(initialLabel)
+            fetchAvatarIfNeeded(for: user.id)
+        }
+        profilePopoverPanel.addSubview(avatarCircle)
+
+        // 3. Presence dot on avatar
+        let isCurrent = (user.id == currentUser?.id || user.id == "usr" || user.id == "sample_usr")
+        let statStr = isCurrent ? currentUserStatus : (userStatusById[user.id] ?? "offline")
+        let dotColor = statusColor(for: statStr)
+        let presenceDot = RoundedEdgePanel()
+        presenceDot.cornerRadius = 8
+        presenceDot.color = dotColor
+        presenceDot.borderColor = Theme.shared.centerBg
+        presenceDot.borderWidth = 2
+        presenceDot.frame = NSRect(x: padding + avatarSize - 16, y: 0, width: 16, height: 16)
+        updateStatusCheck(in: presenceDot, status: statStr)
+        profilePopoverPanel.addSubview(presenceDot)
+
+        // 4. Header text (Full name, @username, badge)
+        let fullName = [user.first_name, user.last_name]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let displayName = fullName.isEmpty ? user.username : fullName
+
+        let nameLabel = NSTextField(labelWithString: displayName)
+        nameLabel.font = MMFont.font(ofSize: 16, weight: .bold)
+        nameLabel.textColor = Theme.shared.centerText
+        nameLabel.lineBreakMode = .byTruncatingTail
+        nameLabel.isEditable = false
+        nameLabel.isSelectable = true
+        profilePopoverPanel.addSubview(nameLabel)
+
+        let usernameLabel = NSTextField(labelWithString: "@\(user.username)")
+        usernameLabel.font = MMFont.font(ofSize: 13, weight: .regular)
+        usernameLabel.textColor = Theme.shared.centerTextMuted
+        usernameLabel.lineBreakMode = .byTruncatingTail
+        usernameLabel.isEditable = false
+        usernameLabel.isSelectable = true
+        profilePopoverPanel.addSubview(usernameLabel)
+
+        var roleBadge: RoundedEdgePanel? = nil
+        if let roleTitle = displayRoleName(for: user) {
+            let badge = RoundedEdgePanel()
+            badge.cornerRadius = 4
+            badge.color = Theme.shared.centerText.withAlphaComponent(0.08)
+            let badgeLabel = NSTextField(labelWithString: roleTitle)
+            let bFont = MMFont.font(ofSize: 10, weight: .bold)
+            badgeLabel.font = bFont
+            badgeLabel.textColor = Theme.shared.centerTextMuted
+            badgeLabel.alignment = .center
+            badgeLabel.isEditable = false
+            badgeLabel.isSelectable = false
+            let badgeWidth = (roleTitle as NSString).size(withAttributes: [.font: bFont]).width + 10
+            badge.frame = NSRect(x: 0, y: 0, width: ceil(badgeWidth), height: 16)
+            badgeLabel.frame = NSRect(x: 0, y: 1, width: badge.frame.width, height: 14)
+            badge.addSubview(badgeLabel)
+            roleBadge = badge
+            profilePopoverPanel.addSubview(badge)
+        }
+
+        // Info items list
+        var infoItems: [(icon: String, text: String)] = []
+
+        if let custom = userCustomStatus(for: user) {
+            let glyph = custom.emoji.isEmpty ? "💬" : (MainWindow.emojiGlyphs[custom.emoji] ?? emojiGlyph(for: custom.emoji))
+            let text = [glyph, custom.text].filter { !$0.isEmpty }.joined(separator: " ")
+            infoItems.append(("quote.bubble", text))
+        }
+        let statusTitle = statStr.capitalized
+        infoItems.append(("circle.fill", statusTitle))
+
+        if let position = user.position?.trimmingCharacters(in: .whitespacesAndNewlines), !position.isEmpty {
+            infoItems.append(("briefcase", position))
+        }
+
+        if let nickname = user.nickname?.trimmingCharacters(in: .whitespacesAndNewlines), !nickname.isEmpty {
+            infoItems.append(("person.text.rectangle", nickname))
+        }
+
+        if let email = user.email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty {
+            infoItems.append(("envelope", email))
+        }
+
+        if let localTime = Self.formattedLocalTime(for: user.timezone) {
+            infoItems.append(("clock", "Local time: \(localTime.timeString) (\(localTime.tzName))"))
+        }
+
+        // Bottom Action buttons
+        let buttonY = padding
+        let buttonWidth = (width - padding * 2 - 8) / 2
+        let buttonHeight: CGFloat = 32
+
+        // "Message" button
+        let messageBtn = RoundedEdgePanel()
+        messageBtn.cornerRadius = MMRadius.control
+        messageBtn.color = Theme.shared.buttonBg
+        messageBtn.frame = NSRect(x: padding, y: buttonY, width: buttonWidth, height: buttonHeight)
+        let msgLabel = NSTextField(labelWithString: "Message")
+        msgLabel.font = MMFont.font(ofSize: 13, weight: .semibold)
+        msgLabel.textColor = .white
+        msgLabel.alignment = .center
+        msgLabel.isEditable = false
+        msgLabel.isSelectable = false
+        msgLabel.frame = NSRect(x: 4, y: 7, width: buttonWidth - 8, height: 18)
+        messageBtn.addSubview(msgLabel)
+        messageBtn.onHoverChanged = { [weak messageBtn] isHovered in
+            messageBtn?.color = isHovered ? Theme.shared.buttonBg.withAlphaComponent(0.85) : Theme.shared.buttonBg
+            messageBtn?.setNeedsAppearanceUpdate()
+        }
+        messageBtn.onClick = { [weak self] in
+            guard let self = self else { return }
+            self.closeProfilePopover()
+            self.startDirectMessage(with: user)
+        }
+        messageBtn.accessibilityTitle = "Message"
+        profilePopoverPanel.addSubview(messageBtn)
+
+        // "Copy username" button
+        let copyBtn = RoundedEdgePanel()
+        copyBtn.cornerRadius = MMRadius.control
+        copyBtn.color = Theme.shared.centerText.withAlphaComponent(0.06)
+        copyBtn.borderColor = Theme.shared.divider
+        copyBtn.borderWidth = 1
+        copyBtn.frame = NSRect(x: padding + buttonWidth + 8, y: buttonY, width: buttonWidth, height: buttonHeight)
+        let copyLabel = NSTextField(labelWithString: "Copy username")
+        copyLabel.font = MMFont.font(ofSize: 12, weight: .medium)
+        copyLabel.textColor = Theme.shared.centerText
+        copyLabel.alignment = .center
+        copyLabel.isEditable = false
+        copyLabel.isSelectable = false
+        copyLabel.frame = NSRect(x: 4, y: 7, width: buttonWidth - 8, height: 18)
+        copyBtn.addSubview(copyLabel)
+        copyBtn.onHoverChanged = { [weak copyBtn] isHovered in
+            copyBtn?.color = isHovered ? Theme.shared.centerHover : Theme.shared.centerText.withAlphaComponent(0.06)
+            copyBtn?.setNeedsAppearanceUpdate()
+        }
+        copyBtn.onClick = { [weak self, weak copyLabel] in
+            guard let self = self else { return }
+            _ = self
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString("@\(user.username)", forType: .string)
+            copyLabel?.stringValue = "Copied!"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak copyLabel] in
+                copyLabel?.stringValue = "Copy username"
+            }
+        }
+        copyBtn.accessibilityTitle = "Copy username"
+        profilePopoverPanel.addSubview(copyBtn)
+
+        var curY = buttonY + buttonHeight + 14
+
+        // Divider above buttons
+        let bottomDivider = RoundedEdgePanel()
+        bottomDivider.cornerRadius = 0
+        bottomDivider.color = Theme.shared.divider
+        bottomDivider.frame = NSRect(x: padding, y: curY, width: width - padding * 2, height: 1)
+        profilePopoverPanel.addSubview(bottomDivider)
+        curY += 10
+
+        // Info rows (bottom to top)
+        for item in infoItems.reversed() {
+            let rowView = NSView(frame: NSRect(x: padding, y: curY, width: width - padding * 2, height: 22))
+            let iconView = NSImageView(frame: NSRect(x: 0, y: 3, width: 16, height: 16))
+            if item.icon == "circle.fill" {
+                if let dotImg = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil) {
+                    iconView.image = dotImg.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
+                    iconView.contentTintColor = dotColor
+                }
+            } else if let img = NSImage(systemSymbolName: item.icon, accessibilityDescription: nil) {
+                iconView.image = img.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+                iconView.contentTintColor = Theme.shared.centerTextMuted
+            }
+            rowView.addSubview(iconView)
+
+            let label = NSTextField(labelWithString: item.text)
+            label.font = MMFont.font(ofSize: 12.5)
+            label.textColor = Theme.shared.centerText
+            label.lineBreakMode = .byTruncatingTail
+            label.isEditable = false
+            label.isSelectable = true
+            label.frame = NSRect(x: 24, y: 2, width: width - padding * 2 - 24, height: 18)
+            rowView.addSubview(label)
+
+            profilePopoverPanel.addSubview(rowView)
+            curY += 24
+        }
+
+        curY += 4
+
+        // Divider above info rows
+        let topDivider = RoundedEdgePanel()
+        topDivider.cornerRadius = 0
+        topDivider.color = Theme.shared.divider
+        topDivider.frame = NSRect(x: padding, y: curY, width: width - padding * 2, height: 1)
+        profilePopoverPanel.addSubview(topDivider)
+        curY += 14
+
+        // Header section positioning
+        let headerY = curY
+        let textX = padding + avatarSize + 12
+        let textWidth = width - textX - padding - closeSize
+
+        avatarCircle.frame.origin.y = headerY + (60 - avatarSize) / 2
+        presenceDot.frame.origin.y = avatarCircle.frame.origin.y - 1
+
+        let nameSize = (displayName as NSString).size(withAttributes: [.font: nameLabel.font!])
+        let badgeWidth = roleBadge?.frame.width ?? 0
+        let availableNameW = badgeWidth > 0 ? textWidth - badgeWidth - 6 : textWidth
+        let nameW = min(ceil(nameSize.width), availableNameW)
+
+        nameLabel.frame = NSRect(x: textX, y: headerY + 34, width: nameW, height: 20)
+        if let badge = roleBadge {
+            badge.frame.origin = CGPoint(x: textX + nameW + 6, y: headerY + 36)
+        }
+        usernameLabel.frame = NSRect(x: textX, y: headerY + 12, width: textWidth, height: 18)
+
+        let totalHeight = headerY + 64 + padding
+        closeButton.frame = NSRect(x: width - padding - closeSize + 4, y: totalHeight - padding - closeSize + 4, width: closeSize, height: closeSize)
+
+        profilePopoverPanel.frame = NSRect(x: 0, y: 0, width: width, height: totalHeight)
+    }
+
+    static func formattedLocalTime(for timezone: MMUser.MMTimeZone?) -> (timeString: String, tzName: String)? {
+        guard let tz = timezone else { return nil }
+        let tzIdentifier: String? = {
+            if tz.useAutomaticTimezone == "true", let auto = tz.automaticTimezone, !auto.isEmpty {
+                return auto
+            }
+            if let manual = tz.manualTimezone, !manual.isEmpty {
+                return manual
+            }
+            if let auto = tz.automaticTimezone, !auto.isEmpty {
+                return auto
+            }
+            return nil
+        }()
+        guard let id = tzIdentifier, !id.isEmpty, let timeZone = TimeZone(identifier: id) else { return nil }
+        let formatter = DateFormatter()
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "h:mm a"
+        let timeString = formatter.string(from: Date())
+        let tzName = timeZone.abbreviation() ?? id
+        return (timeString, tzName)
+    }
+
+    func displayRoleName(for user: MMUser) -> String? {
+        if isBotAccount(user) { return "BOT" }
+        let roles = (user.roles ?? "").lowercased()
+        if roles.contains("system_admin") { return "SYSTEM ADMIN" }
+        if roles.contains("team_admin") { return "TEAM ADMIN" }
+        if roles.contains("channel_admin") { return "CHANNEL ADMIN" }
+        if roles.contains("guest") { return "GUEST" }
+        return nil
+    }
+
+    func userCustomStatus(for user: MMUser) -> (emoji: String, text: String)? {
+        if user.id == currentUser?.id || user.id == "usr" || user.id == "sample_usr" {
+            if !customStatusText.isEmpty || !customStatusEmoji.isEmpty {
+                return (customStatusEmoji, customStatusText)
+            }
+        }
+        guard let raw = user.props?["customStatus"],
+              let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        let text = (json["text"] as? String) ?? ""
+        let emoji = (json["emoji"] as? String) ?? ""
+        if let expiresAtString = json["expires_at"] as? String,
+           let expiresAt = ISO8601DateFormatter().date(from: expiresAtString),
+           expiresAt <= Date() {
+            return nil
+        }
+        if text.isEmpty && emoji.isEmpty { return nil }
+        return (emoji, text)
     }
 }

@@ -701,15 +701,41 @@ extension MainWindow {
         let when = Self.localizedDateTimeFormatter.string(
             from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000)
         )
-        let meta = [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · ")
 
-        let metaLabel = NSTextField(labelWithString: meta)
-        metaLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
-        metaLabel.textColor = Theme.shared.centerTextMuted
+        let authorFont = MMFont.font(ofSize: 12, weight: .semibold)
+        let authorSize = (author as NSString).size(withAttributes: [.font: authorFont])
+        let authorBtn = RoundedEdgePanel()
+        authorBtn.color = .clear
+        authorBtn.cornerRadius = MMRadius.control
+        let authorBtnW = ceil(authorSize.width) + 4
+        authorBtn.frame = NSRect(x: 10, y: 5, width: authorBtnW, height: 18)
+        let authorLabel = NSTextField(labelWithString: author)
+        authorLabel.font = authorFont
+        authorLabel.textColor = Theme.shared.centerTextMuted
+        authorLabel.isEditable = false
+        authorLabel.isSelectable = false
+        authorLabel.frame = NSRect(x: 2, y: 1, width: ceil(authorSize.width), height: 16)
+        authorBtn.addSubview(authorLabel)
+        if !post.user_id.isEmpty {
+            authorBtn.onClick = { [weak self, weak authorBtn] in
+                guard let self = self else { return }
+                self.showUserProfile(userId: post.user_id, from: authorBtn)
+            }
+            authorBtn.onHoverChanged = { [weak authorLabel] isHovered in
+                authorLabel?.textColor = isHovered ? Theme.shared.buttonBg : Theme.shared.centerTextMuted
+            }
+        }
+        row.addSubview(authorBtn)
+
+        let restMeta = [channelName, when].filter { !$0.isEmpty }.joined(separator: " · ")
+        let separator = restMeta.isEmpty ? "" : " · "
+        let metaLabel = NSTextField(labelWithString: separator + restMeta)
+        metaLabel.font = MMFont.font(ofSize: 12)
+        metaLabel.textColor = Theme.shared.centerTextMuted.withAlphaComponent(0.8)
         metaLabel.isEditable = false
         metaLabel.isSelectable = false
         metaLabel.lineBreakMode = .byTruncatingTail
-        metaLabel.frame = NSRect(x: 12, y: 6, width: width - 24, height: 16)
+        metaLabel.frame = NSRect(x: authorBtn.frame.maxX, y: 6, width: max(40, width - authorBtn.frame.maxX - 12), height: 16)
         row.addSubview(metaLabel)
 
         let snippetText = post.message.replacingOccurrences(of: "\n", with: " ")
@@ -808,6 +834,7 @@ extension MainWindow {
     }
 
     func closeTopOverlay() -> Bool {
+        if isProfilePopoverOpen { closeProfilePopover(); return true }
         if isCompletionVisible { closeCompletion(); return true }
         if isLightboxVisible { closeLightbox(); return true }
         if isDMPickerOpen { closeDMPicker(); return true }
