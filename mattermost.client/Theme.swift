@@ -14,6 +14,7 @@ enum Theme {
     static var shared: MMTheme { ThemeManager.shared.theme }
 }
 
+@MainActor
 struct MMTheme {
     let typeName: String
     let isDark: Bool
@@ -217,6 +218,9 @@ struct MMTheme {
 
     static func builtin(for type: String) -> MMTheme? {
         switch type.lowercased() {
+        case "system":
+            let isDark = NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark ? .onyx : .denim
         case "denim", "default", "mattermost": return .denim
         case "indigo": return .indigo
         case "onyx", "dark": return .onyx
@@ -230,7 +234,8 @@ struct MMTheme {
 
     init(json: [String: Any]) {
         let type = (json["type"] as? String) ?? "custom"
-        let fallback = MMTheme.builtin(for: type) ?? .denim
+        let isSystemDark = NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let fallback = MMTheme.builtin(for: type) ?? (isSystemDark ? .onyx : .denim)
         typeName = type
 
         func color(_ key: String, _ fallbackColor: NSColor) -> NSColor {
@@ -387,10 +392,13 @@ final class ThemeManager {
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: "themeOverride")
+            reapply()
         }
     }
 
-    private init() {}
+    private init() {
+        applySystemTheme()
+    }
 
     /// Applies the theme preference for the active team, falling back to the global one.
     func apply(preferences: [[String: String]], teamId: String?) {

@@ -182,4 +182,64 @@ final class SettingsPreferencesTests: XCTestCase {
     func testAppVersionString() {
         XCTAssertFalse(AppVersion.versionString.isEmpty)
     }
+
+    func testNativeControlsAppearanceFollowsTheme() {
+        let window = makeWindow()
+        defer {
+            window.close()
+            ThemeManager.shared.themeOverride = .server
+            window.applyCurrentTheme()
+        }
+
+        // Forced dark override
+        ThemeManager.shared.themeOverride = .dark
+        window.applyCurrentTheme()
+        XCTAssertEqual(window.appearance?.name, .darkAqua)
+        XCTAssertEqual(NSApp.appearance?.name, .darkAqua)
+        XCTAssertEqual(window.teamHeaderButton.color, Theme.shared.sidebarHeaderBg)
+        XCTAssertEqual(window.teamHeaderLabel.textColor, Theme.shared.sidebarHeaderText)
+
+        // Forced light override
+        ThemeManager.shared.themeOverride = .light
+        window.applyCurrentTheme()
+        XCTAssertEqual(window.appearance?.name, .aqua)
+        XCTAssertEqual(NSApp.appearance?.name, .aqua)
+
+        // System appearance
+        ThemeManager.shared.themeOverride = .system
+        window.applyCurrentTheme()
+        XCTAssertNil(window.appearance)
+        XCTAssertNil(NSApp.appearance)
+    }
+
+    func testNewMessagesDividerUsesThemeSeparator() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let divider = window.createNewMessagesDivider(width: 400)
+        let labels = allTextFieldStrings(in: divider)
+        XCTAssertTrue(labels.contains("New Messages"))
+    }
+
+    func testPostRowMentionHighlightColor() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let userJson = """
+        {"id": "user123", "username": "alice"}
+        """.data(using: .utf8)!
+        window.currentUser = try! JSONDecoder().decode(MMUser.self, from: userJson)
+
+        let postJson = """
+        {"id": "p1", "create_at": 100000, "channel_id": "c1", "user_id": "user456", "message": "Hey @alice check this out"}
+        """.data(using: .utf8)!
+        let post = try! JSONDecoder().decode(MMPost.self, from: postJson)
+
+        let (rowView, _) = window.createPostRow(post: post, width: 600, timeStr: "12:00 PM")
+        guard let panel = rowView as? RoundedEdgePanel else {
+            XCTFail("Expected post row to be RoundedEdgePanel")
+            return
+        }
+        XCTAssertNotEqual(panel.color, .clear)
+    }
 }

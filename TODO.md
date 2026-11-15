@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **152/152 pass** |
+| `./test.sh` | **156/156 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,20 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **System dark mode and native controls do not follow the theme** — `M`
-  - `ThemeManager` defaults to Denim (`Theme.swift:361-372`); `builtin(for:)` has no
-    `"system"` mapping, and there is no `effectiveAppearance` fallback or user theme
-    override. A Mattermost "System" theme therefore falls back to light Denim.
-  - Only the emoji and DM pickers force `NSAppearance` (`MainWindow+Composer.swift:25-32`,
-    `MainWindow+Menus.swift:815-817`); `NSApp.appearance` is never set, so native search
-    fields, alerts, menus and text fields stay light on dark custom themes.
-  - Several parsed colors are unused while surfaces hardcode values
-    (`sidebarUnreadText`, `sidebarHoverBg`, `sidebarHeaderBg`, `mentionBg`,
-    `mentionColor`, `newMessageSeparator`, `errorText` — `Theme.swift:23-41`), so custom
-    themes render inconsistently.
-  - Done when system appearance is honored, native controls inherit the palette, and all
-    parsed theme colors are used or removed.
 
 - [ ] **Custom status is local-only and limited** — `S`
   - It is persisted only in `UserDefaults` (`MainWindow+People.swift:176-181`,

@@ -299,13 +299,13 @@ extension MainWindow {
 
     func setupLeftChannelSidebar() {
         let mutedTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
-        let hoverBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        let hoverBg = Theme.shared.sidebarHoverBg
 
         // 1. Team Header Row: "None v" button + "+" button
-        teamHeaderButton.color = .clear
+        teamHeaderButton.color = Theme.shared.sidebarHeaderBg
         teamHeaderButton.cornerRadius = MMRadius.control
         teamHeaderLabel.font = MMFont.font(ofSize: 16, weight: .semibold)
-        teamHeaderLabel.textColor = Theme.shared.sidebarText
+        teamHeaderLabel.textColor = Theme.shared.sidebarHeaderText
         teamHeaderLabel.isEditable = false
         teamHeaderLabel.isSelectable = false
         teamHeaderLabel.lineBreakMode = .byTruncatingTail
@@ -314,14 +314,14 @@ extension MainWindow {
 
         if let chevImg = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Team Menu") {
             teamHeaderChevron.image = chevImg.withSymbolConfiguration(.init(pointSize: 9.5, weight: .bold))
-            teamHeaderChevron.contentTintColor = mutedTint
+            teamHeaderChevron.contentTintColor = Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
         }
         teamHeaderButton.addSubview(teamHeaderChevron)
         teamHeaderButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.teamHeaderButton.color = isHovered ? hoverBg : .clear
+            self.teamHeaderButton.color = isHovered ? hoverBg : Theme.shared.sidebarHeaderBg
             self.teamHeaderButton.setNeedsAppearanceUpdate()
-            self.teamHeaderChevron.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
+            self.teamHeaderChevron.contentTintColor = isHovered ? Theme.shared.sidebarHeaderText : Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
         }
         teamHeaderButton.onClick = { [weak self] in
             self?.toggleTeamMenu()
@@ -1055,8 +1055,8 @@ extension MainWindow {
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         // Web: selected and hovered rows both use 8% white, labels are 14pt regular.
-        let selectedBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
-        let hoverBg = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        let selectedBg = Theme.shared.sidebarHoverBg
+        let hoverBg = Theme.shared.sidebarHoverBg
         let defaultText = Theme.shared.sidebarText.withAlphaComponent(0.64)
         let defaultIcon = Theme.shared.sidebarText.withAlphaComponent(0.64)
 
@@ -1084,21 +1084,33 @@ extension MainWindow {
                 }
             } else {
                 let muted = item.id != "threads" && isChannelMuted(item.id)
+                let unread = item.id == "threads" ? totalUnreadThreads : (unreadByChannel[item.id] ?? 0)
+                let mentions = item.id == "threads" ? 0 : (mentionsByChannel[item.id] ?? 0)
+                let hasUnread = (unread > 0 || mentions > 0) && !muted
+
                 item.row.color = .clear
-                item.label.font = MMFont.font(ofSize: 14, weight: .regular)
-                item.label.textColor = muted
-                    ? Theme.shared.sidebarText.withAlphaComponent(0.42)
-                    : defaultText
-                if item.hasCustomAvatar {
-                    item.iconView.contentTintColor = nil
-                } else if item.isBotBadge {
-                    item.iconView.contentTintColor = muted
-                        ? Theme.shared.sidebarText.withAlphaComponent(0.42)
-                        : Theme.shared.sidebarText.withAlphaComponent(0.85)
+                if hasUnread {
+                    item.label.font = MMFont.font(ofSize: 14, weight: .bold)
+                    item.label.textColor = Theme.shared.sidebarUnreadText
+                    if !item.hasCustomAvatar {
+                        item.iconView.contentTintColor = Theme.shared.sidebarUnreadText
+                    }
                 } else {
-                    item.iconView.contentTintColor = muted
+                    item.label.font = MMFont.font(ofSize: 14, weight: .regular)
+                    item.label.textColor = muted
                         ? Theme.shared.sidebarText.withAlphaComponent(0.42)
-                        : defaultIcon
+                        : defaultText
+                    if item.hasCustomAvatar {
+                        item.iconView.contentTintColor = nil
+                    } else if item.isBotBadge {
+                        item.iconView.contentTintColor = muted
+                            ? Theme.shared.sidebarText.withAlphaComponent(0.42)
+                            : Theme.shared.sidebarText.withAlphaComponent(0.85)
+                    } else {
+                        item.iconView.contentTintColor = muted
+                            ? Theme.shared.sidebarText.withAlphaComponent(0.42)
+                            : defaultIcon
+                    }
                 }
             }
             item.leftBar.isHidden = !isSelected

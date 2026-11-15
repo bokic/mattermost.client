@@ -629,6 +629,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         super.init(contentRect: rect, styleMask: style, backing: backingStoreType, defer: flag)
 
         self.isReleasedWhenClosed = false
+        let initialAppearance = ThemeManager.shared.usesSystemAppearance ? nil : NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+        self.appearance = initialAppearance
+        NSApp.appearance = initialAppearance
         self.backgroundColor = Theme.shared.sidebarTeamBarBg
         self.contentMinSize = NSSize(width: 860, height: 520)
 
@@ -858,16 +861,34 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     func applyCurrentTheme() {
+        let appearance: NSAppearance?
         if ThemeManager.shared.usesSystemAppearance {
-            NSApp.appearance = nil
+            appearance = nil
         } else {
-            NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+            appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
         }
+        NSApp.appearance = appearance
+        self.appearance = appearance
+
         backgroundColor = Theme.shared.sidebarTeamBarBg
         mainPanel.color = Theme.shared.sidebarBg
         chatPanel.color = Theme.shared.centerBg
         mainPanel.setNeedsAppearanceUpdate()
         chatPanel.setNeedsAppearanceUpdate()
+
+        teamHeaderButton.color = Theme.shared.sidebarHeaderBg
+        teamHeaderLabel.textColor = Theme.shared.sidebarHeaderText
+        teamHeaderChevron.contentTintColor = Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
+        teamHeaderButton.setNeedsAppearanceUpdate()
+
+        emojiPanel.appearance = appearance
+        emojiSearchField.appearance = appearance
+        dmPickerPanel.appearance = appearance
+        dmSearchField.appearance = appearance
+        reactionPickerPanel.appearance = appearance
+        reactionPickerSearchField.appearance = appearance
+        profilePopoverPanel.appearance = appearance
+
         updateSidebarSelectionAppearance()
         updateSidebarBadges()
         rebuildTimelineContent(scrollToBottom: false)

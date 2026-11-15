@@ -1042,7 +1042,7 @@ extension MainWindow {
         case .failed(let message):
             progress = 0
             failed = true
-            chip.borderColor = NSColor.systemRed.withAlphaComponent(0.7)
+            chip.borderColor = Theme.shared.errorText.withAlphaComponent(0.7)
             chip.toolTip = message
         }
         if !failed {
@@ -1054,7 +1054,7 @@ extension MainWindow {
         let symbol = failed ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill"
         if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: upload.name) {
             icon.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
-            icon.contentTintColor = failed ? .systemRed : Theme.shared.centerTextMuted
+            icon.contentTintColor = failed ? Theme.shared.errorText : Theme.shared.centerTextMuted
         }
         icon.frame = NSRect(x: 7, y: 6, width: 12, height: 12)
         chip.addSubview(icon)
@@ -1071,7 +1071,7 @@ extension MainWindow {
         }
         let name = NSTextField(labelWithString: title)
         name.font = MMFont.font(ofSize: 11)
-        name.textColor = failed ? .systemRed : Theme.shared.centerText
+        name.textColor = failed ? Theme.shared.errorText : Theme.shared.centerText
         name.lineBreakMode = .byTruncatingMiddle
         name.isEditable = false
         name.isSelectable = false

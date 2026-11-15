@@ -259,7 +259,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         errorLabel = NSTextField(labelWithString: "")
         errorLabel.frame = NSRect(x: 20, y: 92, width: 448, height: 34)
         errorLabel.font = MMFont.font(ofSize: 12)
-        errorLabel.textColor = .systemRed
+        errorLabel.textColor = Theme.shared.errorText
         errorLabel.maximumNumberOfLines = 2
         errorLabel.lineBreakMode = .byWordWrapping
         errorLabel.isEditable = false

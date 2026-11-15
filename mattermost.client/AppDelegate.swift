@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             MainActor.assumeIsolated {
                 guard ThemeManager.shared.usesSystemAppearance else { return }
                 ThemeManager.shared.reapply()
+                self?.mainWindow?.applyCurrentTheme()
                 self?.mainWindow?.refreshServerTheme(teamId: self?.mainWindow?.activeTeam?.id)
             }
         }

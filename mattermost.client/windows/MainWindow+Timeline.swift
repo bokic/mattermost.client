@@ -16,8 +16,8 @@ extension MainWindow {
         container.frame = NSRect(x: 0, y: 0, width: width, height: 34)
         // Web `.NotificationSeparator`: 50% orange rule behind a white pill with
         // 13pt regular orange text and 13pt horizontal padding.
-        let orange = MMPalette.newMessages
-        let lineColor = MMPalette.newMessagesLine
+        let separatorColor = Theme.shared.newMessageSeparator
+        let lineColor = separatorColor.withAlphaComponent(0.5)
 
         let line = RoundedEdgePanel()
         line.cornerRadius = 0
@@ -38,7 +38,7 @@ extension MainWindow {
         pill.frame = NSRect(x: (width - pillW) / 2, y: 4, width: pillW, height: pillH)
         let label = NSTextField(labelWithString: text)
         label.font = font
-        label.textColor = orange
+        label.textColor = separatorColor
         label.alignment = .center
         label.isEditable = false
         label.isSelectable = false
@@ -2060,7 +2060,7 @@ extension MainWindow {
             statusColor = Theme.shared.centerTextMuted
         case .failed:
             statusText = L10n.string("Failed to send")
-            statusColor = .systemRed
+            statusColor = Theme.shared.errorText
         }
         let status = NSTextField(labelWithString: statusText)
         status.font = MMFont.font(ofSize: 11, weight: .semibold)
@@ -2397,12 +2397,17 @@ extension MainWindow {
             let totalRowH = max(24, contentY)
             row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
 
+            let isMentioned = !isSystem && !isDeleted && isCurrentUserMentioned(in: post)
+            let mentionBaseBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.18) : .clear
+            let mentionHoverBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.28) : msgHoverBg
+            row.color = mentionBaseBg
+
             let toolbar = (isSystem || isDeleted)
                 ? nil
                 : addHoverToolbar(for: post, to: row, width: width, compact: true)
 
             row.onHoverChanged = { [weak row, weak hoverTimeLabel, weak toolbar] isHovered in
-                row?.color = isHovered ? msgHoverBg : .clear
+                row?.color = isHovered ? mentionHoverBg : mentionBaseBg
                 row?.setNeedsAppearanceUpdate()
                 hoverTimeLabel?.isHidden = !isHovered
                 toolbar?.isHidden = !isHovered
@@ -2712,11 +2717,16 @@ extension MainWindow {
             updateStatusCheck(in: usrDot, status: stat)
         }
 
+        let isMentioned = !isSystem && !isDeleted && isCurrentUserMentioned(in: post)
+        let mentionBaseBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.18) : .clear
+        let mentionHoverBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.28) : msgHoverBg
+        row.color = mentionBaseBg
+
         let toolbar = (isSystem || isDeleted)
             ? nil
             : addHoverToolbar(for: post, to: row, width: width)
         row.onHoverChanged = { [weak row, weak toolbar] isHovered in
-            row?.color = isHovered ? msgHoverBg : .clear
+            row?.color = isHovered ? mentionHoverBg : mentionBaseBg
             row?.setNeedsAppearanceUpdate()
             toolbar?.isHidden = !isHovered
             row?.reactionAddChip?.isHidden = !isHovered
@@ -3140,7 +3150,6 @@ extension MainWindow {
 
     func applyInlineEnhancements(to result: NSMutableAttributedString, codeRanges: [NSRange], font: NSFont) {
         let brandBlue = Theme.shared.buttonBg
-        let mentionBg = Theme.shared.buttonBg.withAlphaComponent(0.10)
         let string = result.string as NSString
         let fullRange = NSRange(location: 0, length: string.length)
 
@@ -3149,11 +3158,19 @@ extension MainWindow {
         }
 
         // @mentions
+        let myUsername = currentUser?.username.lowercased()
         if let regex = try? NSRegularExpression(pattern: #"(?<![\w@])@([A-Za-z0-9._-]+)"#) {
             for match in regex.matches(in: result.string, options: [], range: fullRange) where !isCode(match.range) {
+                let matchText = string.substring(with: match.range).lowercased()
+                let isMyMention = (myUsername != nil && matchText == "@\(myUsername!)")
+                    || matchText == "@all" || matchText == "@channel" || matchText == "@here"
+                let fgColor = isMyMention ? Theme.shared.mentionHighlightLink : brandBlue
+                let bgColor = isMyMention
+                    ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.35)
+                    : Theme.shared.buttonBg.withAlphaComponent(0.10)
                 result.addAttributes([
-                    .foregroundColor: brandBlue,
-                    .backgroundColor: mentionBg
+                    .foregroundColor: fgColor,
+                    .backgroundColor: bgColor
                 ], range: match.range)
             }
         }

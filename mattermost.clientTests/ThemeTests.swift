@@ -110,4 +110,20 @@ final class ThemeTests: XCTestCase {
         ThemeManager.shared.apply(preferences: preferences, teamId: nil)
         XCTAssertFalse(ThemeManager.shared.usesSystemAppearance)
     }
+
+    func testBuiltinSystemThemeMappingAndCustomFallback() {
+        let isSystemDark =
+            NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let expectedBuiltin = isSystemDark ? "Onyx" : "Denim"
+
+        let systemBuiltin = MMTheme.builtin(for: "system")
+        XCTAssertNotNil(systemBuiltin)
+        XCTAssertEqual(systemBuiltin?.typeName, expectedBuiltin)
+
+        let systemTheme = MMTheme(json: ["type": "system"])
+        XCTAssertEqual(systemTheme.isDark, isSystemDark)
+
+        let customTheme = MMTheme(json: [:])
+        XCTAssertEqual(customTheme.isDark, isSystemDark)
+    }
 }
