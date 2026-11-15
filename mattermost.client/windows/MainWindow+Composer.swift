@@ -1368,6 +1368,14 @@ extension MainWindow {
             threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
             return
         }
+        if (notification.object as? NSTextField) === searchPopoverInputLabel {
+            if searchPopoverInputLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                showRecentSearchesIfNeeded()
+            } else {
+                hideRecentSearches()
+            }
+            return
+        }
         guard (notification.object as? NSTextField) === findChannelLabel else { return }
         channelFilterQuery = findChannelLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)

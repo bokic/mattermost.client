@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **70/70 pass** |
+| `./test.sh` | **76/76 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -27,15 +27,6 @@ completed baseline remains at the end.
 ---
 
 ## P1 — Correctness, data loss & reliability
-
-### Search
-
-- [ ] **Search is first-page-only and mouse-only** — `M`
-  - `presentSearchResults` hard-caps at `posts.prefix(50)` (`MainWindow+Header.swift:295`)
-    with no "load more", no result highlight, no keyboard navigation, and no recent
-    searches. Filter pills (`From:`, `In:`, `On:`…) are decorative.
-  - Done when search paginates, supports Up/Down/Enter, highlights terms, and the filter
-    pills insert valid scopes.
 
 ### Threads and the right-hand panel
 
@@ -417,11 +408,10 @@ completed baseline remains at the end.
 2. **RHS pagination + stale-result guards** — the daily-use list panels still stop at one page.
 3. **Sidebar scrolling + category management** — long sidebars become unreachable.
 4. **Rich thread composer + thread pagination** — threads are still a reduced experience.
-5. **Search pagination/keyboard navigation and filter scopes** — the Files tab now works, but search is still first-page-only.
-6. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
-7. **Accessibility/localization pass** — labels, focus traversal and localized strings.
-8. **Timeline incremental updates + bounded caches** — scalability for large channels.
-9. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
+5. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
+6. **Accessibility/localization pass** — labels, focus traversal and localized strings.
+7. **Timeline incremental updates + bounded caches** — scalability for large channels.
+8. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
 
 ---
 
@@ -436,8 +426,10 @@ history is in git; the original long-form checklist lives in prior commits of th
   drag-and-drop, clipboard-image paste, streamed uploads with per-file progress/cancel/retry,
   server-configured size limits, attachment chips, formatting-toolbar chrome, ⌘K/⌘F, Esc
   overlay handling, focus traversal.
-- **Search:** real global search field, `POST /teams/{team}/posts/search`, floating results
-  with click-to-open, Messages/Files tab styling, scoped `in:` prefill from ⌘F.
+- **Search:** real global search field, `POST /teams/{team}/posts/search`, paginated
+  Messages/Files results with scroll/load-more, Up/Down/Enter navigation, term highlighting,
+  recent searches, working `From:`/`In:`/`On:`/`Before:`/`After:` filter pills, and scoped
+  `in:` prefill from ⌘F.
 - **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels, thread
   view with grouped replies + inline reply, draggable/persisted width, channel subtitle.
 - **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
@@ -471,7 +463,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 70 tests today; keep the count rising
+./test.sh       # 76 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

@@ -183,6 +183,19 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let filesTabLabel = NSTextField(labelWithString: "Files")
     var isSearchPopoverOpen = false
     var isSearchFilesTabSelected = false
+    var searchResultsTerms = ""
+    var searchResultPosts: [MMPost] = []
+    var searchResultFiles: [MMFileInfo] = []
+    var searchResultRowViews: [RoundedEdgePanel] = []
+    var searchResultsSelectionIndex = -1
+    var searchResultsPage = 0
+    var searchResultsHasMore = false
+    var searchResultsLoading = false
+    var searchResultsAreFiles = false
+    var searchResultsAreRecents = false
+    var recentSearches: [String] =
+        UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    var searchRequestToken = 0
 
     // Direct Message picker (opened from the + in the Direct Messages header)
     let dmPickerPanel = RoundedEdgePanel()
@@ -658,6 +671,22 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             if event.keyCode == 48, !isCompletionVisible,
                handleFocusTraversal(reverse: event.modifierFlags.contains(.shift)) {
                 return
+            }
+            if !searchResultsPanel.isHidden, !isSearchPopoverOpen,
+               !event.modifierFlags.contains(.command),
+               !(firstResponder is NSTextView), !(firstResponder is NSTextField) {
+                switch event.keyCode {
+                case 125:
+                    moveSearchSelection(by: 1)
+                    return
+                case 126:
+                    moveSearchSelection(by: -1)
+                    return
+                case 36, 76:
+                    if activateSearchSelection() { return }
+                default:
+                    break
+                }
             }
         }
         if event.type == .leftMouseDown || event.type == .rightMouseDown {

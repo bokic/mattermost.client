@@ -211,6 +211,9 @@ extension MainWindow {
         searchPopoverPanel.isHidden = !open
         if open {
             makeFirstResponder(searchPopoverInputLabel)
+            showRecentSearchesIfNeeded()
+        } else {
+            hideRecentSearches()
         }
     }
 
@@ -250,6 +253,13 @@ extension MainWindow {
         searchResultsScroll.hasVerticalScroller = true
         searchResultsScroll.autohidesScrollers = true
         searchResultsScroll.documentView = searchResultsDoc
+        searchResultsScroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(searchResultsDidScroll),
+            name: NSView.boundsDidChangeNotification,
+            object: searchResultsScroll.contentView
+        )
         searchResultsPanel.addSubview(searchResultsScroll)
 
         contentView?.addSubview(searchResultsPanel)
@@ -257,65 +267,376 @@ extension MainWindow {
 
     @objc func performSearchFromPopover() {
         let terms = searchPopoverInputLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !terms.isEmpty, let team = activeTeam else { return }
+        guard !terms.isEmpty, activeTeam != nil else { return }
         setSearchPopoverOpen(false)
+        startSearch(terms: terms)
+    }
+
+    func rerunSearchForActiveTab() {
+        guard !searchResultsAreRecents,
+              !searchResultsPanel.isHidden,
+              !searchResultsTerms.isEmpty
+        else { return }
+        startSearch(terms: searchResultsTerms)
+    }
+
+    func recordRecentSearch(_ terms: String) {
+        let trimmed = terms.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        recentSearches.removeAll { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
+        recentSearches.insert(trimmed, at: 0)
+        if recentSearches.count > 8 {
+            recentSearches.removeLast(recentSearches.count - 8)
+        }
+        UserDefaults.standard.set(recentSearches, forKey: "recentSearches")
+    }
+
+    func showRecentSearchesIfNeeded() {
+        let query = searchPopoverInputLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isSearchPopoverOpen, query.isEmpty, !recentSearches.isEmpty else {
+            hideRecentSearches()
+            return
+        }
+        searchResultsAreRecents = true
+        searchRequestToken += 1
+        searchResultsLoading = false
+        searchResultsHasMore = false
+        searchResultsSelectionIndex = -1
+        searchResultRowViews = []
+        searchResultPosts = []
+        searchResultFiles = []
+        searchResultsTitle.stringValue = "Recent searches"
+        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+
+        let width = searchResultsPanel.bounds.width
+        let inset: CGFloat = 8
+        var y: CGFloat = 0
+        for (index, term) in recentSearches.enumerated() {
+            let row = makeRecentSearchRow(term, width: width - inset * 2, index: index)
+            row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: 34)
+            searchResultsDoc.addSubview(row)
+            searchResultRowViews.append(row)
+            y += 38
+        }
+        searchResultsDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+        searchResultsScroll.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: width,
+            height: max(0, searchResultsPanel.bounds.height - 44)
+        )
+        searchResultsPanel.isHidden = false
+    }
+
+    func hideRecentSearches() {
+        guard searchResultsAreRecents else { return }
+        searchResultsAreRecents = false
+        searchRequestToken += 1
+        searchResultsPanel.isHidden = true
+        searchResultRowViews = []
+        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+    }
+
+    func makeRecentSearchRow(_ term: String, width: CGFloat, index: Int) -> RoundedEdgePanel {
+        let row = RoundedEdgePanel()
+        row.color = .clear
+        row.cornerRadius = MMRadius.menu
+
+        let icon = NSImageView()
+        if let image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Recent search") {
+            icon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+            icon.contentTintColor = Theme.shared.centerTextMuted
+        }
+        icon.frame = NSRect(x: 10, y: 9, width: 16, height: 16)
+        row.addSubview(icon)
+
+        let label = NSTextField(labelWithString: term)
+        label.font = MMFont.font(ofSize: 13)
+        label.textColor = Theme.shared.centerText
+        label.lineBreakMode = .byTruncatingTail
+        label.isEditable = false
+        label.isSelectable = false
+        label.frame = NSRect(x: 36, y: 8, width: max(60, width - 48), height: 18)
+        row.addSubview(label)
+
+        row.onHoverChanged = { [weak self] _ in
+            self?.updateSearchSelectionAppearance()
+        }
+        row.onClick = { [weak self] in
+            self?.runRecentSearch(term)
+        }
+        row.accessibilityTitle = "Recent search: \(term)"
+        return row
+    }
+
+    func runRecentSearch(_ term: String) {
+        searchPopoverInputLabel.stringValue = term
+        setSearchPopoverOpen(false)
+        startSearch(terms: term)
+    }
+
+    func currentSearchResultCount() -> Int {
+        if searchResultsAreRecents { return recentSearches.count }
+        return searchResultsAreFiles ? searchResultFiles.count : searchResultPosts.count
+    }
+
+    func startSearch(terms: String) {
+        guard activeTeam != nil else { return }
+        recordRecentSearch(terms)
+        searchResultsAreRecents = false
+        searchRequestToken += 1
+        let token = searchRequestToken
+        searchResultsTerms = terms
+        searchResultsAreFiles = isSearchFilesTabSelected
+        searchResultsPage = 0
+        searchResultsHasMore = false
+        searchResultsLoading = true
+        searchResultsSelectionIndex = -1
+        searchResultPosts = []
+        searchResultFiles = []
+        searchResultRowViews = []
         searchResultsTitle.stringValue = "Searching…"
         searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
         searchResultsDoc.frame = NSRect(x: 0, y: 0, width: searchResultsPanel.bounds.width, height: 1)
         searchResultsPanel.isHidden = false
+        makeFirstResponder(chatTimelineContainer)
+        loadSearchPage(page: 0, append: false, token: token)
+    }
+
+    func loadSearchPage(page: Int, append: Bool, token: Int) {
+        guard let team = activeTeam, let ws = webService else { return }
+        let terms = searchResultsTerms
+        let filesMode = searchResultsAreFiles
+        let pageSize = 30
+        if append {
+            searchResultsLoading = true
+            renderSearchResults()
+        }
 
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = self.webService else { return }
+            guard let self = self else { return }
             do {
-                if self.isSearchFilesTabSelected {
-                    let files = try await ws.searchTeamFiles(teamId: team.id, terms: terms)
+                if filesMode {
+                    let files = try await ws.searchTeamFiles(
+                        teamId: team.id,
+                        terms: terms,
+                        page: page,
+                        perPage: pageSize
+                    )
+                    guard token == self.searchRequestToken else { return }
                     let userIds = Array(Set(files.compactMap(\.user_id)).subtracting(self.usersById.keys))
                     if !userIds.isEmpty, let users = try? await ws.fetchUsersByIds(userIds) {
                         for user in users { self.usersById[user.id] = user }
                     }
-                    self.presentSearchFileResults(files, terms: terms)
-                    return
-                }
-                let list = try await ws.searchPosts(teamId: team.id, terms: terms)
-                let posts = list.order.compactMap { list.posts[$0] }
-                let missingUserIds = Array(Set(posts.map { $0.user_id }).subtracting(self.usersById.keys))
-                if !missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(missingUserIds) {
-                    for user in users {
-                        self.usersById[user.id] = user
-                    }
-                }
-                self.presentSearchResults(posts, terms: terms)
-            } catch {
-                if self.isSearchFilesTabSelected {
-                    self.presentSearchFileResults([], terms: terms)
+                    guard token == self.searchRequestToken else { return }
+                    let existing = Set(append ? self.searchResultFiles.map(\.id) : [])
+                    let newFiles = files.filter { !existing.contains($0.id) }
+                    self.searchResultFiles = append ? self.searchResultFiles + newFiles : files
+                    self.searchResultsPage = page
+                    self.searchResultsHasMore = files.count == pageSize
                 } else {
-                    self.presentSearchResults([], terms: terms)
+                    let list = try await ws.searchPosts(
+                        teamId: team.id,
+                        terms: terms,
+                        page: page,
+                        perPage: pageSize
+                    )
+                    guard token == self.searchRequestToken else { return }
+                    let posts = list.order.compactMap { list.posts[$0] }
+                    let missingUserIds = Array(Set(posts.map { $0.user_id }).subtracting(self.usersById.keys))
+                    if !missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(missingUserIds) {
+                        for user in users { self.usersById[user.id] = user }
+                    }
+                    guard token == self.searchRequestToken else { return }
+                    let existing = Set(append ? self.searchResultPosts.map(\.id) : [])
+                    let newPosts = posts.filter { !existing.contains($0.id) }
+                    self.searchResultPosts = append ? self.searchResultPosts + newPosts : posts
+                    self.searchResultsPage = page
+                    self.searchResultsHasMore = posts.count == pageSize
+                }
+                self.searchResultsLoading = false
+                self.renderSearchResults()
+            } catch {
+                guard token == self.searchRequestToken else { return }
+                self.searchResultsLoading = false
+                if append {
+                    self.searchResultsHasMore = false
+                    self.renderSearchResults()
+                    self.searchResultsTitle.stringValue = "Could not load more results"
+                } else {
+                    self.searchResultPosts = []
+                    self.searchResultFiles = []
+                    self.renderSearchResults()
+                    self.searchResultsTitle.stringValue =
+                        "Search failed for “\(self.searchResultsTerms)”"
                 }
             }
         }
     }
 
-    func presentSearchFileResults(_ files: [MMFileInfo], terms: String) {
+    func loadNextSearchPage() {
+        guard searchResultsHasMore, !searchResultsLoading, !searchResultsTerms.isEmpty else { return }
+        loadSearchPage(page: searchResultsPage + 1, append: true, token: searchRequestToken)
+    }
+
+    func renderSearchResults() {
+        searchResultRowViews.removeAll()
         searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
-        searchResultsTitle.stringValue = files.isEmpty
-            ? "No files for “\(terms)”"
-            : "\(files.count) file\(files.count == 1 ? "" : "s") for “\(terms)”"
 
         let width = searchResultsPanel.bounds.width
         let rowHeight: CGFloat = 54
         let inset: CGFloat = 8
         var y: CGFloat = 0
-        for file in files {
-            let row = makeSearchFileResultRow(file, width: width - inset * 2)
-            row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: rowHeight - 4)
-            searchResultsDoc.addSubview(row)
-            y += rowHeight
+
+        if searchResultsAreFiles {
+            for (index, file) in searchResultFiles.enumerated() {
+                let row = makeSearchFileResultRow(file, width: width - inset * 2, index: index)
+                row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: rowHeight - 4)
+                searchResultsDoc.addSubview(row)
+                searchResultRowViews.append(row)
+                y += rowHeight
+            }
+        } else {
+            for (index, post) in searchResultPosts.enumerated() {
+                let row = makeSearchResultRow(post, width: width - inset * 2, index: index)
+                row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: rowHeight - 4)
+                searchResultsDoc.addSubview(row)
+                searchResultRowViews.append(row)
+                y += rowHeight
+            }
         }
+
+        if searchResultsLoading || searchResultsHasMore {
+            let footer = makeSearchResultsFooter(width: width - inset * 2)
+            footer.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: 30)
+            searchResultsDoc.addSubview(footer)
+            y += 34
+        }
+
+        let count = searchResultsAreFiles ? searchResultFiles.count : searchResultPosts.count
+        if count == 0 {
+            searchResultsSelectionIndex = -1
+        } else if searchResultsSelectionIndex < 0 || searchResultsSelectionIndex >= count {
+            searchResultsSelectionIndex = 0
+        }
+
+        searchResultsTitle.stringValue = searchResultsTitleText(count: count)
         searchResultsDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
-        searchResultsScroll.frame = NSRect(x: 0, y: 0, width: width, height: max(0, searchResultsPanel.bounds.height - 44))
+        searchResultsScroll.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: width,
+            height: max(0, searchResultsPanel.bounds.height - 44)
+        )
+        updateSearchSelectionAppearance()
     }
 
-    func makeSearchFileResultRow(_ file: MMFileInfo, width: CGFloat) -> RoundedEdgePanel {
+    func searchResultsTitleText(count: Int) -> String {
+        if searchResultsLoading && count == 0 {
+            return "Searching…"
+        }
+        if count == 0 {
+            return searchResultsAreFiles
+                ? "No files for “\(searchResultsTerms)”"
+                : "No results for “\(searchResultsTerms)”"
+        }
+        let suffix = searchResultsHasMore ? "+" : ""
+        let noun = searchResultsAreFiles ? "file" : "result"
+        let plural = count == 1 ? "" : "s"
+        return "\(count)\(suffix) \(noun)\(plural) for “\(searchResultsTerms)”"
+    }
+
+    func makeSearchResultsFooter(width: CGFloat) -> RoundedEdgePanel {
+        let row = RoundedEdgePanel()
+        row.color = .clear
+        row.cornerRadius = MMRadius.menu
+        let label = NSTextField(
+            labelWithString: searchResultsLoading ? "Loading more results…" : "Load more results"
+        )
+        label.font = MMFont.font(ofSize: 12, weight: .semibold)
+        label.textColor = searchResultsLoading ? Theme.shared.centerTextMuted : Theme.shared.buttonBg
+        label.alignment = .center
+        label.isEditable = false
+        label.isSelectable = false
+        label.frame = NSRect(x: 8, y: 6, width: max(80, width - 16), height: 18)
+        row.addSubview(label)
+        if !searchResultsLoading {
+            row.onClick = { [weak self] in
+                self?.loadNextSearchPage()
+            }
+            row.onHoverChanged = { [weak row] isHovered in
+                row?.color = isHovered ? Theme.shared.centerHover : .clear
+                row?.setNeedsAppearanceUpdate()
+            }
+        }
+        row.accessibilityTitle = searchResultsLoading ? "Loading more results" : "Load more results"
+        return row
+    }
+
+    func updateSearchSelectionAppearance() {
+        let selectedBg = Theme.shared.buttonBg.withAlphaComponent(0.12)
+        for (index, row) in searchResultRowViews.enumerated() {
+            if index == searchResultsSelectionIndex {
+                row.color = selectedBg
+            } else {
+                row.color = row.isHovered ? Theme.shared.centerHover : .clear
+            }
+            row.setNeedsAppearanceUpdate()
+        }
+    }
+
+    func moveSearchSelection(by delta: Int) {
+        let count = currentSearchResultCount()
+        guard count > 0 else { return }
+        if searchResultsSelectionIndex < 0 {
+            searchResultsSelectionIndex = delta < 0 ? count - 1 : 0
+        } else {
+            searchResultsSelectionIndex = (searchResultsSelectionIndex + delta + count) % count
+        }
+        updateSearchSelectionAppearance()
+        guard searchResultRowViews.indices.contains(searchResultsSelectionIndex) else { return }
+        searchResultsDoc.scrollToVisible(
+            searchResultRowViews[searchResultsSelectionIndex].frame.insetBy(dx: 0, dy: -4)
+        )
+        if searchResultsSelectionIndex == count - 1, searchResultsHasMore, !searchResultsLoading {
+            loadNextSearchPage()
+        }
+    }
+
+    @discardableResult
+    func activateSearchSelection() -> Bool {
+        let count = currentSearchResultCount()
+        guard count > 0 else { return false }
+        if searchResultsSelectionIndex < 0 || searchResultsSelectionIndex >= count {
+            searchResultsSelectionIndex = 0
+        }
+        if searchResultsAreRecents {
+            guard recentSearches.indices.contains(searchResultsSelectionIndex) else { return false }
+            runRecentSearch(recentSearches[searchResultsSelectionIndex])
+        } else if searchResultsAreFiles {
+            guard searchResultFiles.indices.contains(searchResultsSelectionIndex) else { return false }
+            let file = searchResultFiles[searchResultsSelectionIndex]
+            closeSearchResults()
+            openAttachment(file)
+        } else {
+            guard searchResultPosts.indices.contains(searchResultsSelectionIndex) else { return false }
+            openSearchResult(searchResultPosts[searchResultsSelectionIndex])
+        }
+        return true
+    }
+
+    @objc func searchResultsDidScroll() {
+        guard !searchResultsPanel.isHidden,
+              searchResultsHasMore,
+              !searchResultsLoading
+        else { return }
+        let clip = searchResultsScroll.contentView.bounds
+        if clip.maxY >= searchResultsDoc.frame.height - 120 {
+            loadNextSearchPage()
+        }
+    }
+
+    func makeSearchFileResultRow(_ file: MMFileInfo, width: CGFloat, index: Int) -> RoundedEdgePanel {
         let row = RoundedEdgePanel()
         row.color = .clear
         row.cornerRadius = MMRadius.menu
@@ -337,9 +658,13 @@ extension MainWindow {
         icon.frame = NSRect(x: 12, y: 18, width: 20, height: 20)
         row.addSubview(icon)
 
-        let nameLabel = NSTextField(labelWithString: file.name ?? file.id)
-        nameLabel.font = MMFont.font(ofSize: 13, weight: .semibold)
-        nameLabel.textColor = Theme.shared.centerText
+        let nameLabel = NSTextField(labelWithAttributedString: SearchSupport.attributedSnippet(
+            file.name ?? file.id,
+            query: searchResultsTerms,
+            font: MMFont.font(ofSize: 13, weight: .semibold),
+            textColor: Theme.shared.centerText,
+            highlightColor: Theme.shared.centerText
+        ))
         nameLabel.isEditable = false
         nameLabel.isSelectable = false
         nameLabel.lineBreakMode = .byTruncatingMiddle
@@ -355,38 +680,18 @@ extension MainWindow {
         metaLabel.frame = NSRect(x: 42, y: 6, width: max(60, width - 54), height: 16)
         row.addSubview(metaLabel)
 
-        row.onHoverChanged = { [weak row] isHovered in
-            row?.color = isHovered ? Theme.shared.centerHover : .clear
-            row?.setNeedsAppearanceUpdate()
+        row.onHoverChanged = { [weak self] _ in
+            self?.updateSearchSelectionAppearance()
         }
         row.onClick = { [weak self] in
             self?.closeSearchResults()
             self?.openAttachment(file)
         }
+        row.accessibilityTitle = file.name ?? file.id
         return row
     }
 
-    func presentSearchResults(_ posts: [MMPost], terms: String) {
-        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
-        searchResultsTitle.stringValue = posts.isEmpty
-            ? "No results for “\(terms)”"
-            : "\(posts.count) result\(posts.count == 1 ? "" : "s") for “\(terms)”"
-
-        let width = searchResultsPanel.bounds.width
-        let rowHeight: CGFloat = 54
-        let inset: CGFloat = 8
-        var y: CGFloat = 0
-        for post in posts.prefix(50) {
-            let row = makeSearchResultRow(post, width: width - inset * 2)
-            row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: rowHeight - 4)
-            searchResultsDoc.addSubview(row)
-            y += rowHeight
-        }
-        searchResultsDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
-        searchResultsScroll.frame = NSRect(x: 0, y: 0, width: width, height: max(0, searchResultsPanel.bounds.height - 44))
-    }
-
-    func makeSearchResultRow(_ post: MMPost, width: CGFloat) -> RoundedEdgePanel {
+    func makeSearchResultRow(_ post: MMPost, width: CGFloat, index: Int) -> RoundedEdgePanel {
         let row = RoundedEdgePanel()
         row.color = .clear
         row.cornerRadius = MMRadius.menu
@@ -408,25 +713,49 @@ extension MainWindow {
         row.addSubview(metaLabel)
 
         let snippetText = post.message.replacingOccurrences(of: "\n", with: " ")
-        let snippet = NSTextField(labelWithString: snippetText)
-        snippet.font = MMFont.font(ofSize: 13)
-        snippet.textColor = Theme.shared.centerText.withAlphaComponent(0.9)
+        let snippet = NSTextField(labelWithAttributedString: SearchSupport.attributedSnippet(
+            snippetText,
+            query: searchResultsTerms,
+            font: MMFont.font(ofSize: 13),
+            textColor: Theme.shared.centerText.withAlphaComponent(0.9),
+            highlightColor: Theme.shared.centerText
+        ))
         snippet.isEditable = false
         snippet.isSelectable = false
         snippet.lineBreakMode = .byTruncatingTail
         snippet.frame = NSRect(x: 12, y: 26, width: width - 24, height: 18)
         row.addSubview(snippet)
 
-        row.onHoverChanged = { [weak row] isHovered in
-            row?.color = isHovered
-                ? Theme.shared.centerHover
-                : .clear
-            row?.setNeedsAppearanceUpdate()
+        row.onHoverChanged = { [weak self] _ in
+            self?.updateSearchSelectionAppearance()
         }
         row.onClick = { [weak self] in
             self?.openSearchResult(post)
         }
+        row.accessibilityTitle = snippetText
         return row
+    }
+
+    func insertSearchFilter(_ pill: String) {
+        guard let insertion = SearchSupport.filterInsertion(
+            for: pill,
+            channelName: channelsById[activeChannelId]?.name
+        ) else { return }
+        if !isSearchPopoverOpen {
+            setSearchPopoverOpen(true)
+        }
+        var current = searchPopoverInputLabel.stringValue
+        if !current.isEmpty, !current.hasSuffix(" ") {
+            current += " "
+        }
+        let updated = current + insertion
+        searchPopoverInputLabel.stringValue = updated
+        hideRecentSearches()
+        makeFirstResponder(searchPopoverInputLabel)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let editor = self.searchPopoverInputLabel.currentEditor() else { return }
+            editor.selectedRange = NSRange(location: (updated as NSString).length, length: 0)
+        }
     }
 
     func openSearchResult(_ post: MMPost) {
@@ -439,6 +768,14 @@ extension MainWindow {
     }
 
     func closeSearchResults() {
+        searchRequestToken += 1
+        searchResultsAreRecents = false
+        searchResultsLoading = false
+        searchResultsHasMore = false
+        searchResultsSelectionIndex = -1
+        searchResultPosts = []
+        searchResultFiles = []
+        searchResultRowViews = []
         searchResultsPanel.isHidden = true
         searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
     }
@@ -449,6 +786,7 @@ extension MainWindow {
         }
         searchPopoverInputLabel.stringValue = ""
         makeFirstResponder(searchPopoverInputLabel)
+        showRecentSearchesIfNeeded()
     }
 
     func focusChannelSearch() {
@@ -461,6 +799,7 @@ extension MainWindow {
         }
         let prefix = "in:\(channel.name) "
         searchPopoverInputLabel.stringValue = prefix
+        hideRecentSearches()
         makeFirstResponder(searchPopoverInputLabel)
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let editor = self.searchPopoverInputLabel.currentEditor() else { return }
@@ -586,8 +925,10 @@ extension MainWindow {
             self?.updateSearchTabsAppearance()
         }
         messagesTabPanel.onClick = { [weak self] in
-            self?.isSearchFilesTabSelected = false
-            self?.updateSearchTabsAppearance()
+            guard let self = self else { return }
+            self.isSearchFilesTabSelected = false
+            self.updateSearchTabsAppearance()
+            self.rerunSearchForActiveTab()
         }
         searchPopoverPanel.addSubview(messagesTabPanel)
 
@@ -604,8 +945,10 @@ extension MainWindow {
             self?.updateSearchTabsAppearance()
         }
         filesTabPanel.onClick = { [weak self] in
-            self?.isSearchFilesTabSelected = true
-            self?.updateSearchTabsAppearance()
+            guard let self = self else { return }
+            self.isSearchFilesTabSelected = true
+            self.updateSearchTabsAppearance()
+            self.rerunSearchForActiveTab()
         }
         searchPopoverPanel.addSubview(filesTabPanel)
 
@@ -663,6 +1006,7 @@ extension MainWindow {
         searchPopoverInputLabel.cell?.usesSingleLineMode = true
         searchPopoverInputLabel.target = self
         searchPopoverInputLabel.action = #selector(performSearchFromPopover)
+        searchPopoverInputLabel.delegate = self
         searchPopoverInputLabel.frame = NSRect(x: 32, y: 7, width: popoverWidth - 72, height: 18)
         searchInputBox.addSubview(searchPopoverInputLabel)
         searchPopoverPanel.addSubview(searchInputBox)
@@ -716,6 +1060,11 @@ extension MainWindow {
                 pill?.color = isHovered ? pillHoverBg : pillBg
                 pill?.setNeedsAppearanceUpdate()
             }
+            let pillName = title
+            pill.onClick = { [weak self] in
+                self?.insertSearchFilter(pillName)
+            }
+            pill.accessibilityTitle = "Insert \\(title) filter"
             searchPopoverPanel.addSubview(pill)
             pillX += pillW + 4
         }
