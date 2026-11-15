@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **187/187 pass** |
+| `./test.sh` | **195/195 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,12 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-### Platform and accessibility
-
-- [ ] **No auto-update path** — `M`
-  - There is no Sparkle/feed or update check. Add a signed appcast/update mechanism (or
-    document that users must download manually) before public distribution.
 
 ---
 

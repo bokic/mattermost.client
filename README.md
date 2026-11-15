@@ -198,7 +198,8 @@ mattermost.client/
   created/renamed/reordered from the client.
 - Accessibility roles/labels and localization are still incomplete.
 - A notarized distribution build requires a Developer ID certificate and
-  notary credentials; see [RELEASE.md](RELEASE.md).
+  notary credentials; see [RELEASE.md](RELEASE.md). Users can check for updates
+  via **Mattermost > Check for Updates…** or download manually from GitHub Releases.
 
 ---
 

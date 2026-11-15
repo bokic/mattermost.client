@@ -9,18 +9,18 @@
 
 import Foundation
 
-enum AppVersion {
-    static func title(base: String, version: String?) -> String {
+public enum AppVersion {
+    public static func title(base: String, version: String?) -> String {
         guard let version = version, !version.isEmpty else { return base }
         return "\(base) \(version)"
     }
 
-    static var windowTitle: String {
+    public static var windowTitle: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return title(base: "Mattermost", version: version)
     }
 
-    static var versionString: String {
+    public static var versionString: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "Development"
     }
 }

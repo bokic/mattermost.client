@@ -173,6 +173,15 @@ fi
 CHECKSUM="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
 printf '%s  %s\n' "$CHECKSUM" "$(basename "$DMG_PATH")" > "$DMG_PATH.sha256"
 
+if [ -f "$ROOT/tools/generate_appcast.py" ]; then
+    echo "Updating appcast.xml..."
+    python3 "$ROOT/tools/generate_appcast.py" \
+        --appcast "$ROOT/appcast.xml" \
+        --version "$APP_VERSION" \
+        --dmg "$DMG_PATH" \
+        --sha256 "$CHECKSUM" || true
+fi
+
 echo ""
 echo "Build succeeded!"
 echo "  DMG:      $DMG_PATH"

@@ -2159,6 +2159,36 @@ extension MainWindow {
             }
         ))
 
+        // UPDATES
+        rows.append(RightPanelRow(
+            title: L10n.string("UPDATES"),
+            subtitle: "",
+            meta: "",
+            action: nil,
+            isSectionHeader: true
+        ))
+        rows.append(RightPanelRow(
+            title: L10n.string("Check for updates"),
+            subtitle: L10n.format("Current version: %@", AppVersion.versionString),
+            meta: L10n.string("Check"),
+            action: { [weak self] in
+                guard let self = self else { return }
+                UpdateChecker.shared.checkForUpdates(userInitiated: true, presentingWindow: self)
+            }
+        ))
+        rows.append(RightPanelRow(
+            title: L10n.string("Automatic updates"),
+            subtitle: UpdateChecker.shared.automaticallyChecksForUpdates
+                ? L10n.string("Check daily for new versions")
+                : L10n.string("Disabled"),
+            meta: L10n.string("Toggle"),
+            action: { [weak self] in
+                guard let self = self else { return }
+                UpdateChecker.shared.automaticallyChecksForUpdates.toggle()
+                self.loadSettingsPanel()
+            }
+        ))
+
         // SESSION & DIAGNOSTICS
         rows.append(RightPanelRow(
             title: "SESSION & DIAGNOSTICS",

@@ -9,5 +9,7 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/bokic/mattermost.client/main/appcast.xml</string>
 </dict>
 </plist>

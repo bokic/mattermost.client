@@ -50,7 +50,16 @@ spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG
    channels/teams, send/edit/delete, upload/download, open the RHS panels,
    exercise zoom, resize/relaunch and confirm Gatekeeper does not block it.
 
-5. Publish the DMG **and** its `.sha256` file.
+5. Publish the DMG, its `.sha256` file, and commit the updated `appcast.xml`.
+   `build_release.sh` automatically updates `appcast.xml` using `tools/generate_appcast.py`.
+
+## Auto-Update and Appcast Feed
+
+The application includes a native auto-update mechanism (`UpdateChecker.swift`):
+- **Feed URL**: `https://raw.githubusercontent.com/bokic/mattermost.client/main/appcast.xml` (configurable via `SUFeedURL` in `Info.plist` or `customUpdateFeedURL` in `UserDefaults`).
+- **Integrity**: Each release enclosure in `appcast.xml` records the release version, file length, and SHA-256 checksum (`sparkle:sha256`) matching the published DMG.
+- **User Controls**: Users can trigger manual checks via **Mattermost > Check for Updates…** in the menu bar, or through **Settings > Updates > Check for updates** in the right-hand panel. Automatic checks can also be toggled in Settings.
+- **Manual Download**: Users who do not have internet connectivity or prefer manual updates can download the DMG directly from GitHub Releases: `https://github.com/bokic/mattermost.client/releases`.
 
 ## Local-only builds
 

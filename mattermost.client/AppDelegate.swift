@@ -60,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             keyEquivalent: "")
         
         startAuthentication()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            UpdateChecker.shared.checkForUpdates(userInitiated: false)
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -458,6 +461,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         app.terminate(self)
     }
+
+    @objc func checkForUpdatesAction(_ sender: Any?) {
+        UpdateChecker.shared.checkForUpdates(
+            userInitiated: true,
+            presentingWindow: mainWindow ?? loginWindow
+        )
+    }
     
     // MARK: - Main Menu & Zoom Actions
     
@@ -470,6 +480,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
         appMenu.addItem(withTitle: L10n.string("About Mattermost"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let checkUpdatesItem = NSMenuItem(title: L10n.string("Check for Updates…"), action: #selector(AppDelegate.checkForUpdatesAction(_:)), keyEquivalent: "")
+        checkUpdatesItem.target = self
+        appMenu.addItem(checkUpdatesItem)
         appMenu.addItem(NSMenuItem.separator())
         let preferencesItem = NSMenuItem(title: L10n.string("Settings…"), action: #selector(AppDelegate.showPreferences), keyEquivalent: ",")
         preferencesItem.target = self

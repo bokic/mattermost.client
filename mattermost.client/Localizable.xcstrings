@@ -61,6 +61,16 @@
         }
       }
     },
+    "A new version of Mattermost is available!": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine neue Version von Mattermost ist verfügbar!"
+          }
+        }
+      }
+    },
     "ACCOUNT & CONNECTION": {
       "localizations": {
         "de": {
@@ -157,6 +167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Authentifizierungscode"
+          }
+        }
+      }
+    },
+    "Automatic updates": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatische Updates"
           }
         }
       }
@@ -271,6 +291,46 @@
         }
       }
     },
+    "Check": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfen"
+          }
+        }
+      }
+    },
+    "Check daily for new versions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Täglich nach neuen Versionen suchen"
+          }
+        }
+      }
+    },
+    "Check for Updates…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Updates suchen…"
+          }
+        }
+      }
+    },
+    "Check for updates": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Updates suchen"
+          }
+        }
+      }
+    },
     "Clear": {
       "localizations": {
         "de": {
@@ -361,6 +421,16 @@
         }
       }
     },
+    "Could not check for updates: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Updates konnte nicht gesucht werden: %@"
+          }
+        }
+      }
+    },
     "Could not load users": {
       "localizations": {
         "de": {
@@ -387,6 +457,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neues Team erstellen"
+          }
+        }
+      }
+    },
+    "Current version: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktuelle Version: %@"
           }
         }
       }
@@ -431,6 +511,16 @@
         }
       }
     },
+    "Disabled": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktiviert"
+          }
+        }
+      }
+    },
     "Disables all notifications": {
       "localizations": {
         "de": {
@@ -467,6 +557,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apps herunterladen"
+          }
+        }
+      }
+    },
+    "Download Update": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update herunterladen"
           }
         }
       }
@@ -911,6 +1011,26 @@
         }
       }
     },
+    "Mattermost %@ is currently the newest version.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mattermost %@ ist derzeit die neueste Version."
+          }
+        }
+      }
+    },
+    "Mattermost %@ is now available (you have %@). Would you like to download it now?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mattermost %@ ist jetzt verfügbar (Sie haben %@). Möchten Sie das Update jetzt herunterladen?"
+          }
+        }
+      }
+    },
     "Mattermost Help": {
       "localizations": {
         "de": {
@@ -1127,6 +1247,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nummerierte Liste"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
           }
         }
       }
@@ -1357,6 +1487,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wiederverbindung…"
+          }
+        }
+      }
+    },
+    "Remind Me Later": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Später erinnern"
           }
         }
       }
@@ -1651,6 +1791,16 @@
         }
       }
     },
+    "Skip This Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Version überspringen"
+          }
+        }
+      }
+    },
     "Strikethrough": {
       "localizations": {
         "de": {
@@ -1781,6 +1931,16 @@
         }
       }
     },
+    "UPDATES": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "UPDATES"
+          }
+        }
+      }
+    },
     "Unmute": {
       "localizations": {
         "de": {
@@ -1797,6 +1957,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stummschaltung aufheben"
+          }
+        }
+      }
+    },
+    "Update Check Failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update-Prüfung fehlgeschlagen"
           }
         }
       }
@@ -1877,6 +2047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nachricht an %@"
+          }
+        }
+      }
+    },
+    "You're up to date!": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie sind auf dem neuesten Stand!"
           }
         }
       }
