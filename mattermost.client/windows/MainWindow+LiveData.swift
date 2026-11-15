@@ -210,6 +210,10 @@ extension MainWindow {
                     }
                 case .emojiAdded:
                     self.loadCustomEmojis()
+                case .other(let eventName, _):
+                    if eventName == "custom_status_set" || eventName == "custom_status_removed" || eventName == "user_updated" {
+                        self.refreshCustomStatus()
+                    }
                 default:
                     break
                 }
@@ -219,6 +223,7 @@ extension MainWindow {
         ws.onWebSocketConnected = { [weak self] in
             DebugLog.log("ws.onWebSocketConnected callback triggered")
             guard let self = self else { return }
+            self.refreshCustomStatus()
             self.refreshUserStatuses()
             self.loadUnreadState()
             let channelId = self.activeChannelId
@@ -341,6 +346,7 @@ extension MainWindow {
         statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.clearExpiredCustomStatusIfNeeded()
+                self?.refreshCustomStatus()
                 self?.refreshUserStatuses()
             }
         }
@@ -865,6 +871,8 @@ extension MainWindow {
     }
 
     @objc func appDidBecomeActive() {
+        clearExpiredCustomStatusIfNeeded()
+        refreshCustomStatus()
         guard !activeChannelId.isEmpty else { return }
         markActiveChannelViewed()
     }

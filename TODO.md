@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **156/156 pass** |
+| `./test.sh` | **163/163 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,16 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **Custom status is local-only and limited** — `S`
-  - It is persisted only in `UserDefaults` (`MainWindow+People.swift:176-181`,
-    `MainWindow.swift:208-209`) and never read from server user props, so statuses set on
-    the web/another device are invisible here; expired statuses are not cleared.
-  - The emoji is a raw text field with no picker/recent statuses, and "custom date and time"
-    is not supported (`:127-161`). Clearing ignores server errors and clears local state
-    regardless (`:188-199`), allowing local/server divergence.
-  - Add a server-backed custom-status read/refresh, an emoji picker, recent statuses and a
-    date/time picker.
 
 - [ ] **Direct messages are 1:1 and picker-limited** — `M`
   - `POST /channels/direct` only (`MainWindow+Menus.swift:1003-1023`), picker fetches the

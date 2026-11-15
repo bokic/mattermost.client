@@ -242,4 +242,190 @@ final class SettingsPreferencesTests: XCTestCase {
         }
         XCTAssertNotEqual(panel.color, .clear)
     }
+
+    func testApplyServerCustomStatusSetsLocalStatus() {
+        let window = makeWindow()
+        defer {
+            window.clearLocalCustomStatus()
+            window.close()
+        }
+
+        let future = ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
+        let userJson = """
+        {
+            "id": "u1",
+            "username": "bob",
+            "props": {
+                "customStatus": "{\\\"emoji\\\":\\\"calendar\\\",\\\"text\\\":\\\"In a meeting\\\",\\\"expires_at\\\":\\\"\(future)\\\"}"
+            }
+        }
+        """.data(using: .utf8)!
+        let user = try! JSONDecoder().decode(MMUser.self, from: userJson)
+
+        window.applyServerCustomStatus(from: user)
+        XCTAssertEqual(window.customStatusText, "In a meeting")
+        XCTAssertEqual(window.customStatusEmoji, "calendar")
+        XCTAssertNotNil(window.customStatusExpiresAt)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: "customStatusText"), "In a meeting")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: "customStatusEmoji"), "calendar")
+    }
+
+    func testApplyServerCustomStatusClearsLocalStatusWhenMissingOrEmpty() {
+        let window = makeWindow()
+        defer {
+            window.clearLocalCustomStatus()
+            window.close()
+        }
+
+        window.customStatusText = "Busy"
+        window.customStatusEmoji = "calendar"
+        UserDefaults.standard.set("Busy", forKey: "customStatusText")
+        UserDefaults.standard.set("calendar", forKey: "customStatusEmoji")
+
+        let userJson = """
+        {
+            "id": "u1",
+            "username": "bob",
+            "props": {}
+        }
+        """.data(using: .utf8)!
+        let user = try! JSONDecoder().decode(MMUser.self, from: userJson)
+
+        window.applyServerCustomStatus(from: user)
+        XCTAssertEqual(window.customStatusText, "")
+        XCTAssertEqual(window.customStatusEmoji, "")
+        XCTAssertNil(window.customStatusExpiresAt)
+        XCTAssertNil(UserDefaults.standard.string(forKey: "customStatusText"))
+        XCTAssertNil(UserDefaults.standard.string(forKey: "customStatusEmoji"))
+    }
+
+    func testApplyServerCustomStatusClearsWhenExpired() {
+        let window = makeWindow()
+        defer {
+            window.clearLocalCustomStatus()
+            window.close()
+        }
+
+        window.customStatusText = "Past Status"
+        window.customStatusEmoji = "palm_tree"
+
+        let past = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
+        let userJson = """
+        {
+            "id": "u1",
+            "username": "bob",
+            "props": {
+                "customStatus": "{\\\"emoji\\\":\\\"palm_tree\\\",\\\"text\\\":\\\"Past Status\\\",\\\"expires_at\\\":\\\"\(past)\\\"}"
+            }
+        }
+        """.data(using: .utf8)!
+        let user = try! JSONDecoder().decode(MMUser.self, from: userJson)
+
+        window.applyServerCustomStatus(from: user)
+        XCTAssertEqual(window.customStatusText, "")
+        XCTAssertEqual(window.customStatusEmoji, "")
+        XCTAssertNil(window.customStatusExpiresAt)
+    }
+
+    func testCustomStatusTargetDateAndExpiryForPresetsAndCustomDate() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        XNil: do {
+            XCTAssertNil(window.customStatusTargetDate(for: 0))
+            XCTAssertNil(window.customStatusExpiry(for: 0))
+        }
+
+        let thirtyMins = window.customStatusTargetDate(for: 1)
+        XCTAssertNotNil(thirtyMins)
+        XCTAssertGreaterThan(thirtyMins!.timeIntervalSinceNow, 25 * 60)
+
+        let customDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let targetCustom = window.customStatusTargetDate(for: 6, customDate: customDate)
+        XCTAssertEqual(targetCustom, customDate)
+
+        let expiryCustom = window.customStatusExpiry(for: 6, customDate: customDate)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        XCTAssertEqual(expiryCustom, formatter.string(from: customDate))
+    }
+
+    func testRecentCustomStatusesStorageAndDeduplication() {
+        let window = makeWindow()
+        defer {
+            UserDefaults.standard.removeObject(forKey: "recentCustomStatuses")
+            window.close()
+        }
+
+        UserDefaults.standard.removeObject(forKey: "recentCustomStatuses")
+
+        window.saveRecentCustomStatus(emoji: "💬", text: "Status 1", durationIndex: 1)
+        window.saveRecentCustomStatus(emoji: "📅", text: "Status 2", durationIndex: 2)
+        window.saveRecentCustomStatus(emoji: "🌴", text: "Status 3", durationIndex: 3)
+        window.saveRecentCustomStatus(emoji: "🤒", text: "Status 4", durationIndex: 4)
+        window.saveRecentCustomStatus(emoji: "🚗", text: "Status 5", durationIndex: 5)
+        window.saveRecentCustomStatus(emoji: "🚀", text: "Status 6", durationIndex: 6)
+
+        let recents = window.recentCustomStatuses()
+        XCTAssertEqual(recents.count, 5)
+        XCTAssertEqual(recents.first?.text, "Status 6")
+        XCTAssertFalse(recents.contains(where: { $0.text == "Status 1" }))
+
+        // Deduplication & moving to front
+        window.saveRecentCustomStatus(emoji: "🎯", text: "Status 4", durationIndex: 1)
+        let updatedRecents = window.recentCustomStatuses()
+        XCTAssertEqual(updatedRecents.count, 5)
+        XCTAssertEqual(updatedRecents.first?.text, "Status 4")
+        XCTAssertEqual(updatedRecents.first?.emoji, "🎯")
+    }
+
+    func testNormalizeCustomStatusEmoji() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        XCTAssertEqual(window.normalizeCustomStatusEmoji("💬"), "speech_balloon")
+        XCTAssertEqual(window.normalizeCustomStatusEmoji(":calendar:"), "calendar")
+        XCTAssertEqual(window.normalizeCustomStatusEmoji("calendar"), "calendar")
+        XCTAssertEqual(window.normalizeCustomStatusEmoji("custom_nonexistent"), "custom_nonexistent")
+    }
+
+    func testCustomStatusDialogHelperActions() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let helper = CustomStatusDialogHelper()
+        helper.mainWindow = window
+
+        let emojiField = NSTextField()
+        let textField = NSTextField()
+        let durationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        durationPopup.addItems(withTitles: ["0", "1", "2", "3", "4", "5", "6"])
+        let datePicker = NSDatePicker()
+        datePicker.isHidden = true
+
+        helper.emojiField = emojiField
+        helper.textField = textField
+        helper.durationPopup = durationPopup
+        helper.datePicker = datePicker
+
+        // durationChanged toggles datePicker visibility
+        durationPopup.selectItem(at: 6)
+        helper.durationChanged(durationPopup)
+        XCTAssertFalse(datePicker.isHidden)
+
+        durationPopup.selectItem(at: 2)
+        helper.durationChanged(durationPopup)
+        XCTAssertTrue(datePicker.isHidden)
+
+        // suggestionSelected applies preset
+        let menuItem = NSMenuItem()
+        let item = CustomStatusItem(emoji: "calendar", text: "Meeting", durationIndex: 2)
+        menuItem.representedObject = item
+        helper.suggestionSelected(menuItem)
+
+        XCTAssertEqual(emojiField.stringValue, window.emojiGlyph(for: "calendar"))
+        XCTAssertEqual(textField.stringValue, "Meeting")
+        XCTAssertEqual(durationPopup.indexOfSelectedItem, 2)
+        XCTAssertTrue(datePicker.isHidden)
+    }
 }

@@ -9,6 +9,77 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
+@objc(MMCustomStatusItem)
+final class CustomStatusItem: NSObject {
+    let emoji: String
+    let text: String
+    let durationIndex: Int
+
+    init(emoji: String, text: String, durationIndex: Int) {
+        self.emoji = emoji
+        self.text = text
+        self.durationIndex = durationIndex
+        super.init()
+    }
+}
+
+struct QuickEmojiOption {
+    let name: String
+    let glyph: String
+    let label: String
+}
+
+@MainActor
+final class CustomStatusDialogHelper: NSObject {
+    weak var mainWindow: MainWindow?
+    weak var emojiField: NSTextField?
+    weak var textField: NSTextField?
+    weak var durationPopup: NSPopUpButton?
+    weak var suggestionsPopup: NSPopUpButton?
+    weak var emojiPopup: NSPopUpButton?
+    weak var datePicker: NSDatePicker?
+
+    @objc func emojiSelected(_ sender: AnyObject) {
+        let menuItem: NSMenuItem?
+        if let popup = sender as? NSPopUpButton {
+            menuItem = popup.selectedItem
+        } else if let item = sender as? NSMenuItem {
+            menuItem = item
+        } else {
+            menuItem = nil
+        }
+        guard let glyph = menuItem?.representedObject as? String, !glyph.isEmpty else { return }
+        emojiField?.stringValue = glyph
+        emojiPopup?.selectItem(at: 0)
+    }
+
+    @objc func suggestionSelected(_ sender: AnyObject) {
+        let menuItem: NSMenuItem?
+        if let popup = sender as? NSPopUpButton {
+            menuItem = popup.selectedItem
+        } else if let item = sender as? NSMenuItem {
+            menuItem = item
+        } else {
+            menuItem = nil
+        }
+        guard let item = menuItem?.representedObject as? CustomStatusItem else { return }
+        let glyph = mainWindow?.emojiGlyph(for: item.emoji) ?? item.emoji
+        emojiField?.stringValue = glyph.isEmpty ? item.emoji : glyph
+        textField?.stringValue = item.text
+        if let durationPopup = durationPopup {
+            let maxIdx = durationPopup.numberOfItems - 1
+            let validIdx = max(0, min(item.durationIndex, maxIdx))
+            durationPopup.selectItem(at: validIdx)
+            datePicker?.isHidden = (validIdx != 6)
+        }
+        suggestionsPopup?.selectItem(at: 0)
+    }
+
+    @objc func durationChanged(_ sender: NSPopUpButton) {
+        datePicker?.isHidden = (sender.indexOfSelectedItem != 6)
+    }
+}
+
 extension MainWindow {
 
     func isBotAccount(_ user: MMUser?) -> Bool {
@@ -183,14 +254,97 @@ extension MainWindow {
         updateDesktopNotificationPreferences(["desktop_sound": desktopSoundsEnabled() ? "false" : "true"])
     }
 
+    static let presetCustomStatuses: [CustomStatusItem] = [
+        CustomStatusItem(emoji: "speech_balloon", text: "Working remotely", durationIndex: 4),
+        CustomStatusItem(emoji: "calendar", text: "In a meeting", durationIndex: 2),
+        CustomStatusItem(emoji: "face_with_thermometer", text: "Out sick", durationIndex: 4),
+        CustomStatusItem(emoji: "beach_umbrella", text: "On vacation", durationIndex: 5),
+        CustomStatusItem(emoji: "car", text: "Commuting", durationIndex: 1),
+    ]
+
+    static let quickEmojiOptions: [QuickEmojiOption] = [
+        QuickEmojiOption(name: "speech_balloon", glyph: "💬", label: "💬 Working remotely"),
+        QuickEmojiOption(name: "calendar", glyph: "📅", label: "📅 In a meeting"),
+        QuickEmojiOption(name: "beach_umbrella", glyph: "🌴", label: "🌴 Vacation"),
+        QuickEmojiOption(name: "face_with_thermometer", glyph: "🤒", label: "🤒 Out sick"),
+        QuickEmojiOption(name: "car", glyph: "🚗", label: "🚗 Commuting"),
+        QuickEmojiOption(name: "house", glyph: "🏠", label: "🏠 Working from home"),
+        QuickEmojiOption(name: "coffee", glyph: "☕️", label: "☕️ Coffee break"),
+        QuickEmojiOption(name: "hamburger", glyph: "🍔", label: "🍔 Lunch"),
+        QuickEmojiOption(name: "dart", glyph: "🎯", label: "🎯 Focused"),
+        QuickEmojiOption(name: "rocket", glyph: "🚀", label: "🚀 Launching"),
+        QuickEmojiOption(name: "bulb", glyph: "💡", label: "💡 Ideating"),
+        QuickEmojiOption(name: "alarm_clock", glyph: "⏰", label: "⏰ Busy"),
+        QuickEmojiOption(name: "headphones", glyph: "🎧", label: "🎧 Listening"),
+        QuickEmojiOption(name: "computer", glyph: "💻", label: "💻 Coding"),
+        QuickEmojiOption(name: "airplane", glyph: "✈️", label: "✈️ Traveling"),
+        QuickEmojiOption(name: "shushing_face", glyph: "🤫", label: "🤫 Deep focus"),
+        QuickEmojiOption(name: "slightly_smiling_face", glyph: "🙂", label: "🙂 Available"),
+    ]
+
+    func normalizeCustomStatusEmoji(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutColons = trimmed.hasPrefix(":") && trimmed.hasSuffix(":") && trimmed.count > 2
+            ? String(trimmed.dropFirst().dropLast())
+            : trimmed
+        if let entry = EmojiCatalog.entries.first(where: { $0.glyph == withoutColons }) {
+            return entry.name
+        }
+        return withoutColons
+    }
+
+    func durationLabel(for index: Int) -> String {
+        switch index {
+        case 1: return "30 mins"
+        case 2: return "1 hour"
+        case 3: return "4 hours"
+        case 4: return "Today"
+        case 5: return "This week"
+        case 6: return "Custom date and time"
+        default: return "Don't clear"
+        }
+    }
+
+    func recentCustomStatuses() -> [CustomStatusItem] {
+        guard let list = UserDefaults.standard.array(forKey: "recentCustomStatuses") as? [[String: Any]] else {
+            return []
+        }
+        return list.compactMap { dict in
+            guard let text = dict["text"] as? String, !text.isEmpty else { return nil }
+            let emoji = (dict["emoji"] as? String) ?? ""
+            let duration = (dict["duration"] as? Int) ?? 0
+            return CustomStatusItem(emoji: emoji, text: text, durationIndex: duration)
+        }
+    }
+
+    func saveRecentCustomStatus(emoji: String, text: String, durationIndex: Int) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        var list = recentCustomStatuses()
+        list.removeAll { $0.text.lowercased() == trimmedText.lowercased() }
+        list.insert(CustomStatusItem(emoji: emoji, text: trimmedText, durationIndex: durationIndex), at: 0)
+        if list.count > 5 {
+            list = Array(list.prefix(5))
+        }
+        let dicts = list.map { ["emoji": $0.emoji, "text": $0.text, "duration": $0.durationIndex] }
+        UserDefaults.standard.set(dicts, forKey: "recentCustomStatuses")
+    }
+
     func applyServerCustomStatus(from user: MMUser) {
         guard let raw = user.props?["customStatus"],
+              !raw.isEmpty,
+              raw != "{}",
               let data = raw.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            clearLocalCustomStatus()
             return
         }
-        let text = (json["text"] as? String) ?? ""
-        let emoji = (json["emoji"] as? String) ?? ""
+        let text = ((json["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let emoji = ((json["emoji"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty && emoji.isEmpty {
+            clearLocalCustomStatus()
+            return
+        }
         let expiresAtString = json["expires_at"] as? String
         let expiresAt = expiresAtString.flatMap { ISO8601DateFormatter().date(from: $0) }
         if let expiresAt = expiresAt, expiresAt <= Date() {
@@ -208,6 +362,20 @@ extension MainWindow {
             UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
         }
         updateCustomStatusUI()
+    }
+
+    func refreshCustomStatus() {
+        guard let ws = webService, ws.isLogged() else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let me = try await ws.fetchCurrentUser()
+                self.currentUser = me
+                self.applyServerCustomStatus(from: me)
+            } catch {
+                DebugLog.warning("refreshCustomStatus failed: \(error)")
+            }
+        }
     }
 
     func updateCustomStatusUI() {
@@ -229,27 +397,128 @@ extension MainWindow {
         alert.addButton(withTitle: "Clear")
         alert.addButton(withTitle: "Cancel")
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 92))
-        let emojiField = NSTextField(frame: NSRect(x: 0, y: 62, width: 56, height: 24))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 146))
+
+        let helper = CustomStatusDialogHelper()
+        helper.mainWindow = self
+        self.customStatusDialogHelper = helper
+
+        let emojiPopup = NSPopUpButton(frame: NSRect(x: 0, y: 116, width: 44, height: 26), pullsDown: true)
+        let emojiMenu = NSMenu()
+        let emojiHeader = NSMenuItem(title: "😀", action: nil, keyEquivalent: "")
+        emojiMenu.addItem(emojiHeader)
+        for opt in Self.quickEmojiOptions {
+            let item = NSMenuItem(
+                title: opt.label,
+                action: #selector(CustomStatusDialogHelper.emojiSelected(_:)),
+                keyEquivalent: ""
+            )
+            item.target = helper
+            item.representedObject = opt.glyph
+            emojiMenu.addItem(item)
+        }
+        emojiPopup.menu = emojiMenu
+        emojiPopup.target = helper
+        emojiPopup.action = #selector(CustomStatusDialogHelper.emojiSelected(_:))
+
+        let emojiField = NSTextField(frame: NSRect(x: 48, y: 116, width: 44, height: 24))
         emojiField.placeholderString = "🙂"
-        emojiField.stringValue = customStatusEmoji
-        let textField = NSTextField(frame: NSRect(x: 64, y: 62, width: 256, height: 24))
-        textField.placeholderString = "Status"
+        emojiField.stringValue = customStatusEmoji.isEmpty ? "" : emojiGlyph(for: customStatusEmoji)
+
+        let textField = NSTextField(frame: NSRect(x: 96, y: 116, width: 224, height: 24))
+        textField.placeholderString = "What is your status?"
         textField.stringValue = customStatusText
-        let durationPopup = NSPopUpButton(frame: NSRect(x: 0, y: 24, width: 320, height: 26), pullsDown: false)
-        durationPopup.addItems(withTitles: ["Don't clear", "30 minutes", "1 hour", "4 hours", "Today", "This week"])
+
+        let suggestionsPopup = NSPopUpButton(frame: NSRect(x: 0, y: 78, width: 320, height: 26), pullsDown: true)
+        let suggestionsMenu = NSMenu()
+        let suggestionsHeader = NSMenuItem(title: "Suggestions & recent statuses…", action: nil, keyEquivalent: "")
+        suggestionsMenu.addItem(suggestionsHeader)
+        for preset in Self.presetCustomStatuses {
+            let glyph = emojiGlyph(for: preset.emoji)
+            let item = NSMenuItem(
+                title: "\(glyph)  \(preset.text) — \(durationLabel(for: preset.durationIndex))",
+                action: #selector(CustomStatusDialogHelper.suggestionSelected(_:)),
+                keyEquivalent: ""
+            )
+            item.target = helper
+            item.representedObject = preset
+            suggestionsMenu.addItem(item)
+        }
+        let recents = recentCustomStatuses()
+        if !recents.isEmpty {
+            suggestionsMenu.addItem(NSMenuItem.separator())
+            let recentsHeader = NSMenuItem(title: "Recent statuses", action: nil, keyEquivalent: "")
+            recentsHeader.isEnabled = false
+            suggestionsMenu.addItem(recentsHeader)
+            for recent in recents {
+                let glyph = emojiGlyph(for: recent.emoji)
+                let item = NSMenuItem(
+                    title: "\(glyph)  \(recent.text) — \(durationLabel(for: recent.durationIndex))",
+                    action: #selector(CustomStatusDialogHelper.suggestionSelected(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = helper
+                item.representedObject = recent
+                suggestionsMenu.addItem(item)
+            }
+        }
+        suggestionsPopup.menu = suggestionsMenu
+        suggestionsPopup.target = helper
+        suggestionsPopup.action = #selector(CustomStatusDialogHelper.suggestionSelected(_:))
+
+        let durationPopup = NSPopUpButton(frame: NSRect(x: 0, y: 40, width: 320, height: 26), pullsDown: false)
+        durationPopup.addItems(withTitles: [
+            "Don't clear",
+            "30 minutes",
+            "1 hour",
+            "4 hours",
+            "Today",
+            "This week",
+            "Custom date and time…",
+        ])
+        durationPopup.target = helper
+        durationPopup.action = #selector(CustomStatusDialogHelper.durationChanged(_:))
+
+        let datePicker = NSDatePicker(frame: NSRect(x: 0, y: 2, width: 320, height: 28))
+        datePicker.datePickerStyle = .textFieldAndStepper
+        datePicker.datePickerElements = [.yearMonthDay, .hourMinute]
+        datePicker.minDate = Date()
+
+        if let expiry = customStatusExpiresAt, expiry > Date() {
+            durationPopup.selectItem(at: 6)
+            datePicker.dateValue = expiry
+            datePicker.isHidden = false
+        } else {
+            durationPopup.selectItem(at: 0)
+            datePicker.dateValue = Date().addingTimeInterval(3600)
+            datePicker.isHidden = true
+        }
+
+        helper.emojiField = emojiField
+        helper.textField = textField
+        helper.durationPopup = durationPopup
+        helper.suggestionsPopup = suggestionsPopup
+        helper.emojiPopup = emojiPopup
+        helper.datePicker = datePicker
+
+        container.addSubview(emojiPopup)
         container.addSubview(emojiField)
         container.addSubview(textField)
+        container.addSubview(suggestionsPopup)
         container.addSubview(durationPopup)
+        container.addSubview(datePicker)
         alert.accessoryView = container
 
         alert.beginSheetModal(for: self) { [weak self] response in
             guard let self = self else { return }
+            self.customStatusDialogHelper = nil
             if response == .alertFirstButtonReturn {
+                let customDate = (durationPopup.indexOfSelectedItem == 6) ? datePicker.dateValue : nil
                 self.applyCustomStatus(
                     emoji: emojiField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
                     text: textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                    durationIndex: durationPopup.indexOfSelectedItem
+                    durationIndex: durationPopup.indexOfSelectedItem,
+                    customDate: customDate
                 )
             } else if response == .alertSecondButtonReturn {
                 self.unsetCustomStatus()
@@ -257,33 +526,52 @@ extension MainWindow {
         }
     }
 
-    func applyCustomStatus(emoji: String, text: String, durationIndex: Int) {
+    func applyCustomStatus(emoji: String, text: String, durationIndex: Int, customDate: Date? = nil) {
         guard !text.isEmpty else {
             unsetCustomStatus()
             return
         }
-        // "" is the server's "don't clear" value; the old `dont_clear` value was
-        // rejected by Mattermost and made most custom statuses fail.
-        let durations = ["", "thirty_minutes", "one_hour", "four_hours", "today", "this_week"]
+        let normalizedEmoji = normalizeCustomStatusEmoji(emoji)
+        let durations = ["", "thirty_minutes", "one_hour", "four_hours", "today", "this_week", "date_and_time"]
         let index = max(0, min(durationIndex, durations.count - 1))
-        let targetDate = customStatusTargetDate(for: index)
-        let expiresAt = customStatusExpiry(for: index)
-        guard let ws = webService else { return }
+        let targetDate = customStatusTargetDate(for: index, customDate: customDate)
+        let expiresAt = customStatusExpiry(for: index, customDate: customDate)
+        guard let ws = webService else {
+            customStatusEmoji = normalizedEmoji
+            customStatusText = text
+            customStatusExpiresAt = targetDate
+            UserDefaults.standard.set(normalizedEmoji, forKey: "customStatusEmoji")
+            UserDefaults.standard.set(text, forKey: "customStatusText")
+            if let targetDate = targetDate {
+                UserDefaults.standard.set(targetDate.timeIntervalSince1970, forKey: "customStatusExpiresAt")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
+            }
+            saveRecentCustomStatus(emoji: normalizedEmoji, text: text, durationIndex: index)
+            updateCustomStatusUI()
+            return
+        }
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                try await ws.setCustomStatus(emoji: emoji, text: text, duration: durations[index], expiresAt: expiresAt)
-                self.customStatusEmoji = emoji
+                try await ws.setCustomStatus(
+                    emoji: normalizedEmoji,
+                    text: text,
+                    duration: durations[index],
+                    expiresAt: expiresAt
+                )
+                self.customStatusEmoji = normalizedEmoji
                 self.customStatusText = text
                 self.customStatusExpiresAt = targetDate
-                UserDefaults.standard.set(emoji, forKey: "customStatusEmoji")
+                UserDefaults.standard.set(normalizedEmoji, forKey: "customStatusEmoji")
                 UserDefaults.standard.set(text, forKey: "customStatusText")
                 if let targetDate = targetDate {
                     UserDefaults.standard.set(targetDate.timeIntervalSince1970, forKey: "customStatusExpiresAt")
                 } else {
                     UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
                 }
+                self.saveRecentCustomStatus(emoji: normalizedEmoji, text: text, durationIndex: index)
                 self.updateCustomStatusUI()
             } catch {
                 self.showInfoAlert("Could not set custom status: \(error.localizedDescription)")
@@ -292,11 +580,18 @@ extension MainWindow {
     }
 
     func unsetCustomStatus() {
-        guard let ws = webService else { return }
+        guard let ws = webService else {
+            clearLocalCustomStatus()
+            return
+        }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            _ = try? await ws.clearCustomStatus()
-            self.clearLocalCustomStatus()
+            do {
+                try await ws.clearCustomStatus()
+                self.clearLocalCustomStatus()
+            } catch {
+                self.showInfoAlert("Could not clear custom status: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -322,7 +617,7 @@ extension MainWindow {
         }
     }
 
-    func customStatusTargetDate(for index: Int) -> Date? {
+    func customStatusTargetDate(for index: Int, customDate: Date? = nil) -> Date? {
         let now = Date()
         let calendar = Calendar.current
         switch index {
@@ -340,13 +635,15 @@ extension MainWindow {
             let daysUntilSunday = (8 - weekday) % 7
             return calendar.date(byAdding: .day, value: daysUntilSunday, to: start)?
                 .addingTimeInterval(24 * 60 * 60 - 1)
+        case 6:
+            return customDate
         default:
             return nil
         }
     }
 
-    func customStatusExpiry(for index: Int) -> String? {
-        guard let date = customStatusTargetDate(for: index) else { return nil }
+    func customStatusExpiry(for index: Int, customDate: Date? = nil) -> String? {
+        guard let date = customStatusTargetDate(for: index, customDate: customDate) else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.string(from: date)
@@ -1033,6 +1330,9 @@ extension MainWindow {
 
     func userCustomStatus(for user: MMUser) -> (emoji: String, text: String)? {
         if user.id == currentUser?.id || user.id == "usr" || user.id == "sample_usr" {
+            if let expiry = customStatusExpiresAt, expiry <= Date() {
+                return nil
+            }
             if !customStatusText.isEmpty || !customStatusEmoji.isEmpty {
                 return (customStatusEmoji, customStatusText)
             }

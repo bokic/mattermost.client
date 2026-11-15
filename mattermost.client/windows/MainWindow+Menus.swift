@@ -63,6 +63,9 @@ extension MainWindow {
         statusMenu.isHidden = !open
         if !open {
             setDndSubMenuOpen(false)
+        } else {
+            clearExpiredCustomStatusIfNeeded()
+            refreshCustomStatus()
         }
         updateAvatarButtonAppearance()
     }

@@ -402,7 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let defaults = UserDefaults.standard
         for key in [
             "username", "currentUserId", "lastTeamId", "lastChannelId",
-            "customStatusEmoji", "customStatusText", "customStatusExpiresAt",
+            "customStatusEmoji", "customStatusText", "customStatusExpiresAt", "recentCustomStatuses",
             "recentEmojis", "rememberPassword"
         ] {
             defaults.removeObject(forKey: key)

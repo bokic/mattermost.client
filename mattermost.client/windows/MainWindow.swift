@@ -266,11 +266,32 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var isDndSubMenuOpen = false
     var selectedStatusIndex = 0
     weak var customStatusMenuRow: RoundedEdgePanel?
-    var customStatusText: String = UserDefaults.standard.string(forKey: "customStatusText") ?? ""
-    var customStatusEmoji: String = UserDefaults.standard.string(forKey: "customStatusEmoji") ?? ""
+    var customStatusDialogHelper: CustomStatusDialogHelper?
     var customStatusExpiresAt: Date? = {
         let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
-        return timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
+        guard timestamp > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: timestamp)
+        if date <= Date() {
+            UserDefaults.standard.removeObject(forKey: "customStatusEmoji")
+            UserDefaults.standard.removeObject(forKey: "customStatusText")
+            UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
+            return nil
+        }
+        return date
+    }()
+    var customStatusText: String = {
+        let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
+        if timestamp > 0 && Date(timeIntervalSince1970: timestamp) <= Date() {
+            return ""
+        }
+        return UserDefaults.standard.string(forKey: "customStatusText") ?? ""
+    }()
+    var customStatusEmoji: String = {
+        let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
+        if timestamp > 0 && Date(timeIntervalSince1970: timestamp) <= Date() {
+            return ""
+        }
+        return UserDefaults.standard.string(forKey: "customStatusEmoji") ?? ""
     }()
     var loadRemoteImagesAutomatically: Bool = {
         UserDefaults.standard.object(forKey: "loadRemoteImagesAutomatically") as? Bool ?? true
