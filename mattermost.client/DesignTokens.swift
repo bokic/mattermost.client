@@ -96,11 +96,4 @@ enum MMPalette {
 
     /// Lightbox zoom bar chrome over the black backdrop.
     static let lightboxChrome = NSColor(red: 61 / 255, green: 60 / 255, blue: 64 / 255, alpha: 0.75)
-
-    /// Light popup used by the team switcher.
-    static let popupBorder = NSColor(white: 0.85, alpha: 1.0)
-    static let popupText = NSColor(white: 0.15, alpha: 1.0)
-    static let popupSecondaryText = NSColor(white: 0.5, alpha: 1.0)
-    static let popupHover = NSColor(white: 0.94, alpha: 1.0)
-    static let popupCheck = NSColor(srgbRed: 0.11, green: 0.35, blue: 0.85, alpha: 1.0)
 }

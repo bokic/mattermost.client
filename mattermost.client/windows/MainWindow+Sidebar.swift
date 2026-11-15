@@ -32,7 +32,12 @@ extension MainWindow {
                 let favorites = preferences
                     .filter { $0["category"] == "favorite_channel" }
                     .compactMap { $0["name"] }
-                self.favoriteChannelIds = Set(favorites)
+                for favId in favorites {
+                    if !self.favoriteChannelOrder.contains(favId) {
+                        self.favoriteChannelOrder.append(favId)
+                    }
+                }
+                self.favoriteChannelIds = Set(self.favoriteChannelOrder).union(favorites)
                 self.refreshFavoriteState()
                 self.rebuildFavoritesCategory()
             }
@@ -59,10 +64,17 @@ extension MainWindow {
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
 
+        let previousFavoriteIds = favoriteChannelIds
+        let previousFavoriteOrder = favoriteChannelOrder
+
         if favorite {
             favoriteChannelIds.insert(channelId)
+            if !favoriteChannelOrder.contains(channelId) {
+                favoriteChannelOrder.append(channelId)
+            }
         } else {
             favoriteChannelIds.remove(channelId)
+            favoriteChannelOrder.removeAll(where: { $0 == channelId })
         }
         refreshFavoriteState()
         rebuildFavoritesCategory()
@@ -73,8 +85,27 @@ extension MainWindow {
             "name": channelId,
             "value": ""
         ]]
-        Task {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
             do {
+                if let team = self.activeTeam,
+                   let favCatId = self.serverFavoritesCategoryId {
+                    if favorite {
+                        try await ws.addChannelToSidebarCategory(
+                            teamId: team.id,
+                            userId: userId,
+                            categoryId: favCatId,
+                            channelId: channelId
+                        )
+                    } else {
+                        try await ws.removeChannelFromSidebarCategory(
+                            teamId: team.id,
+                            userId: userId,
+                            categoryId: favCatId,
+                            channelId: channelId
+                        )
+                    }
+                }
                 if favorite {
                     try await ws.saveUserPreferences(userId: userId, preferences: preference)
                 } else {
@@ -82,6 +113,10 @@ extension MainWindow {
                 }
             } catch {
                 NSLog("Failed to update favorite for \(channelId): \(error.localizedDescription)")
+                self.favoriteChannelIds = previousFavoriteIds
+                self.favoriteChannelOrder = previousFavoriteOrder
+                self.refreshFavoriteState()
+                self.rebuildFavoritesCategory()
             }
         }
     }
@@ -132,6 +167,13 @@ extension MainWindow {
             self.mutedChannelIds = muted
             self.channelDesktopNotificationByChannel = desktopNotifications
             (NSApp.delegate as? AppDelegate)?.syncUnreadCounts(unread)
+            if let threadResp = try? await ws.fetchThreadsPage(userId: userId, teamId: team.id, page: 0, perPage: 1) {
+                self.totalUnreadThreads = threadResp.total_unread_threads ?? 0
+            }
+            if let teamsUnread = try? await ws.fetchTeamsUnread(userId: userId) {
+                self.teamUnreadById = Dictionary(teamsUnread.map { ($0.team_id, $0) }, uniquingKeysWith: { _, latest in latest })
+                self.rebuildTeamMenu()
+            }
             self.updateSidebarBadges()
             self.updateNewMessagesBaseline()
             self.markActiveChannelViewed()
@@ -151,20 +193,23 @@ extension MainWindow {
             }
             let unread = item.id == "threads" ? totalUnreadThreads : (unreadByChannel[item.id] ?? 0)
             let mentions = item.id == "threads" ? 0 : (mentionsByChannel[item.id] ?? 0)
-            item.badgePanel.frame = NSRect(x: MMMetric.sidebarWidth - 16 - 34, y: 6, width: 34, height: 20)
+            let badgeX = (item.hoverCloseView != nil)
+                ? (MMMetric.sidebarWidth - 28 - 34 - 4)
+                : (MMMetric.sidebarWidth - 16 - 34)
+            item.badgePanel.frame = NSRect(x: badgeX, y: 6, width: 34, height: 20)
             item.badgeLabel.frame = NSRect(x: 2, y: 3, width: 30, height: 14)
             if mentions > 0 {
                 item.badgePanel.isHidden = false
-                item.badgePanel.color = Theme.shared.buttonBg
+                item.badgePanel.color = Theme.shared.mentionBg
                 item.badgeLabel.stringValue = mentions > 99 ? "99+" : "\(mentions)"
                 item.badgeLabel.alignment = .center
-                item.badgeLabel.textColor = .white
+                item.badgeLabel.textColor = Theme.shared.mentionColor
             } else if unread > 0 {
                 item.badgePanel.isHidden = false
                 item.badgePanel.color = .clear
                 item.badgeLabel.stringValue = unread > 99 ? "99+" : "\(unread)"
                 item.badgeLabel.alignment = .right
-                item.badgeLabel.textColor = Theme.shared.sidebarText.withAlphaComponent(0.88)
+                item.badgeLabel.textColor = Theme.shared.sidebarUnreadText
             } else {
                 item.badgePanel.isHidden = true
                 item.badgeLabel.stringValue = ""
@@ -180,9 +225,17 @@ extension MainWindow {
             favoritesCategory = nil
         }
 
-        let channels = favoriteChannelIds
+        var orderedChannels: [MMChannel] = []
+        for channelId in favoriteChannelOrder {
+            if let ch = channelsById[channelId], favoriteChannelIds.contains(channelId) {
+                orderedChannels.append(ch)
+            }
+        }
+        let remainingIds = favoriteChannelIds.subtracting(orderedChannels.map(\.id))
+        let remainingChannels = remainingIds
             .compactMap { channelsById[$0] }
             .sorted { channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1)) == .orderedAscending }
+        let channels = orderedChannels + remainingChannels
 
         guard !channels.isEmpty else {
             layoutLeftSidebar(topBarY: mainPanel.bounds.height)
@@ -190,10 +243,16 @@ extension MainWindow {
         }
 
         let items = channels.map { ch -> SidebarItemView in
+            let isBot = isChannelBot(for: ch)
+            let targetId = (ch.type == "D") ? resolveDMTargetUserId(for: ch) : nil
+            if let tId = targetId {
+                fetchAvatarIfNeeded(for: tId)
+            }
+            let customImg = targetId.flatMap { userAvatarsById[$0] }
             let symbol: String
             switch ch.type {
             case "P": symbol = "lock.fill"
-            case "D": symbol = "person.crop.circle"
+            case "D": symbol = isBot ? "cpu" : "person.fill"
             case "G": symbol = "person.2.circle"
             default: symbol = "globe"
             }
@@ -202,13 +261,15 @@ extension MainWindow {
                 symbolName: symbol,
                 title: channelDisplayName(for: ch),
                 isSelectable: true,
-                isBotBadge: false,
-                showsCloseOnHover: false
+                isBotBadge: isBot,
+                showsCloseOnHover: isDirectMessageType(ch),
+                customImage: customImg
             )
         }
 
+        let categoryId = serverFavoritesCategoryId ?? "favorites"
         let category = createSidebarCategory(
-            id: "favorites",
+            id: categoryId,
             title: L10n.string("FAVORITES"),
             showsAddButton: false,
             items: items,
@@ -217,15 +278,23 @@ extension MainWindow {
         category.headerRow.onClick = { [weak self] in
             guard let self = self else { return }
             self.isFavoritesCollapsed.toggle()
-            self.setSidebarCollapsedState(self.isFavoritesCollapsed, categoryId: "favorites")
-            self.persistSidebarCategoryCollapsed(self.isFavoritesCollapsed, categoryId: "favorites")
-            self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
+            self.setSidebarCollapsedState(self.isFavoritesCollapsed, categoryId: categoryId)
+            self.persistSidebarCategoryCollapsed(self.isFavoritesCollapsed, categoryId: categoryId)
+            let symbolName = self.isFavoritesCollapsed ? "chevron.right" : "chevron.down"
+            if let chevImg = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Favorites") {
+                category.chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+            }
+            if self.contentView != nil {
+                self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
+            }
         }
         isFavoritesCollapsed = category.isCollapsed
         favoritesCategory = category
-        updateSidebarSelectionAppearance()
-        updateSidebarBadges()
-        layoutLeftSidebar(topBarY: mainPanel.bounds.height)
+        if contentView != nil {
+            layoutLeftSidebar(topBarY: mainPanel.bounds.height)
+            updateSidebarSelectionAppearance()
+            updateSidebarBadges()
+        }
     }
 
     func setupLeftChannelSidebar() {
@@ -239,6 +308,8 @@ extension MainWindow {
         teamHeaderLabel.textColor = Theme.shared.sidebarText
         teamHeaderLabel.isEditable = false
         teamHeaderLabel.isSelectable = false
+        teamHeaderLabel.lineBreakMode = .byTruncatingTail
+        teamHeaderLabel.maximumNumberOfLines = 1
         teamHeaderButton.addSubview(teamHeaderLabel)
 
         if let chevImg = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Team Menu") {
@@ -499,6 +570,13 @@ extension MainWindow {
             orderedCategories = response.categories
         }
 
+        if let favCat = response.categories.first(where: { $0.type == "favorites" }) {
+            self.serverFavoritesCategoryId = favCat.id
+            self.favoriteChannelOrder = favCat.channel_ids
+            self.favoriteChannelIds = Set(favCat.channel_ids)
+            self.isFavoritesCollapsed = favCat.collapsed ?? false
+        }
+
         guard !orderedCategories.isEmpty else {
             buildDefaultSidebarCategories()
             rebuildFavoritesCategory()
@@ -512,6 +590,13 @@ extension MainWindow {
         var placedChannelIds = Set<String>()
 
         for cat in orderedCategories {
+            if cat.type == "favorites" || cat.id == (self.serverFavoritesCategoryId ?? "") || cat.id.lowercased().contains("favorites") {
+                for channelId in cat.channel_ids {
+                    placedChannelIds.insert(channelId)
+                }
+                continue
+            }
+
             var items: [SidebarItemView] = []
 
             for channelId in cat.channel_ids {
@@ -543,7 +628,7 @@ extension MainWindow {
                     symbolName: symbolName,
                     title: displayTitle,
                     isSelectable: true,
-                    isBotBadge: isBot || (customImg != nil),
+                    isBotBadge: isBot,
                     showsCloseOnHover: showsClose,
                     customImage: customImg
                 )
@@ -570,11 +655,6 @@ extension MainWindow {
                     showsCloseOnHover: false
                 )
                 items.append(inviteMembersItem)
-            }
-
-            // Mattermost hides the built-in Favorites section while it is empty.
-            if items.isEmpty && cat.type == "favorites" {
-                continue
             }
 
             let isCollapsed = cat.collapsed ?? false
@@ -646,13 +726,20 @@ extension MainWindow {
                     existingItems.removeLast()
                 }
                 for ch in unplacedDMs {
+                    let isBot = isChannelBot(for: ch)
+                    let targetId = (ch.type == "D") ? resolveDMTargetUserId(for: ch) : nil
+                    if let tId = targetId {
+                        fetchAvatarIfNeeded(for: tId)
+                    }
+                    let customImg = targetId.flatMap { userAvatarsById[$0] }
                     let item = createSidebarItem(
                         id: ch.id,
-                        symbolName: ch.type == "G" ? "person.2.fill" : "person.fill",
+                        symbolName: ch.type == "G" ? "person.2.fill" : (isBot ? "cpu" : "person.fill"),
                         title: channelDisplayName(for: ch),
                         isSelectable: true,
-                        isBotBadge: false,
-                        showsCloseOnHover: true
+                        isBotBadge: isBot,
+                        showsCloseOnHover: true,
+                        customImage: customImg
                     )
                     existingItems.append(item)
                 }
@@ -825,16 +912,29 @@ extension MainWindow {
         badgeLabel.isSelectable = false
         badgePanel.addSubview(badgeLabel)
 
-        var closeView: NSImageView? = nil
+        var closeButton: RoundedEdgePanel? = nil
         if showsCloseOnHover {
+            let btn = RoundedEdgePanel()
+            btn.cornerRadius = MMRadius.control
+            btn.color = .clear
             let xView = NSImageView()
             if let xImg = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close") {
                 xView.image = xImg.withSymbolConfiguration(.init(pointSize: 9.5, weight: .bold))
                 xView.contentTintColor = Theme.shared.sidebarText.withAlphaComponent(0.72)
             }
-            xView.isHidden = true
-            row.addSubview(xView)
-            closeView = xView
+            xView.frame = NSRect(x: 3, y: 3, width: 12, height: 12)
+            btn.addSubview(xView)
+            btn.onHoverChanged = { [weak btn, weak xView] isHovered in
+                btn?.color = isHovered ? Theme.shared.sidebarText.withAlphaComponent(0.16) : .clear
+                btn?.setNeedsAppearanceUpdate()
+                xView?.contentTintColor = isHovered ? Theme.shared.sidebarText : Theme.shared.sidebarText.withAlphaComponent(0.72)
+            }
+            btn.onClick = { [weak self] in
+                self?.closeDirectChannel(channelId: id)
+            }
+            btn.isHidden = true
+            row.addSubview(btn)
+            closeButton = btn
         }
 
         row.onHoverChanged = { [weak self] _ in
@@ -849,6 +949,8 @@ extension MainWindow {
         row.onClick = { [weak self] in
             guard let self = self else { return }
             if id == "threads" {
+                self.selectedSidebarItemId = "threads"
+                self.updateSidebarSelectionAppearance()
                 self.showRightPanel(mode: .threads)
                 return
             }
@@ -877,15 +979,60 @@ extension MainWindow {
         return SidebarItemView(
             id: id,
             isSelectable: isSelectable,
-            isBotBadge: isBotBadge || (customImage != nil),
+            isBotBadge: isBotBadge,
+            hasCustomAvatar: customImage != nil,
             row: row,
             leftBar: leftBar,
             iconView: iconView,
             label: label,
-            hoverCloseView: closeView,
+            hoverCloseView: closeButton,
             badgePanel: badgePanel,
             badgeLabel: badgeLabel
         )
+    }
+
+    func closeDirectChannel(channelId: String) {
+        guard let channel = channelsById[channelId] else { return }
+        guard let ws = webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.leaveChannel(channelId: channel.id, userId: userId)
+                let pref: [[String: String]] = [[
+                    "user_id": userId,
+                    "category": channel.type == "G" ? "group_channel_show" : "direct_channel_show",
+                    "name": (channel.type == "D" ? (self.resolveDMTargetUserId(for: channel) ?? channel.id) : channel.id),
+                    "value": "false"
+                ]]
+                _ = try? await ws.saveUserPreferences(userId: userId, preferences: pref)
+
+                self.channelsById.removeValue(forKey: channel.id)
+                self.channelsByName.removeValue(forKey: channel.name.lowercased())
+                self.channelsByName.removeValue(forKey: channel.display_name.lowercased())
+                if let team = self.activeTeam,
+                   let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
+                } else {
+                    self.rebuildFavoritesCategory()
+                    self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
+                }
+                if self.activeChannelId == channel.id || self.selectedSidebarItemId == channel.id {
+                    let fallback = self.channelsByName["town-square"]
+                        ?? self.channelsByName["town square"]
+                        ?? self.channelsById.values.first
+                    if let fallback = fallback {
+                        self.selectedSidebarItemId = fallback.id
+                        self.updateSidebarSelectionAppearance()
+                        self.loadChannelPosts(forSidebarItemId: fallback.id)
+                    }
+                }
+            } catch {
+                NSLog("Failed to close direct channel \(channelId): \(error.localizedDescription)")
+            }
+        }
     }
 
     func toggleSidebarCategory(_ categoryId: String) {
@@ -921,19 +1068,19 @@ extension MainWindow {
                 item.row.color = selectedBg
                 item.label.font = MMFont.font(ofSize: 14, weight: .regular)
                 item.label.textColor = Theme.shared.sidebarActiveColor
-                if !item.isBotBadge {
-                    item.iconView.contentTintColor = Theme.shared.sidebarActiveColor
-                } else {
+                if item.hasCustomAvatar {
                     item.iconView.contentTintColor = nil
+                } else {
+                    item.iconView.contentTintColor = Theme.shared.sidebarActiveColor
                 }
             } else if isHovered {
                 item.row.color = hoverBg
                 item.label.font = MMFont.font(ofSize: 14, weight: .regular)
                 item.label.textColor = Theme.shared.sidebarActiveColor
-                if !item.isBotBadge {
-                    item.iconView.contentTintColor = Theme.shared.sidebarActiveColor
-                } else {
+                if item.hasCustomAvatar {
                     item.iconView.contentTintColor = nil
+                } else {
+                    item.iconView.contentTintColor = Theme.shared.sidebarActiveColor
                 }
             } else {
                 let muted = item.id != "threads" && isChannelMuted(item.id)
@@ -942,12 +1089,16 @@ extension MainWindow {
                 item.label.textColor = muted
                     ? Theme.shared.sidebarText.withAlphaComponent(0.42)
                     : defaultText
-                if !item.isBotBadge {
+                if item.hasCustomAvatar {
+                    item.iconView.contentTintColor = nil
+                } else if item.isBotBadge {
+                    item.iconView.contentTintColor = muted
+                        ? Theme.shared.sidebarText.withAlphaComponent(0.42)
+                        : Theme.shared.sidebarText.withAlphaComponent(0.85)
+                } else {
                     item.iconView.contentTintColor = muted
                         ? Theme.shared.sidebarText.withAlphaComponent(0.42)
                         : defaultIcon
-                } else {
-                    item.iconView.contentTintColor = nil
                 }
             }
             item.leftBar.isHidden = !isSelected
@@ -960,8 +1111,10 @@ extension MainWindow {
 
     func layoutTeamHeader(topBarY: CGFloat? = nil) {
         let top = topBarY ?? (mainPanel.bounds.height > 0 ? mainPanel.bounds.height : (contentView?.bounds.height ?? 800) - 44)
+        teamHeaderLabel.lineBreakMode = .byTruncatingTail
+        teamHeaderLabel.maximumNumberOfLines = 1
         let textWidth = ceil(teamHeaderLabel.attributedStringValue.size().width)
-        let maxLabelWidth: CGFloat = 202
+        let maxLabelWidth: CGFloat = 168
         let labelWidth = max(24, min(textWidth + 4, maxLabelWidth))
         // Web: 6pt leading padding, 2pt between label and chevron, 12pt chevron, 5pt trailing.
         let buttonWidth = 6 + labelWidth + 2 + 12 + 5
@@ -978,68 +1131,258 @@ extension MainWindow {
 
         let rowHeight: CGFloat = 34
         let teamsToDisplay = userTeams.isEmpty ? (activeTeam.map { [$0] } ?? []) : userTeams
-        let menuHeight: CGFloat = max(42, CGFloat(teamsToDisplay.count) * rowHeight + 12)
-        let menuWidth: CGFloat = 220
+        let maxVisibleTeamRows = 5
+        let teamsCount = teamsToDisplay.count
+        let visibleCount = min(teamsCount, maxVisibleTeamRows)
+        let teamsListHeight: CGFloat = CGFloat(visibleCount) * rowHeight
+        let actionRowHeight: CGFloat = 30
+        let actionsCount: CGFloat = 3
+        let separatorHeight: CGFloat = 1
+        let menuWidth: CGFloat = 230
+        let menuHeight: CGFloat = max(42, teamsListHeight + separatorHeight + 8 + (actionsCount * actionRowHeight) + 12)
         let menuX: CGFloat = 8
-        let menuY = teamHeaderButton.frame.minY - menuHeight - 4
+        let menuY = max(10, teamHeaderButton.frame.minY - menuHeight - 4)
 
         teamDropdownMenu.frame = NSRect(x: menuX, y: menuY, width: menuWidth, height: menuHeight)
         teamDropdownMenu.color = Theme.shared.centerBg
         teamDropdownMenu.cornerRadius = MMRadius.menu
         teamDropdownMenu.borderWidth = 1
-        teamDropdownMenu.borderColor = MMPalette.popupBorder
+        teamDropdownMenu.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
         teamDropdownMenu.shadowColor = .black
-        teamDropdownMenu.shadowOpacity = 0.18
+        teamDropdownMenu.shadowOpacity = 0.22
         teamDropdownMenu.shadowRadius = 12
         teamDropdownMenu.shadowOffset = CGSize(width: 0, height: -4)
 
         if teamsToDisplay.isEmpty {
             let emptyLabel = NSTextField(labelWithString: "No teams available")
             emptyLabel.font = MMFont.font(ofSize: 13, weight: .regular)
-            emptyLabel.textColor = MMPalette.popupSecondaryText
-            emptyLabel.frame = NSRect(x: 14, y: 10, width: menuWidth - 28, height: 20)
+            emptyLabel.textColor = Theme.shared.centerTextMuted
+            emptyLabel.frame = NSRect(x: 14, y: menuHeight - 34, width: menuWidth - 28, height: 20)
             teamDropdownMenu.addSubview(emptyLabel)
-            return
+        } else {
+            let scrollView = NSScrollView()
+            scrollView.hasVerticalScroller = teamsCount > maxVisibleTeamRows
+            scrollView.hasHorizontalScroller = false
+            scrollView.autohidesScrollers = true
+            scrollView.borderType = .noBorder
+            scrollView.drawsBackground = false
+            scrollView.frame = NSRect(x: 0, y: menuHeight - 6 - teamsListHeight, width: menuWidth, height: teamsListHeight)
+
+            let totalTeamsHeight = max(teamsListHeight, CGFloat(teamsCount) * rowHeight)
+            let docView = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: totalTeamsHeight))
+            scrollView.documentView = docView
+            teamDropdownMenu.addSubview(scrollView)
+
+            var yPos = totalTeamsHeight - rowHeight
+            for team in teamsToDisplay {
+                let row = RoundedEdgePanel()
+                row.frame = NSRect(x: 6, y: yPos, width: menuWidth - 12, height: rowHeight)
+                row.cornerRadius = MMRadius.control
+                row.color = .clear
+
+                let isActive = team.id == activeTeam?.id
+                let label = NSTextField(labelWithString: team.display_name.isEmpty ? team.name : team.display_name)
+                label.font = MMFont.font(ofSize: 13.5, weight: isActive ? .bold : .medium)
+                label.textColor = Theme.shared.centerText
+                label.lineBreakMode = .byTruncatingTail
+                label.maximumNumberOfLines = 1
+                label.isEditable = false
+                label.isSelectable = false
+                let labelTrailingOffset: CGFloat = isActive ? 58 : 34
+                label.frame = NSRect(x: 10, y: 7, width: menuWidth - 12 - 10 - labelTrailingOffset, height: 20)
+                row.addSubview(label)
+
+                let unread = teamUnreadById[team.id]
+                let mentions = unread?.mention_count ?? 0
+                let msgs = unread?.msg_count ?? 0
+                if mentions > 0 {
+                    let badge = RoundedEdgePanel()
+                    badge.cornerRadius = MMRadius.tiny
+                    badge.color = Theme.shared.buttonBg
+                    let badgeLabel = NSTextField(labelWithString: mentions > 99 ? "99+" : "\(mentions)")
+                    badgeLabel.font = MMFont.font(ofSize: 10.5, weight: .bold)
+                    badgeLabel.textColor = Theme.shared.buttonColor
+                    badgeLabel.alignment = .center
+                    badgeLabel.isEditable = false
+                    badgeLabel.isSelectable = false
+                    let badgeWidth: CGFloat = mentions > 99 ? 28 : 20
+                    let badgeX = isActive ? (menuWidth - 12 - 24 - badgeWidth - 4) : (menuWidth - 12 - badgeWidth - 8)
+                    badge.frame = NSRect(x: badgeX, y: 8, width: badgeWidth, height: 17)
+                    badgeLabel.frame = NSRect(x: 1, y: 1, width: badgeWidth - 2, height: 14)
+                    badge.addSubview(badgeLabel)
+                    row.addSubview(badge)
+                } else if msgs > 0 {
+                    let dot = RoundedEdgePanel()
+                    dot.cornerRadius = 4
+                    dot.color = Theme.shared.centerTextMuted
+                    let dotX = isActive ? (menuWidth - 12 - 24 - 8 - 4) : (menuWidth - 12 - 8 - 8)
+                    dot.frame = NSRect(x: dotX, y: 13, width: 8, height: 8)
+                    row.addSubview(dot)
+                }
+
+                if isActive {
+                    let checkView = NSImageView()
+                    if let checkImg = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Active") {
+                        checkView.image = checkImg.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))
+                        checkView.contentTintColor = Theme.shared.buttonBg
+                    }
+                    checkView.frame = NSRect(x: menuWidth - 36, y: 9, width: 16, height: 16)
+                    row.addSubview(checkView)
+                }
+
+                row.onHoverChanged = { [weak row] isHovered in
+                    row?.color = isHovered ? Theme.shared.centerText.withAlphaComponent(0.08) : .clear
+                    row?.setNeedsAppearanceUpdate()
+                }
+
+                row.onClick = { [weak self] in
+                    self?.switchActiveTeam(to: team)
+                }
+
+                docView.addSubview(row)
+                yPos -= rowHeight
+            }
         }
 
-        var yPos = menuHeight - 6 - rowHeight
-        for team in teamsToDisplay {
+        // Divider
+        let separator = RoundedEdgePanel()
+        separator.color = Theme.shared.centerText.withAlphaComponent(0.12)
+        separator.frame = NSRect(x: 10, y: menuHeight - 6 - teamsListHeight - 4, width: menuWidth - 20, height: 1)
+        teamDropdownMenu.addSubview(separator)
+
+        // Action entries: Join another team, Leave Team, Team Settings
+        let actionEntries: [(title: String, symbol: String, action: @MainActor (MainWindow) -> Void)] = [
+            ("Join another team", "plus.circle", { $0.showJoinTeamDialog() }),
+            ("Leave Team", "rectangle.portrait.and.arrow.right", { $0.confirmLeaveTeam() }),
+            ("Team Settings", "gearshape", { $0.showTeamSettingsDialog() })
+        ]
+
+        var actionY = separator.frame.minY - 4 - actionRowHeight
+        for entry in actionEntries {
             let row = RoundedEdgePanel()
-            row.frame = NSRect(x: 6, y: yPos, width: menuWidth - 12, height: rowHeight)
+            row.frame = NSRect(x: 6, y: actionY, width: menuWidth - 12, height: actionRowHeight)
             row.cornerRadius = MMRadius.control
             row.color = .clear
 
-            let isActive = team.id == activeTeam?.id
-            let label = NSTextField(labelWithString: team.display_name.isEmpty ? team.name : team.display_name)
-            label.font = MMFont.font(ofSize: 13.5, weight: isActive ? .bold : .medium)
-            label.textColor = MMPalette.popupText
+            let iconView = NSImageView()
+            if let img = NSImage(systemSymbolName: entry.symbol, accessibilityDescription: entry.title) {
+                iconView.image = img.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+                iconView.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.75)
+            }
+            iconView.frame = NSRect(x: 10, y: 7, width: 16, height: 16)
+            row.addSubview(iconView)
+
+            let label = NSTextField(labelWithString: entry.title)
+            label.font = MMFont.font(ofSize: 13, weight: .regular)
+            label.textColor = Theme.shared.centerText
             label.isEditable = false
             label.isSelectable = false
-            label.frame = NSRect(x: 10, y: 7, width: menuWidth - 52, height: 20)
+            label.frame = NSRect(x: 32, y: 5, width: menuWidth - 44, height: 20)
             row.addSubview(label)
 
-            if isActive {
-                let checkView = NSImageView()
-                if let checkImg = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Active") {
-                    checkView.image = checkImg.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))
-                    checkView.contentTintColor = MMPalette.popupCheck
-                }
-                checkView.frame = NSRect(x: menuWidth - 36, y: 9, width: 16, height: 16)
-                row.addSubview(checkView)
-            }
-
-            row.onHoverChanged = { [weak row] isHovered in
-                row?.color = isHovered ? MMPalette.popupHover : .clear
+            row.onHoverChanged = { [weak row, weak iconView] isHovered in
+                row?.color = isHovered ? Theme.shared.centerText.withAlphaComponent(0.08) : .clear
                 row?.setNeedsAppearanceUpdate()
+                iconView?.contentTintColor = isHovered ? Theme.shared.centerText : Theme.shared.centerText.withAlphaComponent(0.75)
             }
 
             row.onClick = { [weak self] in
-                self?.switchActiveTeam(to: team)
+                guard let self = self else { return }
+                self.setTeamMenuOpen(false)
+                entry.action(self)
             }
 
             teamDropdownMenu.addSubview(row)
-            yPos -= rowHeight
+            actionY -= actionRowHeight
         }
+    }
+
+    func showJoinTeamDialog() {
+        guard let ws = webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Join another team"
+        alert.informativeText = "Enter the team URL name to join."
+        alert.addButton(withTitle: "Join")
+        alert.addButton(withTitle: "Cancel")
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "Team name (e.g. engineering)"
+        alert.accessoryView = field
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            let input = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !input.isEmpty else { return }
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                do {
+                    let team = try await ws.fetchTeamByName(input)
+                    try await ws.addUserToTeam(teamId: team.id, userId: userId)
+                    let teams = try await ws.fetchTeams()
+                    self.userTeams = teams
+                    self.switchActiveTeam(to: team)
+                } catch {
+                    self.showInfoAlert("Could not join team '\(input)': \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func confirmLeaveTeam() {
+        guard let team = activeTeam else { return }
+        guard let ws = webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Leave \(team.display_name.isEmpty ? team.name : team.display_name)?"
+        alert.informativeText = "You will be removed from this team and its channels."
+        alert.addButton(withTitle: "Leave Team")
+        alert.addButton(withTitle: "Cancel")
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                do {
+                    try await ws.leaveTeam(teamId: team.id, userId: userId)
+                    let teams = try await ws.fetchTeams()
+                    self.userTeams = teams
+                    if let nextTeam = teams.first(where: { $0.id != team.id }) ?? teams.first {
+                        self.switchActiveTeam(to: nextTeam)
+                    } else {
+                        self.showInfoAlert("You have left the team.")
+                    }
+                } catch {
+                    self.showInfoAlert("Could not leave team: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func showTeamSettingsDialog() {
+        guard let team = activeTeam else { return }
+        let alert = NSAlert()
+        alert.messageText = "\(team.display_name.isEmpty ? team.name : team.display_name) Settings"
+        var info = "URL: /\(team.name)\n"
+        if let desc = team.description, !desc.isEmpty {
+            info += "Description: \(desc)\n"
+        }
+        if let company = team.company_name, !company.isEmpty {
+            info += "Company: \(company)\n"
+        }
+        if let domains = team.allowed_domains, !domains.isEmpty {
+            info += "Allowed domains: \(domains)\n"
+        }
+        if let allowOpen = team.allow_open_invite {
+            info += "Open invite: \(allowOpen ? "Enabled" : "Disabled")\n"
+        }
+        alert.informativeText = info
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: self)
     }
 
     func updateTeamHeader(with team: MMTeam) {
@@ -1209,6 +1552,7 @@ extension MainWindow {
                     item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
                     item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                     item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
+                    item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 7, width: 18, height: 18)
                     currentY += 32
                 }
                 currentY += 8
@@ -1231,7 +1575,7 @@ extension MainWindow {
 
         // Categories & items (the server's own favorites group is replaced by
         // the locally derived FAVORITES branch above)
-        for category in sidebarCategories where !category.id.lowercased().contains("favorites") {
+        for category in sidebarCategories where !category.id.lowercased().contains("favorites") && category.id != (serverFavoritesCategoryId ?? "") {
             let visibleItems = category.items.filter {
                 matches($0.label.stringValue)
                     && !favoriteChannelIds.contains($0.id)
@@ -1267,7 +1611,7 @@ extension MainWindow {
                     item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
                     item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                     item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
-                    item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 10, width: 12, height: 12)
+                    item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 7, width: 18, height: 18)
                     currentY += 32
                 }
             }

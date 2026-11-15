@@ -210,6 +210,12 @@ struct MMTeam: Codable {
     let allow_open_invite: Bool?
 }
 
+struct MMTeamUnread: Codable {
+    let team_id: String
+    let msg_count: Int
+    let mention_count: Int
+}
+
 struct MMChannel: Codable {
     let id: String
     let create_at: Int64?
@@ -1301,6 +1307,30 @@ final class WebService: NSObject {
             path: "/api/v4/teams/\(teamId)/invite/email",
             method: "POST",
             jsonBody: ["user_email": email]
+        )
+    }
+
+    func fetchTeamsUnread(userId: String) async throws -> [MMTeamUnread] {
+        return try await performAuthenticatedRequest(path: "/api/v4/users/\(userId)/teams/unread")
+    }
+
+    func leaveTeam(teamId: String, userId: String) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/members/\(userId)",
+            method: "DELETE"
+        )
+    }
+
+    func fetchTeamByName(_ name: String) async throws -> MMTeam {
+        return try await performAuthenticatedRequest(path: "/api/v4/teams/name/\(name)")
+    }
+
+    func addUserToTeam(teamId: String, userId: String) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/teams/\(teamId)/members",
+            method: "POST",
+            jsonBody: ["team_id": teamId, "user_id": userId]
         )
     }
     

@@ -296,6 +296,10 @@ extension MainWindow {
         isRightPanelVisible = false
         rightPanel.isHidden = true
         lastRightPanelContentWidth = 0
+        if selectedSidebarItemId == "threads" {
+            selectedSidebarItemId = activeChannelId
+            updateSidebarSelectionAppearance()
+        }
         layoutRightChatPanel()
     }
 

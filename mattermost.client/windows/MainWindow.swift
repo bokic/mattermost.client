@@ -294,11 +294,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let id: String
         let isSelectable: Bool
         var isBotBadge: Bool
+        var hasCustomAvatar: Bool
         let row: RoundedEdgePanel
         let leftBar: RoundedEdgePanel
         let iconView: NSImageView
         let label: NSTextField
-        let hoverCloseView: NSImageView?
+        let hoverCloseView: NSView?
         let badgePanel: RoundedEdgePanel
         let badgeLabel: NSTextField
     }
@@ -344,8 +345,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let channelStarIconView = NSImageView()
     var isChannelFavorited = false
     var favoriteChannelIds: Set<String> = []
+    var favoriteChannelOrder: [String] = []
+    var serverFavoritesCategoryId: String?
     var favoritesCategory: SidebarCategoryView?
     var isFavoritesCollapsed = false
+    var teamUnreadById: [String: MMTeamUnread] = [:]
     var channelFilterQuery: String = ""
     var membershipsByChannel: [String: MMChannelMembership] {
         get { viewModel.membershipsByChannel }

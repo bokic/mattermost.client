@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **124/124 pass** |
+| `./test.sh` | **131/131 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -31,27 +31,6 @@ completed baseline remains at the end.
 ### Message rendering
 
 ### Navigation and sidebar
-
-- [ ] **Sidebar/team-menu state and styling have several parity bugs** — `M`
-  - Native favorites are stored only in the legacy `favorite_channel` preference while the
-    server's own `favorites` category is explicitly skipped (`MainWindow+Sidebar.swift:1016`),
-    so web-created favorites may be missing and native favorites may not sync back. Favorites
-    are a `Set` sorted alphabetically, losing web order (`:143-145,176-180`).
-  - The DM hover "×" has no click handler (`:687-697,803`); the Threads row never gets a
-    selected state or unread badge (`:702-706,107-134`); unread badges hardcode white text /
-    `buttonBg` instead of `sidebarUnreadText`/`mentionBg`/`mentionColor`, and the badge frame
-    overlaps the DM close icon (`:114,1047`).
-  - The team menu has no scroll view, per-team unread, "Join another team", leave or settings
-    entries (`:822-889`); long team names overlap the `+`/chevron, and its light popup colors
-    are hardcoded while the background is themed (`:833-871`, `DesignTokens.swift:78-82`),
-    making it unreadable on Onyx/Indigo.
-  - Favorite toggles are optimistic and never roll back when
-    `saveUserPreferences`/`deleteUserPreferences` fails (`MainWindow+Sidebar.swift:51-75`),
-    leaving the UI and server inconsistent.
-  - Bot rows without a custom avatar lose their tint because the selection renderer clears
-    `contentTintColor` for every `isBotBadge` item (`:733,775-798`), so they can render black
-    on dark sidebars.
-  - Done when these states mirror the web client and custom themes.
 
 - [ ] **Profile is a no-op; there is no user profile view** — `M`
   - The status menu's Profile row (`MainWindow+Menus.swift:487-506`) does nothing. There is
