@@ -193,8 +193,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Done: rebuilt the icon set from the largest artwork (trimmed to its 512×512 opaque bounds and
     upscaled to a 1024 master), then generated every slot from that master.
   - All ten PNGs are now square and match their declared point/scale (16, 32, 32, 64, 128, 256, 256,
-    512, 512, 1024). `assetutil` shows matching renditions in `Assets.car` and the system icon now
+    512, 512, 1024). `assetutil` shows matching renditions in `Assets.car` and the system icon
     resolves up to 1024×1024.
+  - Follow-up: Finder still showed a generic icon because IconServices rejects icons containing
+    transparent pixels on current macOS. The artwork is now flattened onto its background blue as a
+    full-bleed opaque square, and the system applies the squircle mask — Finder and the Dock render
+    the compass correctly.
 
 - [ ] **No privacy manifest** — `S`
   - Where: `UserDefaults` is a required-reason API; there is no `PrivacyInfo.xcprivacy`.
