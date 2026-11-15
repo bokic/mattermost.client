@@ -33,8 +33,12 @@ jobs:
         run: ./lint.sh
 
   macos14-verify:
-    # Exercises the documented macOS 14.0 deployment floor on a real runner.
-    runs-on: macos-14
+    # GitHub-hosted macOS 14 runners are no longer available. Register a
+    # macOS 14 machine/VM as a self-hosted runner with a custom label (for
+    # example `macos14`) and set the repository variable MACOS14_RUNNER to that
+    # label to enable this job.
+    if: vars.MACOS14_RUNNER != ''
+    runs-on: ${{ vars.MACOS14_RUNNER }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,6 +77,25 @@ jobs:
           kill "$PID" 2>/dev/null || true
           wait "$PID" 2>/dev/null || true
           echo "App stayed alive on macOS $(sw_vers -productVersion) for the smoke window."
+
+  deployment-floor:
+    # Always-on check that the binary advertises the documented macOS 14 floor.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Check deployment target metadata
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Debug/mattermost.client.app"
+          if ! plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist" | grep -qx '14.0'; then
+            echo "::error::LSMinimumSystemVersion is not 14.0"
+            exit 1
+          fi
+          otool -l "$APP/Contents/MacOS/mattermost.client" | grep -A4 LC_BUILD_VERSION
 
   release:
     # A universal, checksummed Release DMG is built and smoke-launched for tags
