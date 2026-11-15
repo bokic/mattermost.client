@@ -395,8 +395,53 @@ final class WebServiceTests: XCTestCase {
         )
     }
 
-    func testDecodeMMUserStatus() throws {
-        let statusJSON = """
+    func testDecodeFileSearchResult() throws {
+        let json = """
+        {
+            "order": ["file_image", "file_text"],
+            "file_infos": {
+                "file_image": {
+                    "id": "file_image",
+                    "user_id": "u12345",
+                    "post_id": "post_1",
+                    "channel_id": "ch_town_square",
+                    "create_at": 1794702804589,
+                    "name": "attach.png",
+                    "extension": "png",
+                    "size": 39192,
+                    "mime_type": "image/png",
+                    "width": 400,
+                    "height": 241,
+                    "has_preview_image": true
+                },
+                "file_text": {
+                    "id": "file_text",
+                    "user_id": "u12345",
+                    "post_id": "post_2",
+                    "channel_id": "ch_town_square",
+                    "create_at": 1794701589295,
+                    "name": "upload-test.txt",
+                    "extension": "txt",
+                    "size": 20,
+                    "mime_type": "text/plain; charset=utf-8"
+                }
+            },
+            "next_file_info_id": "",
+            "prev_file_info_id": ""
+        }
+        """.data(using: .utf8)!
+
+        let result = try JSONDecoder().decode(MMFileSearchResult.self, from: json)
+        XCTAssertEqual(result.order, ["file_image", "file_text"])
+        XCTAssertEqual(result.file_infos["file_image"]?.name, "attach.png")
+        XCTAssertEqual(result.file_infos["file_image"]?.size, 39192)
+        XCTAssertEqual(result.file_infos["file_image"]?.width, 400)
+        XCTAssertEqual(result.file_infos["file_image"]?.has_preview_image, true)
+        XCTAssertEqual(result.file_infos["file_text"]?.extension, "txt")
+        XCTAssertEqual(result.file_infos["file_text"]?.create_at, 1794701589295)
+    }
+
+    func testDecodeMMUserStatus() throws {        let statusJSON = """
         {
             "user_id": "u12345",
             "status": "away",

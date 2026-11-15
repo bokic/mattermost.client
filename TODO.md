@@ -296,7 +296,7 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     restored at launch; releasing the drag reflows the active panel.
   - Added a Files button to the channel header and a Files item to the channel menu.
   - Verified against computed styles from the live web client and screenshots of the Files view at
-    400pt and after resizing to 480pt; `rhsWidth` was persisted and restored. 21 tests pass.
+    400pt and after resizing to 480pt; `rhsWidth` was persisted and restored. 22 tests pass.
 - [ ] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
 - [ ] **Emoji picker** (server emoji list + recent) — `M`
 - [ ] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`
