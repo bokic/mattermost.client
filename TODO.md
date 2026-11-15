@@ -101,13 +101,16 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     re-anchors the viewport by the added height. Exhaustion is detected when a page returns fewer
     than 60 posts, and the state resets per channel.
 
-- [ ] **No read state, per-channel unread counts or mentions** — `L`
-  - Progress: menu-bar dot, Dock badge and native notifications now fire for messages in channels you
-    are not looking at, and clear when the channel is opened or the app is activated.
-  - Remaining: `POST /channels/{id}/view`, per-channel/sidebar unread counters, mention counts,
-    sidebar highlighting, and the "New Messages" divider.
-  - Done when: switching channels marks them read, sidebar rows show unread/mention counts, and the
-    dock badge reflects mentions.
+- [x] **No read state, per-channel unread counts or mentions** — `L`
+  - Done: memberships are loaded from `/users/{id}/teams/{team}/channels/members`, giving per-channel
+    unread (`total_msg_count − msg_count`) and mention counts rendered as sidebar badges (blue pill
+    for mentions, right-aligned white count for unread). Opening a channel marks it read via
+    `POST /channels/members/me/view`, zeroes its badges and records `last_viewed_at`; the timeline
+    shows a "New Messages" divider above the first post newer than the last view. Incoming WS posts
+    increment counts for channels you are not looking at, and the tray/dock/notification path shares
+    the same state.
+  - Remaining: "mark all as read" (`PUT /users/{id}/teams/{team}/read`), collapsing the divider once
+    scrolled past, and mute-based suppression.
 
 - [ ] **Post model cannot represent attachments, reactions, pinned posts, edits or deletes** — `M`
   - Where: `MMPost` (`webservice.swift:118`) only decodes `message` + ids; no `metadata.files`,

@@ -18,6 +18,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Sidebar Navigation**: 264 pt sidebar laid out to the web client's metrics — 32 pt rows, 19 pt leading padding, a filter menu (All channels / Favorites), a live `Find channel` filter, and a `Threads` row.
 - **Channel Actions**: `Add Channels` opens a Browse Channels list with join support; `Invite Members` sends email invitations.
 - **Collapsible Categories**: Custom categories (e.g. `MOJ_CAT`), `CHANNELS`, and `DIRECT MESSAGES`. Favoriting a channel (★) moves it into a `FAVORITES` branch at the top and removes it from its original category; unfavoriting returns it.
+- **Unread & Mentions**: Channel rows show unread counts and blue mention pills backed by server memberships, and the timeline marks the first unread post with a "New Messages" divider. Opening a channel marks it read.
 - **Active Channel Highlight**: Blue 4 pt accent pill (`#5D89EA`) at the row's leading edge over an 8% white highlight, matching the web client.
 
 ### 3. Right Chat Panel (`#FFFFFF`)

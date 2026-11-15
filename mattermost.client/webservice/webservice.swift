@@ -144,6 +144,14 @@ struct MMThread: Decodable {
     let post: MMPost?
 }
 
+struct MMChannelMembership: Decodable {
+    let channel_id: String
+    let msg_count: Int?
+    let mention_count: Int?
+    let last_viewed_at: Int64?
+    let last_update_at: Int64?
+}
+
 struct MMChannelMember: Decodable {
     let user_id: String
     let channel_id: String
@@ -679,6 +687,27 @@ final class WebService: NSObject {
                 URLQueryItem(name: "per_page", value: String(perPage))
             ]
         )
+    }
+    
+    func fetchChannelMemberships(userId: String, teamId: String, page: Int = 0, perPage: Int = 200) async throws -> [MMChannelMembership] {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/members",
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
+        )
+    }
+    
+    /// Marks a channel as viewed; returns the server's new last_viewed_at.
+    func markChannelViewed(channelId: String) async throws -> Int64? {
+        struct ViewResponse: Decodable { let last_viewed_at_times: [String: Int64]? }
+        let response: ViewResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/channels/members/me/view",
+            method: "POST",
+            body: ["channel_id": channelId, "collapsed_threads_supported": true]
+        )
+        return response.last_viewed_at_times?[channelId]
     }
     
     func fetchPublicChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {

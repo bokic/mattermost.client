@@ -193,6 +193,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let iconView: NSImageView
         let label: NSTextField
         let hoverCloseView: NSImageView?
+        let badgePanel: RoundedEdgePanel
+        let badgeLabel: NSTextField
     }
     
     private struct SidebarCategoryView {
@@ -219,6 +221,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var favoritesCategory: SidebarCategoryView?
     private var isFavoritesCollapsed = false
     private var channelFilterQuery: String = ""
+    private var membershipsByChannel: [String: MMChannelMembership] = [:]
+    private var unreadByChannel: [String: Int] = [:]
+    private var mentionsByChannel: [String: Int] = [:]
+    private var lastViewedAtByChannel: [String: Int64] = [:]
+    private var newMessagesBaseline: Int64 = 0
+    private var newMessagesDividerPostId: String?
     private var isLoadingOlderPosts = false
     private var didLoadAllHistory = false
     private let postsPerPage = 60
@@ -366,6 +374,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
         updateViews()
         applyZoomFactor(ZoomManager.shared.currentZoomFactor)
+        if CommandLine.arguments.contains("--view-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+                ws.sendWebSocketMessage(action: "view_channel", data: [
+                    "channel_id": self.activeChannelId,
+                    "prev_channel_id": "",
+                    "channel_type": "O"
+                ])
+            }
+        }
         self.makeKeyAndOrderFront(nil)
         
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResize), name: NSWindow.didResizeNotification, object: self)
@@ -1024,6 +1042,121 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     
     // MARK: - Favorites branch
     
+    // MARK: - Read state & badges
+    
+    private func loadUnreadState() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let memberships = try? await ws.fetchChannelMemberships(userId: userId, teamId: team.id) else { return }
+            self.membershipsByChannel = Dictionary(uniqueKeysWithValues: memberships.map { ($0.channel_id, $0) })
+            var unread: [String: Int] = [:]
+            var mentions: [String: Int] = [:]
+            var viewed: [String: Int64] = [:]
+            for membership in memberships {
+                let total = Int(self.channelsById[membership.channel_id]?.total_msg_count ?? 0)
+                unread[membership.channel_id] = max(0, total - (membership.msg_count ?? 0))
+                mentions[membership.channel_id] = membership.mention_count ?? 0
+                if let when = membership.last_viewed_at {
+                    viewed[membership.channel_id] = when
+                }
+            }
+            self.unreadByChannel = unread
+            self.mentionsByChannel = mentions
+            self.lastViewedAtByChannel = viewed
+            self.updateSidebarBadges()
+            self.updateNewMessagesBaseline()
+            self.markActiveChannelViewed()
+        }
+    }
+    
+    private func updateSidebarBadges() {
+        let allItems: [SidebarItemView] = (threadsSidebarItem.map { [$0] } ?? [])
+            + (favoritesCategory?.items ?? [])
+            + sidebarCategories.flatMap { $0.items }
+        for item in allItems {
+            let unread = unreadByChannel[item.id] ?? 0
+            let mentions = mentionsByChannel[item.id] ?? 0
+            item.badgePanel.frame = NSRect(x: 264 - 16 - 34, y: 6, width: 34, height: 20)
+            item.badgeLabel.frame = NSRect(x: 2, y: 3, width: 30, height: 14)
+            if mentions > 0 {
+                item.badgePanel.isHidden = false
+                item.badgePanel.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+                item.badgeLabel.stringValue = mentions > 99 ? "99+" : "\(mentions)"
+                item.badgeLabel.alignment = .center
+                item.badgeLabel.textColor = .white
+            } else if unread > 0 {
+                item.badgePanel.isHidden = false
+                item.badgePanel.color = .clear
+                item.badgeLabel.stringValue = unread > 99 ? "99+" : "\(unread)"
+                item.badgeLabel.alignment = .right
+                item.badgeLabel.textColor = NSColor(white: 1.0, alpha: 0.88)
+            } else {
+                item.badgePanel.isHidden = true
+                item.badgeLabel.stringValue = ""
+            }
+            item.badgePanel.setNeedsAppearanceUpdate()
+        }
+    }
+    
+    private func updateNewMessagesBaseline() {
+        guard !activeChannelId.isEmpty else { return }
+        newMessagesBaseline = lastViewedAtByChannel[activeChannelId] ?? 0
+        if newMessagesBaseline > 0 {
+            newMessagesDividerPostId = currentChannelPosts.first(where: { $0.create_at > newMessagesBaseline })?.id
+            rebuildTimelineContent(scrollToBottom: false)
+        }
+    }
+    
+    private func markActiveChannelViewed() {
+        guard !activeChannelId.isEmpty,
+              (unreadByChannel[activeChannelId] ?? 0) > 0 || (mentionsByChannel[activeChannelId] ?? 0) > 0,
+              let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        let channelId = activeChannelId
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            if let viewedAt = try? await ws.markChannelViewed(channelId: channelId) {
+                self.lastViewedAtByChannel[channelId] = viewedAt
+            }
+            self.unreadByChannel[channelId] = 0
+            self.mentionsByChannel[channelId] = 0
+            self.updateSidebarBadges()
+        }
+    }
+    
+    private func createNewMessagesDivider(width: CGFloat) -> NSView {
+        let container = TimelineFlippedView()
+        container.frame = NSRect(x: 0, y: 0, width: width, height: 34)
+        let blue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        
+        let line = RoundedEdgePanel()
+        line.cornerRadius = 0
+        line.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.35)
+        line.frame = NSRect(x: 20, y: 16, width: max(0, width - 40), height: 1)
+        container.addSubview(line)
+        
+        let font = MMFont.font(ofSize: 12, weight: .semibold)
+        let text = "New Messages"
+        let textW = ceil((text as NSString).size(withAttributes: [.font: font]).width) + 24
+        let pill = RoundedEdgePanel()
+        pill.color = .white
+        pill.cornerRadius = 13
+        pill.frame = NSRect(x: (width - textW) / 2, y: 4, width: textW, height: 26)
+        let label = NSTextField(labelWithString: text)
+        label.font = font
+        label.textColor = blue
+        label.alignment = .center
+        label.isEditable = false
+        label.isSelectable = false
+        label.frame = NSRect(x: 0, y: 5, width: textW, height: 16)
+        pill.addSubview(label)
+        container.addSubview(pill)
+        return container
+    }
+    
     /// Mirrors the web client: favorited channels move into a dedicated
     /// "Favorites" group at the top of the sidebar and are removed from their
     /// original category until unfavorited.
@@ -1074,6 +1207,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         }
         favoritesCategory = category
         updateSidebarSelectionAppearance()
+        updateSidebarBadges()
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
     }
     
@@ -2516,6 +2650,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         rebuildFavoritesCategory()
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         updateSidebarSelectionAppearance()
+        updateSidebarBadges()
+        loadUnreadState()
         fetchAvatarForUsernameIfNeeded("system-bot")
     }
     
@@ -2638,6 +2774,20 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         label.frame = NSRect(x: 49, y: 6, width: 140, height: 20)
         row.addSubview(label)
         
+        let badgePanel = RoundedEdgePanel()
+        badgePanel.cornerRadius = 10
+        badgePanel.color = .clear
+        badgePanel.isHidden = true
+        row.addSubview(badgePanel)
+        
+        let badgeLabel = NSTextField(labelWithString: "")
+        badgeLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+        badgeLabel.textColor = .white
+        badgeLabel.alignment = .center
+        badgeLabel.isEditable = false
+        badgeLabel.isSelectable = false
+        badgePanel.addSubview(badgeLabel)
+        
         var closeView: NSImageView? = nil
         if showsCloseOnHover {
             let xView = NSImageView()
@@ -2689,7 +2839,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             leftBar: leftBar,
             iconView: iconView,
             label: label,
-            hoverCloseView: closeView
+            hoverCloseView: closeView,
+            badgePanel: badgePanel,
+            badgeLabel: badgeLabel
         )
     }
     
@@ -5398,6 +5550,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 currentY += 24 + 10
             }
             
+            if post.id == newMessagesDividerPostId {
+                let dividerView = createNewMessagesDivider(width: chatW)
+                dividerView.frame.origin.y = currentY
+                timelineDocView.addSubview(dividerView)
+                currentY += 40
+            }
+            
             let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId && !post.user_id.isEmpty)
             let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: timeFmt.string(from: postDate), isConsecutive: isConsecutive)
             rowView.frame.origin.y = currentY
@@ -5839,8 +5998,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let normalized = itemId.lowercased()
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
+        newMessagesDividerPostId = nil
+        newMessagesBaseline = lastViewedAtByChannel[ch.id] ?? 0
         refreshFavoriteState()
         (NSApp.delegate as? AppDelegate)?.markChannelRead(ch.id)
+        markActiveChannelViewed()
         reloadRightPanelIfNeeded()
         let resolvedTitle = channelDisplayName(for: ch)
         channelTitleLabel.stringValue = resolvedTitle
@@ -5891,6 +6053,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             // Discard results for a channel that is no longer open.
             guard self.activeChannelId == channelId else { return }
             self.didLoadAllHistory = posts.count < self.postsPerPage
+            if self.newMessagesBaseline > 0 {
+                self.newMessagesDividerPostId = posts.first(where: { $0.create_at > self.newMessagesBaseline })?.id
+            }
             applyPostsToTimeline(posts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
@@ -5944,6 +6109,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             return
         }
         
+        unreadByChannel[post.channel_id, default: 0] += 1
+        let username = (currentUser?.username ?? "").lowercased()
+        if !username.isEmpty && post.message.lowercased().contains("@" + username) {
+            mentionsByChannel[post.channel_id, default: 0] += 1
+        }
+        updateSidebarBadges()
+        
         let channel = channelsById[post.channel_id]
         let channelName = channel.map { channelDisplayName(for: $0) } ?? ""
         let author = usersById[post.user_id]?.username ?? "New message"
@@ -5977,6 +6149,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     @objc private func appDidBecomeActive() {
         guard !activeChannelId.isEmpty else { return }
         (NSApp.delegate as? AppDelegate)?.markChannelRead(activeChannelId)
+        markActiveChannelViewed()
     }
     
     /// Enables/disables the send button as the editor content changes.
