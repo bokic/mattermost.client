@@ -1286,12 +1286,12 @@ extension MainWindow {
 
         // Action entries: Invite People, Team Members, Team Settings, Create Team, Join Team, Leave Team
         let actionEntries: [(title: String, symbol: String, action: @MainActor (MainWindow) -> Void)] = [
-            ("Invite People", "person.badge.plus", { $0.showTeamInviteDialog() }),
-            ("Team Members", "person.2", { $0.showRightPanel(mode: .teamMembers) }),
-            ("Team Settings", "gearshape", { $0.showTeamSettingsDialog() }),
-            ("Create New Team", "plus.rectangle.on.rectangle", { $0.showCreateTeamDialog() }),
-            ("Join another team", "plus.circle", { $0.showJoinTeamDialog() }),
-            ("Leave Team", "rectangle.portrait.and.arrow.right", { $0.confirmLeaveTeam() }),
+            (L10n.string("Invite People"), "person.badge.plus", { $0.showTeamInviteDialog() }),
+            (L10n.string("Team Members"), "person.2", { $0.showRightPanel(mode: .teamMembers) }),
+            (L10n.string("Team Settings"), "gearshape", { $0.showTeamSettingsDialog() }),
+            (L10n.string("Create New Team"), "plus.rectangle.on.rectangle", { $0.showCreateTeamDialog() }),
+            (L10n.string("Join another team"), "plus.circle", { $0.showJoinTeamDialog() }),
+            (L10n.string("Leave Team"), "rectangle.portrait.and.arrow.right", { $0.confirmLeaveTeam() }),
         ]
 
         var actionY = separator.frame.minY - 4 - actionRowHeight

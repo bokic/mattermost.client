@@ -151,7 +151,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         title.frame = NSRect(x: 86, y: 616, width: 300, height: 26)
         contentView.addSubview(title)
 
-        let subtitle = NSTextField(labelWithString: "Sign in to your workspace")
+        let subtitle = NSTextField(labelWithString: L10n.string("Sign in to your workspace"))
         subtitle.font = MMFont.font(ofSize: 12)
         subtitle.textColor = .secondaryLabelColor
         subtitle.frame = NSRect(x: 86, y: 596, width: 340, height: 16)
@@ -164,12 +164,12 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         cardPanel.frame = NSRect(x: 36, y: 170, width: 488, height: 420)
         contentView.addSubview(cardPanel)
 
-        serverCaption = makeCaption("Server URL")
+        serverCaption = makeCaption(L10n.string("Server URL"))
         serverCaption.frame = NSRect(x: 20, y: 376, width: 220, height: 16)
         cardPanel.addSubview(serverCaption)
 
         findServerButton = NSButton(
-            title: "Find server by email",
+            title: L10n.string("Find server by email"),
             target: self,
             action: #selector(findServerButtonPressed)
         )
@@ -202,7 +202,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         portLabel.formatter = NumberFormatter()
         cardPanel.addSubview(portLabel)
 
-        usernameCaption = makeCaption("Username or email")
+        usernameCaption = makeCaption(L10n.string("Username or email"))
         usernameCaption.frame = NSRect(x: 20, y: 306, width: 448, height: 16)
         cardPanel.addSubview(usernameCaption)
 
@@ -211,12 +211,12 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         usernameLabel.frame = NSRect(x: 20, y: 274, width: 448, height: 30)
         cardPanel.addSubview(usernameLabel)
 
-        passwordCaption = makeCaption("Password")
+        passwordCaption = makeCaption(L10n.string("Password"))
         passwordCaption.frame = NSRect(x: 20, y: 236, width: 448, height: 16)
         cardPanel.addSubview(passwordCaption)
 
         passwordLabel = NSSecureTextField()
-        passwordLabel.placeholderString = "Password"
+        passwordLabel.placeholderString = L10n.string("Password")
         passwordLabel.font = MMFont.font(ofSize: 13)
         passwordLabel.delegate = self
         passwordLabel.frame = NSRect(x: 20, y: 204, width: 412, height: 30)
@@ -224,7 +224,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         passwordLabel.action = #selector(connectButtonPressed)
         cardPanel.addSubview(passwordLabel)
 
-        visiblePasswordField = makeField(placeholder: "Password")
+        visiblePasswordField = makeField(placeholder: L10n.string("Password"))
         visiblePasswordField.delegate = self
         visiblePasswordField.frame = NSRect(x: 20, y: 204, width: 412, height: 30)
         visiblePasswordField.isHidden = true
@@ -233,17 +233,17 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         cardPanel.addSubview(visiblePasswordField)
 
         showPasswordButton = NSButton(
-            image: NSImage(systemSymbolName: "eye", accessibilityDescription: "Show password")!,
+            image: NSImage(systemSymbolName: "eye", accessibilityDescription: L10n.string("Show password"))!,
             target: self,
             action: #selector(togglePasswordVisibility)
         )
         showPasswordButton.bezelStyle = .inline
         showPasswordButton.isBordered = false
-        showPasswordButton.toolTip = "Show password"
+        showPasswordButton.toolTip = L10n.string("Show password")
         showPasswordButton.frame = NSRect(x: 440, y: 206, width: 28, height: 26)
         cardPanel.addSubview(showPasswordButton)
 
-        mfaCaption = makeCaption("Authentication code")
+        mfaCaption = makeCaption(L10n.string("Authentication code"))
         mfaCaption.frame = NSRect(x: 20, y: 166, width: 448, height: 16)
         mfaCaption.isHidden = true
         cardPanel.addSubview(mfaCaption)
@@ -287,7 +287,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         connectButton.frame = NSRect(x: 20, y: 18, width: 448, height: 36)
         cardPanel.addSubview(connectButton)
 
-        ssoHintLabel = NSTextField(labelWithString: "or continue with")
+        ssoHintLabel = NSTextField(labelWithString: L10n.string("or continue with"))
         ssoHintLabel.font = MMFont.font(ofSize: 11)
         ssoHintLabel.textColor = .secondaryLabelColor
         ssoHintLabel.alignment = .center
@@ -295,7 +295,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         contentView.addSubview(ssoHintLabel)
 
         ssoButton = NSButton(
-            title: "Continue with single sign-on",
+            title: L10n.string("Continue with single sign-on"),
             target: self,
             action: #selector(ssoButtonPressed)
         )
@@ -462,9 +462,9 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
             visiblePasswordField.isHidden = true
             showPasswordButton.image = NSImage(
                 systemSymbolName: "eye",
-                accessibilityDescription: "Show password"
+                accessibilityDescription: L10n.string("Show password")
             )
-            showPasswordButton.toolTip = "Show password"
+            showPasswordButton.toolTip = L10n.string("Show password")
             makeFirstResponder(passwordLabel)
         } else {
             visiblePasswordField.stringValue = passwordLabel.stringValue
@@ -472,9 +472,9 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
             passwordLabel.isHidden = true
             showPasswordButton.image = NSImage(
                 systemSymbolName: "eye.slash",
-                accessibilityDescription: "Hide password"
+                accessibilityDescription: L10n.string("Hide password")
             )
-            showPasswordButton.toolTip = "Hide password"
+            showPasswordButton.toolTip = L10n.string("Hide password")
             makeFirstResponder(visiblePasswordField)
         }
     }
@@ -530,10 +530,10 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
 
     func promptForEmailDiscovery() {
         let alert = NSAlert()
-        alert.messageText = "Find your server"
-        alert.informativeText = "Enter your work or organizational email address to discover your Mattermost server."
-        alert.addButton(withTitle: "Find server")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = L10n.string("Find your server")
+        alert.informativeText = L10n.string("Enter your work email address to find your Mattermost server.")
+        alert.addButton(withTitle: L10n.string("Find Server"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
 
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         input.placeholderString = "you@company.com"

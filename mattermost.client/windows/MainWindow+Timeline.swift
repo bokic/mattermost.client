@@ -708,12 +708,12 @@ extension MainWindow {
         toolbar.accessibilityTitle = "Message actions"
 
         let postRef = post
-        let entries: [(symbol: String, label: String, action: () -> Void)] = [
-            ("face.smiling", "Add Reaction", {}),
-            ("arrowshape.turn.up.left", "Reply", { [weak self] in
+        let entries: [(symbol: String, label: String, key: String, action: () -> Void)] = [
+            ("face.smiling", L10n.string("Add Reaction"), "Add Reaction", {}),
+            ("arrowshape.turn.up.left", L10n.string("Reply"), "Reply", { [weak self] in
                 self?.showThread(for: postRef)
             }),
-            ("ellipsis", "More", { [weak self, weak toolbar] in
+            ("ellipsis", L10n.string("More Actions"), "More", { [weak self, weak toolbar] in
                 guard let self = self, let toolbar = toolbar else { return }
                 self.showPostActionMenu(for: postRef, anchorRect: self.postToolbarAnchor(toolbar))
             })
@@ -748,7 +748,7 @@ extension MainWindow {
                 icon?.contentTintColor = Theme.shared.centerText.withAlphaComponent(isHovered ? 0.8 : 0.64)
                 button?.setNeedsAppearanceUpdate()
             }
-            if entry.label == "Add Reaction" {
+            if entry.key == "Add Reaction" {
                 button.onClick = { [weak self, weak button] in
                     guard let self = self, let button = button else { return }
                     self.showReactionPicker(for: postRef, anchor: button)

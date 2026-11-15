@@ -139,7 +139,7 @@ extension MainWindow {
             customIcon: makeMattermostCompassIcon(),
             symbolName: "safari.fill",
             iconTint: brandBlue,
-            title: "Channels",
+            title: L10n.string("Channels"),
             font: MMFont.font(ofSize: 13, weight: .semibold),
             textColor: darkText,
             hoverBg: rowHoverBg,
@@ -156,12 +156,12 @@ extension MainWindow {
         productSwitcherMenu.addSubview(topDivider)
 
         // Action items
-        let items: [(symbol: String, title: String, y: CGFloat)] = [
-            ("wrench.and.screwdriver", "System Console", 211),
-            ("point.3.connected.trianglepath.dotted", "Integrations", 179),
-            ("square.grid.2x2", "App Marketplace", 147),
-            ("arrow.down.to.line", "Download Apps", 115),
-            ("info.circle", "About Mattermost", 83)
+        let items: [(symbol: String, title: String, id: String, y: CGFloat)] = [
+            ("wrench.and.screwdriver", L10n.string("System Console"), "System Console", 211),
+            ("point.3.connected.trianglepath.dotted", L10n.string("Integrations"), "Integrations", 179),
+            ("square.grid.2x2", L10n.string("App Marketplace"), "App Marketplace", 147),
+            ("arrow.down.to.line", L10n.string("Download Apps"), "Download Apps", 115),
+            ("info.circle", L10n.string("About Mattermost"), "About Mattermost", 83)
         ]
 
         for item in items {
@@ -177,11 +177,11 @@ extension MainWindow {
                 showsCheckmark: false,
                 checkmarkColor: brandBlue
             )
-            let itemTitle = item.title
+            let itemId = item.id
             row.onClick = { [weak self] in
                 guard let self = self else { return }
                 self.setProductSwitcherMenuOpen(false)
-                switch itemTitle {
+                switch itemId {
                 case "System Console":
                     self.openServerPath("/admin_console")
                 case "Integrations":
@@ -413,7 +413,7 @@ extension MainWindow {
             customIcon: nil,
             symbolName: "face.smiling",
             iconTint: mutedIcon,
-            title: "Set custom status",
+            title: L10n.string("Set custom status"),
             font: MMFont.font(ofSize: 13, weight: .regular),
             textColor: darkText,
             hoverBg: rowHoverBg,
@@ -445,10 +445,10 @@ extension MainWindow {
         statusCheckViews.removeAll()
 
         let statusConfigs: [(index: Int, symbol: String, tint: NSColor, title: String, subtitle: String?, y: CGFloat, height: CGFloat, showsChevron: Bool)] = [
-            (0, "checkmark.circle.fill", Theme.shared.onlineIndicator, "Online", nil, 216, 34, false),
-            (1, "clock.fill", Theme.shared.awayIndicator, "Away", nil, 182, 34, false),
-            (2, "minus.circle.fill", Theme.shared.dndIndicator, "Do not disturb", "Disables all notifications", 136, 46, true),
-            (3, "circle", Theme.shared.centerTextPlaceholder, "Offline", nil, 102, 34, false)
+            (0, "checkmark.circle.fill", Theme.shared.onlineIndicator, L10n.string("Online"), nil, 216, 34, false),
+            (1, "clock.fill", Theme.shared.awayIndicator, L10n.string("Away"), nil, 182, 34, false),
+            (2, "minus.circle.fill", Theme.shared.dndIndicator, L10n.string("Do not disturb"), L10n.string("Disables all notifications"), 136, 46, true),
+            (3, "circle", Theme.shared.centerTextPlaceholder, L10n.string("Offline"), nil, 102, 34, false)
         ]
 
         for cfg in statusConfigs {
@@ -543,7 +543,7 @@ extension MainWindow {
             customIcon: nil,
             symbolName: "person",
             iconTint: mutedIcon,
-            title: "Profile",
+            title: L10n.string("Profile"),
             font: MMFont.font(ofSize: 13, weight: .regular),
             textColor: darkText,
             hoverBg: rowHoverBg,
@@ -581,7 +581,7 @@ extension MainWindow {
             customIcon: nil,
             symbolName: "rectangle.portrait.and.arrow.right",
             iconTint: mutedIcon,
-            title: "Log out",
+            title: L10n.string("Log out"),
             font: MMFont.font(ofSize: 13, weight: .regular),
             textColor: darkText,
             hoverBg: rowHoverBg,
@@ -952,7 +952,7 @@ extension MainWindow {
         }
         dmPickerPanel.addSubview(dmCloseButton)
 
-        dmSearchField.placeholderString = "Search for people"
+        dmSearchField.placeholderString = L10n.string("Search for people")
         dmSearchField.font = MMFont.font(ofSize: 13)
         dmSearchField.delegate = self
         dmSearchField.sendsSearchStringImmediately = true
@@ -994,7 +994,7 @@ extension MainWindow {
         }
         guard let ws = webService, ws.isLogged(),
               activeTeam != nil, let contentView = contentView else {
-            showInfoAlert("Sign in to start a direct message.")
+            showInfoAlert(L10n.string("Sign in to start a direct message."))
             return
         }
 
@@ -1065,18 +1065,18 @@ extension MainWindow {
     func updateDMStartButtonState() {
         let count = selectedDMUserIds.count
         if count == 0 {
-            dmSelectionCountLabel.stringValue = "Select members"
-            dmStartButtonLabel.stringValue = "Go"
+            dmSelectionCountLabel.stringValue = L10n.string("Select members")
+            dmStartButtonLabel.stringValue = L10n.string("Go")
             dmStartButton.color = Theme.shared.divider.withAlphaComponent(0.2)
             dmStartButtonLabel.textColor = Theme.shared.centerTextMuted
         } else if count == 1 {
-            dmSelectionCountLabel.stringValue = "1 member selected"
-            dmStartButtonLabel.stringValue = "Go"
+            dmSelectionCountLabel.stringValue = L10n.string("1 member selected")
+            dmStartButtonLabel.stringValue = L10n.string("Go")
             dmStartButton.color = Theme.shared.buttonBg
             dmStartButtonLabel.textColor = Theme.shared.buttonColor
         } else {
-            dmSelectionCountLabel.stringValue = "\(count) members (up to 7)"
-            dmStartButtonLabel.stringValue = "Go (\(count))"
+            dmSelectionCountLabel.stringValue = L10n.format("%d members (up to 7)", count)
+            dmStartButtonLabel.stringValue = L10n.format("Go (%d)", count)
             dmStartButton.color = Theme.shared.buttonBg
             dmStartButtonLabel.textColor = Theme.shared.buttonColor
         }
@@ -1094,7 +1094,7 @@ extension MainWindow {
             guard let users = try? await ws.fetchTeamUsers(teamId: team.id, page: page, perPage: pageSize) else {
                 if page == 0 {
                     self.dmUsers = []
-                    self.renderDMUsers(empty: "Could not load users")
+                    self.renderDMUsers(empty: L10n.string("Could not load users"))
                 }
                 return
             }
@@ -1470,15 +1470,15 @@ extension MainWindow {
         let hasUnread = (unreadByChannel[activeChannelId] ?? 0) > 0
             || (mentionsByChannel[activeChannelId] ?? 0) > 0
         let rows: [(symbol: String, title: String, action: () -> Void)] = [
-            ("info.circle", "View Info", { [weak self] in
+            ("info.circle", L10n.string("View Info"), { [weak self] in
                 self?.closeChannelMenu()
                 self?.showRightPanel(mode: .channelInfo)
             }),
-            ("pin", "Pinned Posts", { [weak self] in
+            ("pin", L10n.string("Pinned Posts"), { [weak self] in
                 self?.closeChannelMenu()
                 self?.showRightPanel(mode: .pinned)
             }),
-            ("doc.text", "Files", { [weak self] in
+            ("doc.text", L10n.string("Files"), { [weak self] in
                 self?.closeChannelMenu()
                 self?.showRightPanel(mode: .files)
             }),
@@ -1495,7 +1495,7 @@ extension MainWindow {
                 self?.closeChannelMenu()
                 self?.markAllChannelsRead()
             }),
-            (isChannelMuted(activeChannelId) ? "speaker.slash" : "speaker", isChannelMuted(activeChannelId) ? "Unmute Channel" : "Mute Channel", { [weak self] in
+            (isChannelMuted(activeChannelId) ? "speaker.slash" : "speaker", isChannelMuted(activeChannelId) ? L10n.string("Unmute Channel") : L10n.string("Mute Channel"), { [weak self] in
                 guard let self = self else { return }
                 self.closeChannelMenu()
                 self.setChannelNotificationPreference(
@@ -1513,7 +1513,7 @@ extension MainWindow {
                 self.closeChannelMenu()
                 self.copyChannelLink()
             }),
-            ("rectangle.portrait.and.arrow.right", "Leave Channel", { [weak self] in
+            ("rectangle.portrait.and.arrow.right", L10n.string("Leave Channel"), { [weak self] in
                 self?.closeChannelMenu()
                 self?.confirmLeaveChannel()
             })

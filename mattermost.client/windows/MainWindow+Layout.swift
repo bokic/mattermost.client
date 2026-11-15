@@ -83,14 +83,14 @@ extension MainWindow {
         channelTitleButton.onClick = { [weak self] in
             self?.toggleChannelMenu()
         }
-        channelTitleButton.accessibilityTitle = "Channel Menu"
+        channelTitleButton.accessibilityTitle = L10n.string("Channel Menu")
         channelTitleButton.accessibilityHelp = "Open channel menu"
         channelTitleButton.accessibilityRoleOverride = .button
         chatPanel.addSubview(channelTitleButton)
 
         channelMembersButton.cornerRadius = MMRadius.control
         channelMembersButton.color = .clear
-        channelMembersButton.accessibilityTitle = "Channel Members"
+        channelMembersButton.accessibilityTitle = L10n.string("Channel Members")
         channelMembersButton.accessibilityHelp = "View and manage channel members"
         channelMembersButton.accessibilityRoleOverride = .button
         if let personImg = NSImage(systemSymbolName: "person", accessibilityDescription: "Members") {
@@ -117,7 +117,7 @@ extension MainWindow {
 
         channelPinsButton.cornerRadius = MMRadius.control
         channelPinsButton.color = .clear
-        channelPinsButton.accessibilityTitle = "Pinned Posts"
+        channelPinsButton.accessibilityTitle = L10n.string("Pinned Posts")
         channelPinsButton.accessibilityHelp = "View pinned messages"
         channelPinsButton.accessibilityRoleOverride = .button
         if let pinImg = NSImage(systemSymbolName: "pin", accessibilityDescription: "Pinned Messages") {
@@ -138,7 +138,7 @@ extension MainWindow {
 
         channelFilesButton.cornerRadius = MMRadius.control
         channelFilesButton.color = .clear
-        channelFilesButton.accessibilityTitle = "Files"
+        channelFilesButton.accessibilityTitle = L10n.string("Files")
         channelFilesButton.accessibilityHelp = "View files shared in this channel"
         channelFilesButton.accessibilityRoleOverride = .button
         if let filesImg = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Channel files") {
@@ -159,7 +159,7 @@ extension MainWindow {
 
         channelSidebarButton.cornerRadius = MMRadius.control
         channelSidebarButton.color = .clear
-        channelSidebarButton.accessibilityTitle = "Threads"
+        channelSidebarButton.accessibilityTitle = L10n.string("Threads")
         channelSidebarButton.accessibilityHelp = "Toggle threads right panel"
         channelSidebarButton.accessibilityRoleOverride = .button
         if let sideImg = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Channel Sidebar") {
@@ -180,7 +180,7 @@ extension MainWindow {
 
         channelInfoButton.cornerRadius = MMRadius.control
         channelInfoButton.color = .clear
-        channelInfoButton.accessibilityTitle = "Channel Info"
+        channelInfoButton.accessibilityTitle = L10n.string("Channel Info")
         channelInfoButton.accessibilityHelp = "View channel details"
         channelInfoButton.accessibilityRoleOverride = .button
         if let infoImg = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "View Info") {
@@ -394,7 +394,7 @@ extension MainWindow {
         composerAaButton.onClick = { [weak self] in
             self?.toggleComposerToolbar()
         }
-        composerAaButton.accessibilityTitle = "Toggle formatting toolbar"
+        composerAaButton.accessibilityTitle = L10n.string("Toggle formatting toolbar")
         composerAaButton.accessibilityHelp = "Show or hide text formatting buttons"
         composerAaButton.accessibilityRoleOverride = .button
         chatEntryPanel.addSubview(composerAaButton)

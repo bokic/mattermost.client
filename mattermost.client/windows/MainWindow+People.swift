@@ -295,13 +295,13 @@ extension MainWindow {
 
     func durationLabel(for index: Int) -> String {
         switch index {
-        case 1: return "30 mins"
-        case 2: return "1 hour"
-        case 3: return "4 hours"
-        case 4: return "Today"
-        case 5: return "This week"
+        case 1: return L10n.string("30 minutes")
+        case 2: return L10n.string("1 hour")
+        case 3: return L10n.string("4 hours")
+        case 4: return L10n.string("Today")
+        case 5: return L10n.string("This week")
         case 6: return "Custom date and time"
-        default: return "Don't clear"
+        default: return L10n.string("Don't clear")
         }
     }
 
@@ -391,11 +391,11 @@ extension MainWindow {
 
     func showCustomStatusDialog() {
         let alert = NSAlert()
-        alert.messageText = "Set a custom status"
-        alert.informativeText = "Let people know what you are up to."
-        alert.addButton(withTitle: "Set status")
-        alert.addButton(withTitle: "Clear")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = L10n.string("Set a custom status")
+        alert.informativeText = L10n.string("Let people know what you are up to.")
+        alert.addButton(withTitle: L10n.string("Set status"))
+        alert.addButton(withTitle: L10n.string("Clear"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
 
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 146))
 
@@ -426,12 +426,12 @@ extension MainWindow {
         emojiField.stringValue = customStatusEmoji.isEmpty ? "" : emojiGlyph(for: customStatusEmoji)
 
         let textField = NSTextField(frame: NSRect(x: 96, y: 116, width: 224, height: 24))
-        textField.placeholderString = "What is your status?"
+        textField.placeholderString = L10n.string("What is your status?")
         textField.stringValue = customStatusText
 
         let suggestionsPopup = NSPopUpButton(frame: NSRect(x: 0, y: 78, width: 320, height: 26), pullsDown: true)
         let suggestionsMenu = NSMenu()
-        let suggestionsHeader = NSMenuItem(title: "Suggestions & recent statuses…", action: nil, keyEquivalent: "")
+        let suggestionsHeader = NSMenuItem(title: L10n.string("Suggestions & recent statuses…"), action: nil, keyEquivalent: "")
         suggestionsMenu.addItem(suggestionsHeader)
         for preset in Self.presetCustomStatuses {
             let glyph = emojiGlyph(for: preset.emoji)
@@ -447,7 +447,7 @@ extension MainWindow {
         let recents = recentCustomStatuses()
         if !recents.isEmpty {
             suggestionsMenu.addItem(NSMenuItem.separator())
-            let recentsHeader = NSMenuItem(title: "Recent statuses", action: nil, keyEquivalent: "")
+            let recentsHeader = NSMenuItem(title: L10n.string("Recent statuses"), action: nil, keyEquivalent: "")
             recentsHeader.isEnabled = false
             suggestionsMenu.addItem(recentsHeader)
             for recent in recents {
@@ -468,12 +468,12 @@ extension MainWindow {
 
         let durationPopup = NSPopUpButton(frame: NSRect(x: 0, y: 40, width: 320, height: 26), pullsDown: false)
         durationPopup.addItems(withTitles: [
-            "Don't clear",
-            "30 minutes",
-            "1 hour",
-            "4 hours",
-            "Today",
-            "This week",
+            L10n.string("Don't clear"),
+            L10n.string("30 minutes"),
+            L10n.string("1 hour"),
+            L10n.string("4 hours"),
+            L10n.string("Today"),
+            L10n.string("This week"),
             "Custom date and time…",
         ])
         durationPopup.target = helper

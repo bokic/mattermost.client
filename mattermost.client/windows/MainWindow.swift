@@ -29,7 +29,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     let searchPanel = RoundedEdgePanel()
     let searchIconView = NSImageView()
-    let searchLabel = NSTextField(labelWithString: "Search")
+    let searchLabel = NSTextField(labelWithString: L10n.string("Search"))
     let helpPanel = RoundedEdgePanel()
     let helpIconView = NSImageView()
 
@@ -42,7 +42,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Right-hand side panel (threads / members / pinned posts / files)
     let rightPanel = RoundedEdgePanel()
-    let rightPanelTitle = NSTextField(labelWithString: "Threads")
+    let rightPanelTitle = NSTextField(labelWithString: L10n.string("Threads"))
     let rightPanelSubtitle = NSTextField(labelWithString: "")
     let rightPanelCloseButton = RoundedEdgePanel()
     let rightPanelResizeHandle = RightPanelResizeHandle()
@@ -216,16 +216,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Search popover panel
     let searchPopoverPanel = RoundedEdgePanel()
-    let searchPopoverInputLabel = NSTextField(labelWithString: "Search messages")
+    let searchPopoverInputLabel = NSTextField(labelWithString: L10n.string("Search messages"))
     let searchResultsPanel = RoundedEdgePanel()
     let searchResultsScroll = NSScrollView()
     let searchResultsDoc = TimelineFlippedView()
-    let searchResultsTitle = NSTextField(labelWithString: "Search results")
+    let searchResultsTitle = NSTextField(labelWithString: L10n.string("Search results"))
     let searchResultsCloseButton = RoundedEdgePanel()
     let messagesTabPanel = RoundedEdgePanel()
-    let messagesTabLabel = NSTextField(labelWithString: "Messages")
+    let messagesTabLabel = NSTextField(labelWithString: L10n.string("Messages"))
     let filesTabPanel = RoundedEdgePanel()
-    let filesTabLabel = NSTextField(labelWithString: "Files")
+    let filesTabLabel = NSTextField(labelWithString: L10n.string("Files"))
     var isSearchPopoverOpen = false
     var isSearchFilesTabSelected = false
     var searchResultsTerms = ""
@@ -244,7 +244,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Direct Message picker (opened from the + in the Direct Messages header)
     let dmPickerPanel = RoundedEdgePanel()
-    let dmTitleLabel = NSTextField(labelWithString: "Direct Messages")
+    let dmTitleLabel = NSTextField(labelWithString: L10n.string("Direct Messages"))
     let dmCloseButton = RoundedEdgePanel()
     let dmSearchField = NSSearchField()
     let dmScroll = NSScrollView()
@@ -252,7 +252,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let dmBottomBar = RoundedEdgePanel()
     let dmSelectionCountLabel = NSTextField(labelWithString: "")
     let dmStartButton = RoundedEdgePanel()
-    let dmStartButtonLabel = NSTextField(labelWithString: "Go")
+    let dmStartButtonLabel = NSTextField(labelWithString: L10n.string("Go"))
     var dmUsers: [MMUser] = []
     var dmSearchResults: [MMUser] = []
     var selectedDMUserIds: Set<String> = []
@@ -330,7 +330,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let filterChannelIconView = NSImageView()
     let findChannelPanel = RoundedEdgePanel()
     let findChannelIconView = NSImageView()
-    let findChannelLabel = NSTextField(labelWithString: "Find channel")
+    let findChannelLabel = NSTextField(labelWithString: L10n.string("Find channel"))
 
     struct SidebarItemView {
         let id: String

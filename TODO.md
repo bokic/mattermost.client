@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **181/181 pass** |
+| `./test.sh` | **187/187 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -35,10 +35,6 @@ completed baseline remains at the end.
 ### Composer and account
 
 ### Platform and accessibility
-
-- [ ] **No localization; all UI strings are hardcoded English** — `M`
-  - Move strings into a String Catalog, use `NSLocalizedString`/`String(localized:)`, and
-    add at least one additional locale. Dates already follow `Locale.current`.
 
 - [ ] **No auto-update path** — `M`
   - There is no Sparkle/feed or update check. Add a signed appcast/update mechanism (or

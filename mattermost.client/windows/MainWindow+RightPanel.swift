@@ -231,7 +231,7 @@ extension MainWindow {
             rightPanelTitle.stringValue = L10n.string("Browse Channels")
             loadBrowseChannels()
         case .thread:
-            rightPanelTitle.stringValue = "Thread"
+            rightPanelTitle.stringValue = L10n.string("Thread")
             restoreThreadDraft()
             renderThreadAttachments()
             updateThreadSendState()
@@ -1985,29 +1985,29 @@ extension MainWindow {
 
         // ACCOUNT & CONNECTION
         rows.append(RightPanelRow(
-            title: "ACCOUNT & CONNECTION",
+            title: L10n.string("ACCOUNT & CONNECTION"),
             subtitle: "",
             meta: "",
             action: nil,
             isSectionHeader: true
         ))
         rows.append(RightPanelRow(
-            title: "Account",
-            subtitle: username.isEmpty ? "Not logged in" : "@\(username)",
+            title: L10n.string("Account"),
+            subtitle: username.isEmpty ? L10n.string("Not logged in") : "@\(username)",
             meta: server,
             action: nil
         ))
         rows.append(RightPanelRow(
-            title: "Connection details",
-            subtitle: "Server URL, WebSocket and session diagnostics",
-            meta: "View",
+            title: L10n.string("Connection details"),
+            subtitle: L10n.string("Server URL, WebSocket and session diagnostics"),
+            meta: L10n.string("View"),
             action: { [weak self] in self?.showConnectionDetails() }
         ))
         rows.append(RightPanelRow(
-            title: "Reconnect",
+            title: L10n.string("Reconnect"),
             subtitle: webService?.isWebSocketConnected == true
-                ? "Connected"
-                : "Reconnecting…",
+                ? L10n.string("Connected")
+                : L10n.string("Reconnecting…"),
             meta: "Connection",
             action: { [weak self] in
                 guard let self = self else { return }
@@ -2019,36 +2019,36 @@ extension MainWindow {
 
         // NOTIFICATIONS & MUTE
         rows.append(RightPanelRow(
-            title: "NOTIFICATIONS & MUTE",
+            title: L10n.string("NOTIFICATIONS & MUTE"),
             subtitle: "",
             meta: "",
             action: nil,
             isSectionHeader: true
         ))
         rows.append(RightPanelRow(
-            title: "Desktop notifications",
+            title: L10n.string("Desktop notifications"),
             subtitle: desktopNotificationModeLabel(),
-            meta: "Change",
+            meta: L10n.string("Change"),
             action: { [weak self] in self?.cycleDesktopNotificationMode() }
         ))
         rows.append(RightPanelRow(
-            title: "Notification sound",
-            subtitle: desktopSoundsEnabled() ? "On" : "Off",
-            meta: "Toggle",
+            title: L10n.string("Notification sound"),
+            subtitle: desktopSoundsEnabled() ? L10n.string("On") : L10n.string("Off"),
+            meta: L10n.string("Toggle"),
             action: { [weak self] in self?.toggleDesktopNotificationSound() }
         ))
         let mentionKeys = currentUser?.notify_props?.mention_keys?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         rows.append(RightPanelRow(
-            title: "Mention keys",
-            subtitle: mentionKeys.isEmpty ? "None configured" : mentionKeys,
-            meta: "Edit",
+            title: L10n.string("Mention keys"),
+            subtitle: mentionKeys.isEmpty ? L10n.string("None configured") : mentionKeys,
+            meta: L10n.string("Edit"),
             action: { [weak self] in self?.editMentionKeys() }
         ))
 
         // MUTED CHANNELS
         let mutedChannels = allMutedChannelIds()
         rows.append(RightPanelRow(
-            title: "MUTED CHANNELS",
+            title: L10n.string("MUTED CHANNELS"),
             subtitle: "",
             meta: "\(mutedChannels.count)",
             action: nil,
@@ -2056,8 +2056,8 @@ extension MainWindow {
         ))
         if mutedChannels.isEmpty {
             rows.append(RightPanelRow(
-                title: "No muted channels",
-                subtitle: "All channels currently follow your default notification settings",
+                title: L10n.string("No muted channels"),
+                subtitle: L10n.string("All channels currently follow your default notification settings"),
                 meta: "",
                 action: nil
             ))
@@ -2081,7 +2081,7 @@ extension MainWindow {
                     subtitle: "\(prefix)Notifications muted",
                     meta: "",
                     action: nil,
-                    secondaryActionTitle: "Unmute",
+                    secondaryActionTitle: L10n.string("Unmute"),
                     secondaryAction: { [weak self] in
                         guard let self = self else { return }
                         self.setChannelNotificationPreference(channelId: chId, desktop: "default")
@@ -2093,20 +2093,20 @@ extension MainWindow {
 
         // APPEARANCE
         rows.append(RightPanelRow(
-            title: "APPEARANCE",
+            title: L10n.string("APPEARANCE"),
             subtitle: "",
             meta: "",
             action: nil,
             isSectionHeader: true
         ))
         rows.append(RightPanelRow(
-            title: "Theme override",
+            title: L10n.string("Theme override"),
             subtitle: ThemeManager.shared.themeOverride.displayName,
-            meta: "Change",
+            meta: L10n.string("Change"),
             action: { [weak self] in self?.cycleThemeOverride() }
         ))
         rows.append(RightPanelRow(
-            title: "Reset zoom",
+            title: L10n.string("Reset zoom"),
             subtitle: "Currently \(zoomPercent)%",
             meta: "Appearance",
             action: { [weak self] in
@@ -2117,15 +2117,15 @@ extension MainWindow {
 
         // PRIVACY & MEDIA
         rows.append(RightPanelRow(
-            title: "PRIVACY & MEDIA",
+            title: L10n.string("PRIVACY & MEDIA"),
             subtitle: "",
             meta: "",
             action: nil,
             isSectionHeader: true
         ))
         rows.append(RightPanelRow(
-            title: loadRemoteImagesAutomatically ? "Disable automatic remote images" : "Enable automatic remote images",
-            subtitle: "When off, inline/Giphy images are not fetched from third-party hosts",
+            title: loadRemoteImagesAutomatically ? L10n.string("Disable automatic remote images") : L10n.string("Enable automatic remote images"),
+            subtitle: L10n.string("When off, inline/Giphy images are not fetched from third-party hosts"),
             meta: "Privacy",
             action: { [weak self] in
                 guard let self = self else { return }
@@ -2317,7 +2317,7 @@ extension MainWindow {
     func loadBrowseChannels() {
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
-            renderRightPanel(empty: "Sign in to browse channels", rows: [])
+            renderRightPanel(empty: L10n.string("Sign in to browse channels"), rows: [])
             return
         }
         Task { @MainActor [weak self] in
@@ -2340,7 +2340,7 @@ extension MainWindow {
 
             guard self.rightPanelMode == .browse else { return }
             if allDiscovered.isEmpty {
-                self.renderRightPanel(empty: "No channels found", rows: [])
+                self.renderRightPanel(empty: L10n.string("No channels found"), rows: [])
                 return
             }
 
@@ -2357,33 +2357,33 @@ extension MainWindow {
                 let desc = channel.purpose ?? channel.header ?? ""
                 let subtitle: String
                 if !desc.isEmpty {
-                    subtitle = "\(isPrivate ? "Private" : "Public") • \(desc)"
+                    subtitle = "\(isPrivate ? L10n.string("Private") : L10n.string("Public")) • \(desc)"
                 } else {
-                    subtitle = isPrivate ? "Private channel" : "Public channel"
+                    subtitle = isPrivate ? L10n.string("Private channel") : L10n.string("Public channel")
                 }
 
                 let meta: String
                 let action: () -> Void
                 if isJoined {
-                    meta = "Joined"
+                    meta = L10n.string("Joined")
                     action = { [weak self] in
                         self?.openChannel(withId: channel.id)
                         self?.closeRightPanel()
                     }
                 } else if !isPrivate {
-                    meta = "Click to join"
+                    meta = L10n.string("Click to join")
                     action = { [weak self] in
                         self?.joinChannel(channel)
                     }
                 } else if isPending {
-                    meta = "Request pending"
+                    meta = L10n.string("Request pending")
                     action = { [weak self] in
                         self?.showInfoAlert(
                             "Your request to join \(channel.display_name) has been sent and is awaiting administrator approval."
                         )
                     }
                 } else {
-                    meta = "Request to join"
+                    meta = L10n.string("Request to join")
                     action = { [weak self] in
                         self?.requestToJoinChannel(channel)
                     }
@@ -2397,7 +2397,7 @@ extension MainWindow {
                     action: action
                 )
             }
-            self.renderRightPanel(empty: "No channels found", rows: rows)
+            self.renderRightPanel(empty: L10n.string("No channels found"), rows: rows)
         }
     }
 
