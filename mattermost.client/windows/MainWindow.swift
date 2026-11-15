@@ -123,6 +123,20 @@ private class FileTypeIconView: NSView {
     }
 }
 
+private enum CompletionKind {
+    case user
+    case channel
+    case emoji
+}
+
+private struct CompletionItem {
+    let kind: CompletionKind
+    let title: String
+    let subtitle: String
+    let insertText: String
+    let glyph: String?
+}
+
 private struct EmojiEntry {
     let name: String
     let glyph: String
@@ -1021,6 +1035,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     private var pendingAttachments: [PendingAttachment] = []
+    let completionPanel = RoundedEdgePanel()
+    private var completionItems: [CompletionItem] = []
+    private var completionRowViews: [RoundedEdgePanel] = []
+    private var completionRange = NSRange(location: 0, length: 0)
+    private var completionKind: CompletionKind = .user
+    private var completionSelectedIndex = 0
+    private var isCompletionVisible = false
+    private var completionUsers: [LoginWebService] = []
+    private var completionUsersTeamId: String?
+    private var completionUsersLoading = false
     private var composerBaseHeight: CGFloat { isComposerToolbarVisible ? 90 : 50 }
     private var composerPendingHeight: CGFloat { pendingAttachments.isEmpty ? 0 : 36 }
     private var composerTotalHeight: CGFloat { composerBaseHeight + composerPendingHeight }
@@ -1104,6 +1128,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         composerAttachmentTray.isHidden = true
         chatEntryPanel.addSubview(composerAttachmentTray)
+
+        completionPanel.color = Theme.shared.centerBg
+        completionPanel.cornerRadius = 6
+        completionPanel.borderWidth = 1
+        completionPanel.borderColor = Theme.shared.divider
+        completionPanel.shadowColor = .black
+        completionPanel.shadowOpacity = 0.16
+        completionPanel.shadowRadius = 10
+        completionPanel.shadowOffset = CGSize(width: 0, height: -3)
+        completionPanel.isHidden = true
+        chatPanel.addSubview(completionPanel)
         
         treeView.delegate = mainTreeDelegate
         treeView.isHidden = true
@@ -1900,6 +1935,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     /// Closes the topmost floating overlay. Returns false when nothing was open.
     @discardableResult
     private func closeTopOverlay() -> Bool {
+        if isCompletionVisible { closeCompletion(); return true }
         if isLightboxVisible { closeLightbox(); return true }
         if isDMPickerOpen { closeDMPicker(); return true }
         if isEmojiPanelOpen { closeEmojiPanel(); return true }
@@ -3090,7 +3126,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             if event.keyCode == 53, closeTopOverlay() {
                 return
             }
-            if event.keyCode == 48, handleFocusTraversal(reverse: event.modifierFlags.contains(.shift)) {
+            if event.keyCode == 48, !isCompletionVisible,
+               handleFocusTraversal(reverse: event.modifierFlags.contains(.shift)) {
                 return
             }
         }
@@ -3149,6 +3186,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 }
                 if isDMPickerOpen && !dmPickerPanel.frame.contains(point) && !dmAnchorFrame.contains(point) {
                     closeDMPicker()
+                }
+                if isCompletionVisible {
+                    let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
+                    if !completionPanel.frame.contains(chatPoint) && !chatEntryPanel.frame.contains(chatPoint) {
+                        closeCompletion()
+                    }
                 }
             }
         }
@@ -5534,12 +5577,341 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     private func insertEmoji(_ emoji: String) {
+        closeCompletion()
         let range = entryView.selectedRange()
         entryView.insertText(emoji, replacementRange: range)
         entryView.needsDisplay = true
         updateComposerSendState()
         closeEmojiPanel()
         makeFirstResponder(entryView)
+    }
+
+    // MARK: - Composer autocomplete
+
+    private struct CompletionTrigger {
+        let kind: CompletionKind
+        let query: String
+        let range: NSRange
+    }
+
+    private func updateCompletion() {
+        guard entryView.selectedRange().length == 0,
+              let trigger = detectCompletionTrigger() else {
+            closeCompletion()
+            return
+        }
+
+        var items: [CompletionItem] = []
+        switch trigger.kind {
+        case .user:
+            ensureCompletionUsers()
+            let query = trigger.query.lowercased()
+            var seen = Set<String>()
+            let candidates = completionUsers.isEmpty ? Array(usersById.values) : completionUsers
+            items = candidates
+                .filter { user in
+                    guard seen.insert(user.id).inserted else { return false }
+                    let full = [user.first_name, user.last_name].compactMap { $0 }.joined(separator: " ").lowercased()
+                    return query.isEmpty
+                        || user.username.lowercased().contains(query)
+                        || full.contains(query)
+                }
+                .sorted { lhs, rhs in
+                    let lhsPrefix = lhs.username.lowercased().hasPrefix(query)
+                    let rhsPrefix = rhs.username.lowercased().hasPrefix(query)
+                    if lhsPrefix != rhsPrefix { return lhsPrefix }
+                    return lhs.username.localizedCaseInsensitiveCompare(rhs.username) == .orderedAscending
+                }
+                .map { user in
+                    let full = [user.first_name, user.last_name].compactMap { $0 }.joined(separator: " ")
+                    return CompletionItem(
+                        kind: .user,
+                        title: "@" + user.username,
+                        subtitle: full,
+                        insertText: "@" + user.username + " ",
+                        glyph: nil
+                    )
+                }
+        case .channel:
+            let query = trigger.query.lowercased()
+            items = channelsById.values
+                .filter { $0.type == "O" || $0.type == "P" }
+                .filter { channel in
+                    query.isEmpty
+                        || channel.name.lowercased().contains(query)
+                        || channel.display_name.lowercased().contains(query)
+                }
+                .sorted { $0.display_name.localizedCaseInsensitiveCompare($1.display_name) == .orderedAscending }
+                .map { channel in
+                    CompletionItem(
+                        kind: .channel,
+                        title: "#" + channel.name,
+                        subtitle: channel.display_name,
+                        insertText: "#" + channel.name + " ",
+                        glyph: nil
+                    )
+                }
+        case .emoji:
+            let query = trigger.query.lowercased()
+            items = (EmojiCatalog.entries + customEmojiEntries)
+                .filter { query.isEmpty || $0.name.lowercased().contains(query) }
+                .sorted { lhs, rhs in
+                    let lhsPrefix = lhs.name.lowercased().hasPrefix(query)
+                    let rhsPrefix = rhs.name.lowercased().hasPrefix(query)
+                    if lhsPrefix != rhsPrefix { return lhsPrefix }
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+                .map { entry in
+                    CompletionItem(
+                        kind: .emoji,
+                        title: ":" + entry.name + ":",
+                        subtitle: "",
+                        insertText: ":" + entry.name + ": ",
+                        glyph: entry.isCustom ? "🖼️" : entry.glyph
+                    )
+                }
+        }
+
+        guard !items.isEmpty else {
+            closeCompletion()
+            return
+        }
+
+        let sameSelection = isCompletionVisible
+            && completionKind == trigger.kind
+            && completionRange == trigger.range
+            && completionItems.count == min(items.count, 8)
+        completionKind = trigger.kind
+        completionRange = trigger.range
+        completionItems = Array(items.prefix(8))
+        if !sameSelection {
+            completionSelectedIndex = 0
+        }
+        completionSelectedIndex = min(completionSelectedIndex, max(0, completionItems.count - 1))
+        renderCompletionPanel()
+    }
+
+    private func detectCompletionTrigger() -> CompletionTrigger? {
+        let selection = entryView.selectedRange()
+        guard selection.length == 0 else { return nil }
+        let caret = selection.location
+        let text = entryView.string as NSString
+        guard caret >= 0, caret <= text.length else { return nil }
+        let prefix = text.substring(to: caret)
+
+        let specifications: [(CompletionKind, String)] = [
+            (.user, #"(?<![\w@])@([A-Za-z0-9._-]*)$"#),
+            (.channel, #"(?<![\w])[#~]([A-Za-z0-9._-]*)$"#),
+            (.emoji, #"(?<![\w:]):([A-Za-z0-9_+\-]+)$"#)
+        ]
+        let range = NSRange(location: 0, length: caret)
+        for (kind, pattern) in specifications {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            guard let match = regex.firstMatch(in: prefix, options: [], range: range) else { continue }
+            let query = (prefix as NSString).substring(with: match.range(at: 1))
+            return CompletionTrigger(kind: kind, query: query, range: match.range)
+        }
+        return nil
+    }
+
+    private func ensureCompletionUsers() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam,
+              completionUsersTeamId != team.id,
+              !completionUsersLoading else { return }
+        completionUsersLoading = true
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let users = (try? await ws.fetchTeamUsers(teamId: team.id)) ?? []
+            self.completionUsersLoading = false
+            guard !users.isEmpty else { return }
+            self.completionUsers = users
+            self.completionUsersTeamId = team.id
+            for user in users {
+                self.usersById[user.id] = user
+                self.usersByUsername[user.username.lowercased()] = user
+            }
+            if self.isCompletionVisible {
+                self.updateCompletion()
+            }
+        }
+    }
+
+    private func renderCompletionPanel() {
+        completionPanel.subviews.forEach { $0.removeFromSuperview() }
+        completionRowViews.removeAll()
+
+        let width: CGFloat = 300
+        let rowHeight: CGFloat = 36
+        let height = CGFloat(completionItems.count) * rowHeight + 8
+        let rightLimit = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
+        let x = min(
+            max(8, chatEntryPanel.frame.minX + 14),
+            max(8, rightLimit - width - 8)
+        )
+        let y = min(
+            max(8, chatEntryPanel.frame.maxY + 6),
+            max(8, chatPanel.bounds.height - height - 8)
+        )
+        completionPanel.frame = NSRect(x: x, y: y, width: width, height: height)
+
+        let textColor = Theme.shared.centerText
+        let muted = Theme.shared.centerTextMuted
+        let selectedBg = Theme.shared.buttonBg.withAlphaComponent(0.08)
+
+        for (index, item) in completionItems.enumerated() {
+            let row = RoundedEdgePanel()
+            row.cornerRadius = 4
+            row.color = index == completionSelectedIndex ? selectedBg : .clear
+            row.frame = NSRect(
+                x: 4,
+                y: height - 4 - CGFloat(index + 1) * rowHeight,
+                width: width - 8,
+                height: rowHeight
+            )
+
+            var titleX: CGFloat = 12
+            switch item.kind {
+            case .user:
+                let avatar = RoundedEdgePanel()
+                avatar.cornerRadius = 10
+                avatar.clipContentToBounds = true
+                avatar.frame = NSRect(x: 8, y: 8, width: 20, height: 20)
+                let user = usersByUsername[item.title.dropFirst().lowercased()]
+                if let user = user, let image = userAvatarsById[user.id] {
+                    avatar.color = .clear
+                    let imageView = NSImageView(frame: NSRect(origin: .zero, size: avatar.frame.size))
+                    imageView.image = image
+                    imageView.imageScaling = .scaleProportionallyUpOrDown
+                    avatar.addSubview(imageView)
+                } else {
+                    avatar.color = Theme.shared.buttonBg
+                    let initial = item.title.dropFirst().first.map { String($0).uppercased() } ?? "U"
+                    let label = NSTextField(labelWithString: initial)
+                    label.font = MMFont.font(ofSize: 10, weight: .semibold)
+                    label.textColor = .white
+                    label.alignment = .center
+                    label.isEditable = false
+                    label.isSelectable = false
+                    label.frame = NSRect(x: 0, y: 3, width: 20, height: 14)
+                    avatar.addSubview(label)
+                }
+                row.addSubview(avatar)
+                titleX = 36
+            case .channel:
+                let hash = NSTextField(labelWithString: "#")
+                hash.font = MMFont.font(ofSize: 15, weight: .semibold)
+                hash.textColor = muted
+                hash.isEditable = false
+                hash.isSelectable = false
+                hash.frame = NSRect(x: 10, y: 8, width: 18, height: 20)
+                row.addSubview(hash)
+                titleX = 32
+            case .emoji:
+                let glyph = NSTextField(labelWithString: item.glyph ?? "🙂")
+                glyph.font = MMFont.font(ofSize: 18)
+                glyph.alignment = .center
+                glyph.isEditable = false
+                glyph.isSelectable = false
+                glyph.frame = NSRect(x: 8, y: 7, width: 24, height: 22)
+                row.addSubview(glyph)
+                titleX = 38
+            }
+
+            let title = NSTextField(labelWithString: item.title)
+            title.font = MMFont.font(ofSize: 13, weight: .semibold)
+            title.textColor = textColor
+            title.lineBreakMode = .byTruncatingTail
+            title.isEditable = false
+            title.isSelectable = false
+            title.frame = NSRect(
+                x: titleX,
+                y: item.subtitle.isEmpty ? 9 : 5,
+                width: width - titleX - 16,
+                height: 17
+            )
+            row.addSubview(title)
+
+            if !item.subtitle.isEmpty {
+                let subtitle = NSTextField(labelWithString: item.subtitle)
+                subtitle.font = MMFont.font(ofSize: 11)
+                subtitle.textColor = muted
+                subtitle.lineBreakMode = .byTruncatingTail
+                subtitle.isEditable = false
+                subtitle.isSelectable = false
+                subtitle.frame = NSRect(x: titleX, y: 21, width: width - titleX - 16, height: 14)
+                row.addSubview(subtitle)
+            }
+
+            let rowIndex = index
+            row.onHoverChanged = { [weak self, weak row] isHovered in
+                guard let self = self, let row = row else { return }
+                if rowIndex != self.completionSelectedIndex {
+                    row.color = isHovered ? Theme.shared.centerHover : .clear
+                    row.setNeedsAppearanceUpdate()
+                }
+            }
+            row.onClick = { [weak self] in
+                self?.acceptCompletion(at: rowIndex)
+            }
+            completionPanel.addSubview(row)
+            completionRowViews.append(row)
+        }
+
+        completionPanel.isHidden = false
+        isCompletionVisible = true
+        chatPanel.addSubview(completionPanel)
+    }
+
+    private func updateCompletionRows() {
+        let selectedBg = Theme.shared.buttonBg.withAlphaComponent(0.08)
+        for (index, row) in completionRowViews.enumerated() {
+            row.color = index == completionSelectedIndex ? selectedBg : .clear
+            row.setNeedsAppearanceUpdate()
+        }
+    }
+
+    private func moveCompletionSelection(by delta: Int) -> Bool {
+        guard isCompletionVisible, !completionItems.isEmpty else { return false }
+        completionSelectedIndex = (completionSelectedIndex + delta + completionItems.count) % completionItems.count
+        updateCompletionRows()
+        return true
+    }
+
+    private func acceptCompletion(at index: Int) {
+        guard isCompletionVisible, completionItems.indices.contains(index) else { return }
+        let item = completionItems[index]
+        let length = (entryView.string as NSString).length
+        guard NSMaxRange(completionRange) <= length else {
+            closeCompletion()
+            return
+        }
+
+        if item.kind == .emoji {
+            let name = item.insertText.trimmingCharacters(in: CharacterSet(charactersIn: ": "))
+            recentEmojiNames.removeAll { $0 == name }
+            recentEmojiNames.insert(name, at: 0)
+            if recentEmojiNames.count > 18 {
+                recentEmojiNames.removeLast(recentEmojiNames.count - 18)
+            }
+            UserDefaults.standard.set(recentEmojiNames, forKey: "recentEmojis")
+        }
+
+        entryView.insertText(item.insertText, replacementRange: completionRange)
+        closeCompletion()
+        updateComposerSendState()
+        makeFirstResponder(entryView)
+    }
+
+    private func closeCompletion() {
+        guard isCompletionVisible || !completionPanel.isHidden else { return }
+        completionPanel.isHidden = true
+        completionPanel.subviews.forEach { $0.removeFromSuperview() }
+        completionRowViews.removeAll()
+        completionItems.removeAll()
+        completionRange = NSRange(location: 0, length: 0)
+        completionSelectedIndex = 0
+        isCompletionVisible = false
     }
 
     private func attachFiles() {
@@ -9463,6 +9835,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
         _ = cancelEditing()
+        closeCompletion()
         clearPendingAttachments()
         newMessagesDividerPostId = nil
         newMessagesDividerView = nil
@@ -9715,6 +10088,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     @discardableResult
     private func startEditingLastMessage() -> Bool {
         guard editingPostId == nil, pendingAttachments.isEmpty else { return false }
+        closeCompletion()
         let myId = currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId ?? ""
         guard !myId.isEmpty else { return false }
         guard let post = currentChannelPosts.last(where: {
@@ -9736,6 +10110,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     @discardableResult
     private func cancelEditing() -> Bool {
         guard editingPostId != nil else { return false }
+        closeCompletion()
         editingPostId = nil
         entryView.string = ""
         entryView.needsDisplay = true
@@ -9756,6 +10131,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             return
         }
 
+        closeCompletion()
         entryView.string = ""
         entryView.needsDisplay = true
         updateComposerSendState()
@@ -9857,10 +10233,36 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         entryView.needsDisplay = true
         updateComposerSendState()
         sendTypingIfNeeded()
+        updateCompletion()
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        guard (notification.object as? NSTextView) === entryView else { return }
+        updateCompletion()
     }
     
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard textView === entryView else { return false }
+        if isCompletionVisible {
+            if commandSelector == #selector(NSResponder.moveUp(_:)) {
+                return moveCompletionSelection(by: -1)
+            }
+            if commandSelector == #selector(NSResponder.moveDown(_:)) {
+                return moveCompletionSelection(by: 1)
+            }
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                acceptCompletion(at: completionSelectedIndex)
+                return true
+            }
+            if commandSelector == #selector(NSResponder.insertTab(_:)) {
+                acceptCompletion(at: completionSelectedIndex)
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                closeCompletion()
+                return true
+            }
+        }
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             // Shift+Return inserts a newline; Return sends.
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { return false }

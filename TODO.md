@@ -379,7 +379,19 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Verified with an in-app harness: one uploaded file added a 36pt tray, the composer height became
     86, sending created a post with one file, the pending list cleared, and the test post was
     deleted afterwards. 27 tests pass.
-- [ ] **Mentions/autocomplete** for `@user`, `#channel`, `:emoji:` while typing — `L`
+- [x] **Mentions/autocomplete** for `@user`, `#channel`, `:emoji:` while typing — `L`
+  - The composer detects `@`, `#`/`~` and `:query` tokens immediately before the caret (guarding
+    against emails, URLs and times) and shows a 300pt autocomplete panel above the composer.
+  - Users come from a cached `GET /users?in_team=...` list (with an immediate local fallback);
+    channels are filtered from the loaded channel directory; emoji combine the bundled catalog and
+    server custom emoji. Matches are prefix-ranked, capped at 8 rows.
+  - Rows show avatars/initials for users, `#` + channel name/subtitle, or glyph + `:shortcode:`.
+    Selecting inserts `@username `, `#channel-name ` or `:shortcode: `; emoji selections also update
+    the persisted recent emoji list.
+  - Keyboard: Up/Down move the selection, Enter or Tab accepts, Esc dismisses; Tab focus traversal is
+    suspended while the panel is open. Clicking a row accepts, clicking elsewhere closes.
+  - Verified with screenshots for users (`@bo` → @boris), channels (`#` → ch2/off-topic/town-square/zz)
+    and emoji (`:sm` → smile/smiley/…), plus selection and acceptance harness logs. 27 tests pass.
 
 ---
 
