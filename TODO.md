@@ -166,13 +166,19 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 ## P2 — Security, privacy & packaging
 
 - [x] **Credentials are stored in plaintext `UserDefaults`** — `M`
-  - Done: `KeychainHelper` now uses `SecItemAdd`/`SecItemUpdate`/`SecItemCopyMatching`/
+  - Done: release builds use `SecItemAdd`/`SecItemUpdate`/`SecItemCopyMatching`/
     `SecItemDelete` with `kSecClassGenericPassword`, a service scoped to the app and
     `kSecAttrAccessibleAfterFirstUnlock`.
+  - Debug builds (`#if DEBUG`, enabled via `SWIFT_ACTIVE_COMPILATION_CONDITIONS`) intentionally use
+    a plaintext UserDefaults store (`debugCredential.*`) instead of the Keychain. Rebuilding an
+    ad-hoc/development-signed app changes its code signature, which makes macOS prompt for the
+    login-keychain password on every launch; the debug store keeps the edit/build/run loop prompt-free
+    and is compiled out of release builds.
   - Legacy `auth_token`/`auth_password` (and un-prefixed) UserDefaults values are migrated on first
-    read and deleted at launch via `migrateLegacyCredentials()`, so no plaintext credential remains.
-  - Verified: after launch the plaintext keys are gone, the item exists in the login keychain, and a
-    relaunch auto-signs in from the Keychain.
+    read and deleted at launch via `migrateLegacyCredentials()`. Release builds also purge any
+    `debugCredential.*` values left by a debug build.
+  - Verified: launch logs which store is active; debug builds sign in without any Keychain prompt,
+    while release builds use the Keychain.
 
 - [x] **Cleartext HTTP by default and no ATS configuration** — `S`
   - Done: plain hostnames now resolve over `https` with the scheme default port (443); `http://`

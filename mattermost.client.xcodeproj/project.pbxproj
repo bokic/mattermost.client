@@ -8,11 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		343864C12CD3FE4400725849 /* webservice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864C22CD3FE4400725849 /* webservice.swift */; };
+		343864D12CD3FE4400725849 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864D22CD3FE4400725849 /* KeychainHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		343864B12CD3FE4300725849 /* mattermost.client.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mattermost.client.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		343864C22CD3FE4400725849 /* webservice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/webservice/webservice.swift; sourceTree = "<group>"; };
+		343864D22CD3FE4400725849 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/KeychainHelper.swift; sourceTree = "<group>"; };
 		343864C32CD3FE4400725849 /* mattermost.clientTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mattermost.clientTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -177,6 +179,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				343864C12CD3FE4400725849 /* webservice.swift in Sources */,
+				343864D12CD3FE4400725849 /* KeychainHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -219,6 +222,7 @@
 				SDKROOT = macosx;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 			};
 			name = Debug;
 		};
@@ -289,6 +293,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 			};
 			name = Debug;
 		};
@@ -335,6 +340,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 			};
 			name = Debug;
 		};

@@ -2,21 +2,36 @@
 //  KeychainHelper.swift
 //  mattermost.client
 //
-//  Stores the bearer token and account password in the macOS Keychain using a
-//  generic-password item scoped to this application. Values written by older
-//  builds to UserDefaults are migrated automatically the first time they are
-//  read, and the plaintext copies are removed.
+//  Stores the bearer token and account password.
+//
+//  Release builds use generic-password items in the macOS Keychain scoped to this
+//  application. Debug builds use UserDefaults instead: rebuilding an ad-hoc or
+//  development-signed app changes its code signature, which makes macOS ask for the
+//  login-keychain password on every launch. Plaintext storage keeps the developer
+//  loop prompt-free and never ships in a release build (`#if DEBUG`).
 //
 
 import Foundation
 import Security
 
 enum KeychainHelper {
-    /// Service name that scopes items to this application.
+    /// Service name that scopes Keychain items to this application.
     private static let service = "com.bbarbulovski.mattermost-client.credentials"
 
     /// Legacy plaintext keys written by earlier builds.
     private static let legacyPrefix = "auth_"
+
+    /// Debug-build preference prefix for plaintext credentials.
+    static let debugStorePrefix = "debugCredential."
+
+    /// True when credentials are stored in UserDefaults rather than the Keychain.
+    static var usesDebugCredentialStore: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
 
     static func set(_ value: String, forKey account: String) {
         guard !value.isEmpty else {
@@ -24,6 +39,12 @@ enum KeychainHelper {
             return
         }
 
+        #if DEBUG
+        UserDefaults.standard.set(value, forKey: debugStorePrefix + account)
+        // Only drop the plaintext copies once the debug store accepted the value.
+        UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
+        UserDefaults.standard.removeObject(forKey: account)
+        #else
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -51,9 +72,15 @@ enum KeychainHelper {
         } else {
             NSLog("KeychainHelper: failed to store \(account) (status \(status))")
         }
+        #endif
     }
 
     static func get(forKey account: String) -> String? {
+        #if DEBUG
+        if let value = UserDefaults.standard.string(forKey: debugStorePrefix + account), !value.isEmpty {
+            return value
+        }
+        #else
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -70,6 +97,7 @@ enum KeychainHelper {
            !value.isEmpty {
             return value
         }
+        #endif
 
         // Migrate values left by builds that wrote to UserDefaults in plaintext.
         for legacyKey in [legacyPrefix + account, account] {
@@ -79,14 +107,24 @@ enum KeychainHelper {
             }
         }
 
+        #if !DEBUG
         if status != errSecItemNotFound {
             NSLog("KeychainHelper: failed to read \(account) (status \(status))")
         }
+        #endif
         return nil
     }
 
-    /// Moves any plaintext credentials written by older builds into the Keychain.
+    /// Moves any plaintext credentials written by older builds into the active store.
     static func migrateLegacyCredentials() {
+        #if !DEBUG
+        // Debug builds may have left plaintext values behind; release builds never
+        // read them, so remove them for hygiene.
+        for account in ["token", "password"] {
+            UserDefaults.standard.removeObject(forKey: debugStorePrefix + account)
+        }
+        #endif
+
         for account in ["token", "password"] {
             for legacyKey in [legacyPrefix + account, account] {
                 if let legacy = UserDefaults.standard.string(forKey: legacyKey), !legacy.isEmpty {
@@ -96,15 +134,18 @@ enum KeychainHelper {
             }
         }
     }
-    
+
     static func delete(forKey account: String) {
+        #if !DEBUG
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
         SecItemDelete(query as CFDictionary)
+        #endif
 
+        UserDefaults.standard.removeObject(forKey: debugStorePrefix + account)
         UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
         UserDefaults.standard.removeObject(forKey: account)
     }
