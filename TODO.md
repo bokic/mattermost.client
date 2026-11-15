@@ -299,9 +299,9 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     400pt and after resizing to 480pt; `rhsWidth` was persisted and restored. 22 tests pass.
 - [x] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
   - Saved posts and Recent Mentions are server-backed RHS lists (`GET /users/{id}/posts/flagged`
-    and post search with `@username`). Both now jump to the exact post: the channel opens, context
-    is fetched with the `around={post_id}` pagination parameter when the post is outside the latest
-    page, and the row scrolls into view with a short blue highlight.
+    and post search with `@username`). Both now jump to the exact post: the channel opens, the
+    target post is fetched directly with `GET /posts/{post_id}` when it is outside the latest page,
+    and the row scrolls into view with a short blue highlight.
   - Settings remains the gear panel with Reset zoom, Reconnect, Account/server details and Log out.
   - Invite Members (sidebar row and welcome hero) sends a real team email invite through
     `POST /teams/{team}/invite/email`, with email validation and success/error feedback.

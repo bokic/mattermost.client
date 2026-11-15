@@ -8530,8 +8530,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             var posts = postList.chronologicalPosts
             if let jumpId = self.pendingJumpPostId,
                !posts.contains(where: { $0.id == jumpId }),
-               let context = try? await ws.fetchChannelPosts(channelId: channelId, around: jumpId) {
-                posts = context.chronologicalPosts
+               let target = try? await ws.fetchPost(postId: jumpId),
+               target.channel_id == channelId {
+                posts.append(target)
+                posts.sort { $0.create_at < $1.create_at }
             }
             for post in posts {
                 fetchAvatarIfNeeded(for: post.user_id)

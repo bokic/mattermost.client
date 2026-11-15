@@ -24,7 +24,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 ### 3. Right Chat Panel (`#FFFFFF`)
 - **Channel Header**: Favorite star toggle (`☆`, persisted), channel title dropdown (View Info, Pinned Posts, favorite toggle, Copy Link, Leave Channel), member count badge (opens the Members panel), and pinned posts indicator (opens Pinned Posts).
 - **Right-hand Panel**: Threads, Members, Pinned Posts, Files, Mentions, Saved Posts, Settings and Browse Channels, with hover states, empty states and click-to-open. The panel has a web-matching header (title + channel subtitle), a draggable left edge, and a persisted width (`rhsWidth`, default 400pt).
-- **Saved Posts & Mentions**: Server-backed RHS lists; clicking an item opens its channel, fetches surrounding context with `around={post_id}` when needed, scrolls to the message and briefly highlights it.
+- **Saved Posts & Mentions**: Server-backed RHS lists; clicking an item opens its channel, fetches the target post directly when it is outside the latest page, scrolls to the message and briefly highlights it.
 - **Direct Messages**: The `+` beside DIRECT MESSAGES opens a searchable team-user picker; selecting a user creates or reuses a DM (`POST /channels/direct`) and opens it.
 - **Settings, Invite & Browse**: The gear panel exposes zoom, reconnect, account/server and logout; invite sends a real team email invitation; Browse Channels lists public channels with joined state and join-on-click.
 - **Welcome Hero**: Channel introduction illustration, welcome title, description, and workspace invitation action.

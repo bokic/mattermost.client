@@ -924,16 +924,13 @@ final class WebService: NSObject {
         return response.threads
     }
     
-    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60, before: String? = nil, around: String? = nil) async throws -> MMPostList {
+    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60, before: String? = nil) async throws -> MMPostList {
         var queryItems = [
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "per_page", value: String(perPage))
         ]
         if let before = before, !before.isEmpty {
             queryItems.append(URLQueryItem(name: "before", value: before))
-        }
-        if let around = around, !around.isEmpty {
-            queryItems.append(URLQueryItem(name: "around", value: around))
         }
         return try await performAuthenticatedRequest(
             path: "/api/v4/channels/\(channelId)/posts",
