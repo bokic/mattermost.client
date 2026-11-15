@@ -375,6 +375,51 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let size: Int64?
     }
 
+    struct ActiveAttachmentUpload {
+        enum Source {
+            case file(URL)
+            case data(Data)
+        }
+
+        enum State {
+            case queued
+            case uploading(progress: Double)
+            case failed(message: String)
+        }
+
+        let id: UUID
+        let channelId: String
+        let name: String
+        let size: Int64
+        let mimeType: String
+        let source: Source
+        var state: State
+
+        var isUploading: Bool {
+            if case .uploading = state { return true }
+            return false
+        }
+
+        var isInProgress: Bool {
+            switch state {
+            case .queued, .uploading:
+                return true
+            case .failed:
+                return false
+            }
+        }
+
+        var isQueued: Bool {
+            if case .queued = state { return true }
+            return false
+        }
+
+        var currentProgress: Double {
+            if case .uploading(let progress) = state { return progress }
+            return 0
+        }
+    }
+
     /// Composer state is kept per channel so switching conversations cannot send
     /// text or attachments to the wrong channel.
     struct ComposerDraft {
@@ -411,6 +456,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var typingIndicatorWorkItem: DispatchWorkItem?
     var threadTypingIndicatorWorkItem: DispatchWorkItem?
     var pendingAttachments: [PendingAttachment] = []
+    var activeAttachmentUploads: [ActiveAttachmentUpload] = []
+    var attachmentUploadTasks: [UUID: Task<Void, Never>] = [:]
+    var attachmentSizeLimit = AttachmentUploadPolicy.fallbackLimitBytes
+    let maxConcurrentAttachmentUploads = 3
     let completionPanel = RoundedEdgePanel()
     var completionItems: [CompletionItem] = []
     var completionRowViews: [RoundedEdgePanel] = []
@@ -422,8 +471,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var completionUsersTeamId: String?
     var completionUsersLoading = false
     var composerBaseHeight: CGFloat { isComposerToolbarVisible ? MMMetric.composerToolbarHeight : MMMetric.composerHeight }
-    var composerPendingHeight: CGFloat { pendingAttachments.isEmpty ? 0 : MMMetric.composerAttachmentsHeight }
+    var composerPendingHeight: CGFloat {
+        hasComposerAttachments ? MMMetric.composerAttachmentsHeight : 0
+    }
     var composerTotalHeight: CGFloat { composerBaseHeight + composerPendingHeight }
+    var hasComposerAttachments: Bool {
+        !pendingAttachments.isEmpty
+            || activeAttachmentUploads.contains { $0.channelId == activeChannelId }
+    }
 
     // Live WebService state (owned by the view model; exposed for the views).
     /// Injected by `AppDelegate` when the workspace window is created.

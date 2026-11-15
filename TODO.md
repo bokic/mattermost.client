@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **61/61 pass** |
+| `./test.sh` | **70/70 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -27,16 +27,6 @@ completed baseline remains at the end.
 ---
 
 ## P1 — Correctness, data loss & reliability
-
-### Composer and drafts
-
-- [ ] **Attachment uploads are all-or-nothing, sequential, and unbounded** — `M`
-  - `uploadFiles` (`MainWindow+Composer.swift:652-692`) reads each file fully into memory
-    (`Data(contentsOf:)`) and uploads sequentially with no size check, progress, cancel, or
-    per-file error. Partial successes are silently kept, failures are ignored.
-  - No clipboard-image paste, no attachment preview before send, and no upload retry.
-  - Done when uploads stream/chunk (or at least cap size), show per-file progress/errors,
-    can be cancelled, and server file-size limits are surfaced before uploading.
 
 ### Search
 
@@ -427,12 +417,11 @@ completed baseline remains at the end.
 2. **RHS pagination + stale-result guards** — the daily-use list panels still stop at one page.
 3. **Sidebar scrolling + category management** — long sidebars become unreachable.
 4. **Rich thread composer + thread pagination** — threads are still a reduced experience.
-5. **Upload progress/cancel/retry + server size limits** — prevents large-file surprises.
-6. **Search pagination/keyboard navigation and filter scopes** — the Files tab now works, but search is still first-page-only.
-7. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
-8. **Accessibility/localization pass** — labels, focus traversal and localized strings.
-9. **Timeline incremental updates + bounded caches** — scalability for large channels.
-10. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
+5. **Search pagination/keyboard navigation and filter scopes** — the Files tab now works, but search is still first-page-only.
+6. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
+7. **Accessibility/localization pass** — labels, focus traversal and localized strings.
+8. **Timeline incremental updates + bounded caches** — scalability for large channels.
+9. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
 
 ---
 
@@ -444,8 +433,9 @@ history is in git; the original long-form checklist lives in prior commits of th
 - **Composer:** editable editor, Return/Shift-Return, send/edit via ↑, delete, typing events,
   optimistic send with retry/delete, per-channel drafts, emoji picker with
   categories/search/recents/custom emoji, `@`/`#`/`:emoji:` autocomplete, file attach +
-  drag-and-drop, attachment chips, formatting-toolbar chrome, ⌘K/⌘F, Esc overlay handling,
-  focus traversal.
+  drag-and-drop, clipboard-image paste, streamed uploads with per-file progress/cancel/retry,
+  server-configured size limits, attachment chips, formatting-toolbar chrome, ⌘K/⌘F, Esc
+  overlay handling, focus traversal.
 - **Search:** real global search field, `POST /teams/{team}/posts/search`, floating results
   with click-to-open, Messages/Files tab styling, scoped `in:` prefill from ⌘F.
 - **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels, thread
@@ -481,7 +471,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 61 tests today; keep the count rising
+./test.sh       # 70 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

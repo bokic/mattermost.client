@@ -649,105 +649,233 @@ extension MainWindow {
         }
     }
 
+    func loadAttachmentSizeLimit() {
+        guard let ws = webService else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self, let serverLimit = await ws.fetchMaxFileSize() else { return }
+            self.attachmentSizeLimit = AttachmentUploadPolicy.resolvedLimit(serverValue: serverLimit)
+        }
+    }
+
     func uploadFiles(_ urls: [URL]) {
         let files = urls.filter { !$0.hasDirectoryPath }
         guard !files.isEmpty,
               !activeChannelId.isEmpty,
-              let ws = webService else { return }
+              webService != nil else { return }
         let channelId = activeChannelId
-        // Mattermost's default Team Edition limit is 50 MB; surface it before
-        // reading a huge file into memory.
-        let maxFileSize: Int64 = 50 * 1024 * 1024
-        composerHelpLabel.stringValue = files.count == 1 ? "Uploading…" : "Uploading 1/\(files.count)…"
+        let limit = attachmentSizeLimit
+        var rejected: [String] = []
 
-        Task { @MainActor [weak self] in
-            guard let self = self else { return }
-            var uploaded: [PendingAttachment] = []
-            var failures: [String] = []
-            for (index, url) in files.enumerated() {
-                guard self.activeChannelId == channelId else { return }
-                self.composerHelpLabel.stringValue = "Uploading \(index + 1)/\(files.count)…"
-                let accessed = url.startAccessingSecurityScopedResource()
-                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init)
-                if let size = size, size > maxFileSize {
-                    failures.append("\(url.lastPathComponent) exceeds 50 MB")
-                    continue
-                }
-                guard let data = try? Data(contentsOf: url) else {
-                    failures.append("\(url.lastPathComponent) could not be read")
-                    continue
-                }
-                guard Int64(data.count) <= maxFileSize else {
-                    failures.append("\(url.lastPathComponent) exceeds 50 MB")
-                    continue
-                }
-                let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-                do {
-                    let fileId = try await ws.uploadFile(
-                        channelId: channelId,
-                        data: data,
-                        filename: url.lastPathComponent,
-                        mimeType: mime
-                    )
-                    uploaded.append(PendingAttachment(id: fileId, name: url.lastPathComponent, size: Int64(data.count)))
-                } catch {
-                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
-                }
+        for url in files {
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+            let size = values?.fileSize.map(Int64.init) ?? 0
+            let name = url.lastPathComponent
+            if AttachmentUploadPolicy.exceedsLimit(size: size, limit: limit) {
+                rejected.append(
+                    "\(name) is \(AttachmentUploadPolicy.formattedBytes(size)); the limit is \(AttachmentUploadPolicy.formattedBytes(limit))."
+                )
+                continue
             }
-            guard self.activeChannelId == channelId else { return }
-            if !uploaded.isEmpty {
-                self.pendingAttachments.append(contentsOf: uploaded)
-                self.renderPendingAttachments()
-                self.layoutRightChatPanel()
-                self.scrollTimelineToBottom()
-                self.updateComposerSendState()
-            }
-            if !failures.isEmpty {
-                self.composerHelpLabel.stringValue = failures.count == 1
-                    ? "Upload failed: \(failures[0])"
-                    : "\(failures.count) files could not be uploaded"
-                self.showInfoAlert("Some files could not be uploaded:\n\n" + failures.joined(separator: "\n"))
-            } else {
-                self.composerHelpLabel.stringValue = "Attached \(self.pendingAttachments.count) file\(self.pendingAttachments.count == 1 ? "" : "s")"
-            }
+            let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+                ?? "application/octet-stream"
+            enqueueUpload(
+                ActiveAttachmentUpload(
+                    id: UUID(),
+                    channelId: channelId,
+                    name: name,
+                    size: size,
+                    mimeType: mime,
+                    source: .file(url),
+                    state: .queued
+                )
+            )
+        }
+        if !rejected.isEmpty {
+            composerHelpLabel.stringValue = rejected.joined(separator: " ")
         }
     }
 
     func uploadPastedImage(_ data: Data, filename: String) {
-        guard !activeChannelId.isEmpty, let ws = webService else { return }
-        let channelId = activeChannelId
-        composerHelpLabel.stringValue = "Uploading pasted image…"
-        Task { @MainActor [weak self] in
+        guard !activeChannelId.isEmpty, webService != nil else { return }
+        let limit = attachmentSizeLimit
+        guard !AttachmentUploadPolicy.exceedsLimit(size: Int64(data.count), limit: limit) else {
+            composerHelpLabel.stringValue =
+                "The pasted image is \(AttachmentUploadPolicy.formattedBytes(Int64(data.count))); the limit is \(AttachmentUploadPolicy.formattedBytes(limit))."
+            return
+        }
+        enqueueUpload(
+            ActiveAttachmentUpload(
+                id: UUID(),
+                channelId: activeChannelId,
+                name: filename,
+                size: Int64(data.count),
+                mimeType: "image/png",
+                source: .data(data),
+                state: .queued
+            )
+        )
+    }
+
+    private func enqueueUpload(_ upload: ActiveAttachmentUpload) {
+        activeAttachmentUploads.removeAll { $0.id == upload.id }
+        var upload = upload
+        upload.state = .queued
+        activeAttachmentUploads.append(upload)
+        if activeChannelId == upload.channelId {
+            composerHelpLabel.stringValue = "Uploading \(upload.name)…"
+        }
+        renderPendingAttachments()
+        layoutRightChatPanel()
+        updateComposerSendState()
+        pumpAttachmentUploads()
+    }
+
+    private func pumpAttachmentUploads() {
+        let available = maxConcurrentAttachmentUploads - attachmentUploadTasks.count
+        guard available > 0 else { return }
+        let queuedIds = activeAttachmentUploads.filter(\.isQueued).map(\.id).prefix(available)
+        for id in queuedIds {
+            guard let index = activeAttachmentUploads.firstIndex(where: { $0.id == id }) else { continue }
+            var upload = activeAttachmentUploads[index]
+            upload.state = .uploading(progress: 0)
+            activeAttachmentUploads[index] = upload
+            startUpload(upload)
+        }
+    }
+
+    private func startUpload(_ upload: ActiveAttachmentUpload) {
+        guard let ws = webService else { return }
+        let limit = attachmentSizeLimit
+        let task = Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                let fileId = try await ws.uploadFile(
-                    channelId: channelId,
-                    data: data,
-                    filename: filename,
-                    mimeType: "image/png"
-                )
-                guard self.activeChannelId == channelId else { return }
-                self.pendingAttachments.append(
-                    PendingAttachment(id: fileId, name: filename, size: Int64(data.count))
-                )
-                self.renderPendingAttachments()
-                self.layoutRightChatPanel()
-                self.updateComposerSendState()
-                self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+                let fileId: String
+                switch upload.source {
+                case .file(let url):
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    fileId = try await ws.uploadFile(
+                        channelId: upload.channelId,
+                        fileURL: url,
+                        filename: upload.name,
+                        mimeType: upload.mimeType,
+                        maxBytes: limit
+                    ) { [weak self] fraction in
+                        Task { @MainActor [weak self] in
+                            self?.updateUploadProgress(id: upload.id, progress: fraction)
+                        }
+                    }
+                case .data(let data):
+                    fileId = try await ws.uploadFile(
+                        channelId: upload.channelId,
+                        data: data,
+                        filename: upload.name,
+                        mimeType: upload.mimeType
+                    )
+                    self.updateUploadProgress(id: upload.id, progress: 1)
+                }
+                self.finishUpload(id: upload.id, fileId: fileId)
+            } catch is CancellationError {
+                self.removeUpload(id: upload.id)
             } catch {
-                guard self.activeChannelId == channelId else { return }
-                self.composerHelpLabel.stringValue = "Upload failed"
-                self.showInfoAlert("Could not upload the pasted image: \(error.localizedDescription)")
+                self.failUpload(id: upload.id, message: error.localizedDescription)
             }
         }
+        attachmentUploadTasks[upload.id] = task
+    }
+
+    private func updateUploadProgress(id: UUID, progress: Double) {
+        guard let index = activeAttachmentUploads.firstIndex(where: { $0.id == id }),
+              case .uploading = activeAttachmentUploads[index].state
+        else { return }
+        guard abs(activeAttachmentUploads[index].currentProgress - progress) >= 0.01 || progress >= 1
+        else { return }
+        activeAttachmentUploads[index].state = .uploading(progress: progress)
+        renderPendingAttachments()
+    }
+
+    private func finishUpload(id: UUID, fileId: String) {
+        guard let upload = activeAttachmentUploads.first(where: { $0.id == id }) else { return }
+        activeAttachmentUploads.removeAll { $0.id == id }
+        attachmentUploadTasks.removeValue(forKey: id)
+        addPendingAttachment(
+            PendingAttachment(id: fileId, name: upload.name, size: upload.size),
+            to: upload.channelId
+        )
+        if activeChannelId == upload.channelId {
+            composerHelpLabel.stringValue = pendingAttachments.isEmpty
+                ? defaultComposerStatusText()
+                : "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+        }
+        renderPendingAttachments()
+        layoutRightChatPanel()
+        updateComposerSendState()
+        pumpAttachmentUploads()
+    }
+
+    private func failUpload(id: UUID, message: String) {
+        guard let index = activeAttachmentUploads.firstIndex(where: { $0.id == id }) else { return }
+        let upload = activeAttachmentUploads[index]
+        activeAttachmentUploads[index].state = .failed(message: message)
+        attachmentUploadTasks.removeValue(forKey: id)
+        if activeChannelId == upload.channelId {
+            composerHelpLabel.stringValue = "\(upload.name): \(message)"
+        }
+        renderPendingAttachments()
+        layoutRightChatPanel()
+        updateComposerSendState()
+        pumpAttachmentUploads()
+    }
+
+    private func addPendingAttachment(_ attachment: PendingAttachment, to channelId: String) {
+        if activeChannelId == channelId {
+            pendingAttachments.append(attachment)
+            renderPendingAttachments()
+            layoutRightChatPanel()
+            scrollTimelineToBottom()
+            updateComposerSendState()
+        } else if var draft = composerDraftsByChannelId[channelId] {
+            draft.attachments.append(attachment)
+            composerDraftsByChannelId[channelId] = draft
+        } else {
+            composerDraftsByChannelId[channelId] = ComposerDraft(
+                text: "",
+                attachments: [attachment],
+                editingPostId: nil
+            )
+        }
+    }
+
+    func retryUpload(id: UUID) {
+        guard let index = activeAttachmentUploads.firstIndex(where: { $0.id == id }),
+              !activeAttachmentUploads[index].isInProgress
+        else { return }
+        activeAttachmentUploads[index].state = .queued
+        renderPendingAttachments()
+        pumpAttachmentUploads()
+    }
+
+    func cancelUpload(id: UUID) {
+        attachmentUploadTasks[id]?.cancel()
+        attachmentUploadTasks.removeValue(forKey: id)
+        removeUpload(id: id)
+    }
+
+    private func removeUpload(id: UUID) {
+        activeAttachmentUploads.removeAll { $0.id == id }
+        attachmentUploadTasks.removeValue(forKey: id)
+        renderPendingAttachments()
+        layoutRightChatPanel()
+        updateComposerSendState()
+        pumpAttachmentUploads()
     }
 
     func renderPendingAttachments() {
         composerAttachmentTray.subviews.forEach { $0.removeFromSuperview() }
-        composerAttachmentTray.isHidden = pendingAttachments.isEmpty
-        guard !pendingAttachments.isEmpty else { return }
+        let uploads = activeAttachmentUploads.filter { $0.channelId == activeChannelId }
+        let total = uploads.count + pendingAttachments.count
+        composerAttachmentTray.isHidden = total == 0
+        guard total > 0 else { return }
 
         let trayWidth = max(composerAttachmentTray.bounds.width, 200)
         let chipW: CGFloat = 168
@@ -755,8 +883,15 @@ extension MainWindow {
         let gap: CGFloat = 6
         let maxVisible = max(1, Int((trayWidth + gap) / (chipW + gap)))
         var x: CGFloat = 0
+        var rendered = 0
 
-        for attachment in pendingAttachments.prefix(maxVisible) {
+        for upload in uploads.prefix(maxVisible) {
+            renderUploadChip(upload, frame: NSRect(x: x, y: 2, width: chipW, height: chipH))
+            x += chipW + gap
+            rendered += 1
+        }
+
+        for attachment in pendingAttachments.prefix(max(0, maxVisible - rendered)) {
             let chip = RoundedEdgePanel()
             chip.cornerRadius = MMRadius.control
             chip.color = Theme.shared.centerHover
@@ -800,10 +935,11 @@ extension MainWindow {
 
             composerAttachmentTray.addSubview(chip)
             x += chipW + gap
+            rendered += 1
         }
 
-        if pendingAttachments.count > maxVisible {
-            let more = NSTextField(labelWithString: "+\(pendingAttachments.count - maxVisible)")
+        if total > maxVisible {
+            let more = NSTextField(labelWithString: "+\(total - maxVisible)")
             more.font = MMFont.font(ofSize: 11, weight: .semibold)
             more.textColor = Theme.shared.centerTextMuted
             more.isEditable = false
@@ -811,6 +947,109 @@ extension MainWindow {
             more.frame = NSRect(x: x + 2, y: 7, width: 32, height: 14)
             composerAttachmentTray.addSubview(more)
         }
+    }
+
+    private func renderUploadChip(_ upload: ActiveAttachmentUpload, frame: NSRect) {
+        let chip = RoundedEdgePanel()
+        chip.cornerRadius = MMRadius.control
+        chip.color = Theme.shared.centerHover
+        chip.borderWidth = 1
+
+        let progress: Double
+        let failed: Bool
+        switch upload.state {
+        case .queued:
+            progress = 0
+            failed = false
+        case .uploading(let value):
+            progress = value
+            failed = false
+        case .failed(let message):
+            progress = 0
+            failed = true
+            chip.borderColor = NSColor.systemRed.withAlphaComponent(0.7)
+            chip.toolTip = message
+        }
+        if !failed {
+            chip.borderColor = Theme.shared.divider
+        }
+        chip.frame = frame
+
+        let icon = NSImageView()
+        let symbol = failed ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill"
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: upload.name) {
+            icon.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+            icon.contentTintColor = failed ? .systemRed : Theme.shared.centerTextMuted
+        }
+        icon.frame = NSRect(x: 7, y: 6, width: 12, height: 12)
+        chip.addSubview(icon)
+
+        let title: String
+        if failed {
+            title = "\(upload.name) — failed"
+        } else if upload.isQueued {
+            title = "\(upload.name) — queued"
+        } else if progress >= 1 {
+            title = "\(upload.name) — finishing…"
+        } else {
+            title = "\(upload.name) — \(Int(progress * 100))%"
+        }
+        let name = NSTextField(labelWithString: title)
+        name.font = MMFont.font(ofSize: 11)
+        name.textColor = failed ? .systemRed : Theme.shared.centerText
+        name.lineBreakMode = .byTruncatingMiddle
+        name.isEditable = false
+        name.isSelectable = false
+        name.frame = NSRect(x: 24, y: 5, width: frame.width - (failed ? 66 : 50), height: 14)
+        chip.addSubview(name)
+
+        if !failed && progress > 0 && progress < 1 {
+            let bar = RoundedEdgePanel()
+            bar.cornerRadius = 1
+            bar.color = Theme.shared.buttonBg
+            let barWidth = max(1, (frame.width - 12) * progress)
+            bar.frame = NSRect(x: 6, y: 1, width: barWidth, height: 2)
+            chip.addSubview(bar)
+        }
+
+        if failed {
+            let retry = RoundedEdgePanel()
+            retry.cornerRadius = MMRadius.tiny
+            retry.color = .clear
+            retry.frame = NSRect(x: frame.width - 40, y: 4, width: 16, height: 16)
+            let retryIcon = NSImageView()
+            if let image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Retry upload") {
+                retryIcon.image = image.withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+                retryIcon.contentTintColor = Theme.shared.centerTextMuted
+            }
+            retryIcon.frame = NSRect(x: 4, y: 4, width: 9, height: 9)
+            retry.addSubview(retryIcon)
+            let uploadId = upload.id
+            retry.onClick = { [weak self] in
+                self?.retryUpload(id: uploadId)
+            }
+            chip.addSubview(retry)
+        }
+
+        let remove = RoundedEdgePanel()
+        remove.cornerRadius = MMRadius.tiny
+        remove.color = .clear
+        remove.frame = NSRect(x: frame.width - 22, y: 4, width: 16, height: 16)
+        let xIcon = NSImageView()
+        let accessibility = failed ? "Remove failed upload" : "Cancel upload"
+        if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: accessibility) {
+            xIcon.image = image.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
+            xIcon.contentTintColor = Theme.shared.centerTextMuted
+        }
+        xIcon.frame = NSRect(x: 4, y: 4, width: 8, height: 8)
+        remove.addSubview(xIcon)
+        let uploadId = upload.id
+        remove.onClick = { [weak self] in
+            self?.cancelUpload(id: uploadId)
+        }
+        chip.addSubview(remove)
+
+        composerAttachmentTray.addSubview(chip)
     }
 
     func removePendingAttachment(id: String) {
@@ -939,8 +1178,13 @@ extension MainWindow {
     }
 
     func updateComposerSendState() {
-        let hasText = !entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !pendingAttachments.isEmpty
+        let hasActiveUpload = activeAttachmentUploads.contains {
+            $0.channelId == activeChannelId && $0.isInProgress
+        }
+        let hasText =
+            (!entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !pendingAttachments.isEmpty)
+            && !hasActiveUpload
         guard hasText != composerSendEnabled else { return }
         composerSendEnabled = hasText
         if hasText {

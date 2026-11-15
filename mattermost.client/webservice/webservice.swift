@@ -144,6 +144,8 @@ enum WebServiceError: LocalizedError {
     case httpStatus(code: Int, message: String?)
     case decodingError(Error)
     case networkError(Error)
+    case fileTooLarge(size: Int64, limit: Int64)
+    case fileReadError(Error)
 
     var errorDescription: String? {
         switch self {
@@ -164,7 +166,31 @@ enum WebServiceError: LocalizedError {
             return "Failed to decode server response: \(error.localizedDescription)"
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
+        case .fileTooLarge(let size, let limit):
+            return
+                "\(AttachmentUploadPolicy.formattedBytes(size)) exceeds the \(AttachmentUploadPolicy.formattedBytes(limit)) limit."
+        case .fileReadError(let error):
+            return "Could not read the file: \(error.localizedDescription)"
         }
+    }
+}
+
+/// Bridges `URLSession` upload progress callbacks onto a small sendable closure.
+private final class UploadProgressObserver: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Int64, Int64) -> Void
+
+    init(onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        onProgress(totalBytesSent, totalBytesExpectedToSend)
     }
 }
 
@@ -557,26 +583,91 @@ final class WebService: NSObject {
         min(30.0, pow(2.0, Double(max(0, attempt)))) + jitter
     }
 
+    static func sanitizedMultipartFilename(_ filename: String) -> String {
+        (filename as NSString).lastPathComponent
+            .components(separatedBy: CharacterSet(charactersIn: "\r\n\"\\"))
+            .joined(separator: "_")
+    }
+
+    static func sanitizedMultipartMimeType(_ mimeType: String) -> String {
+        mimeType
+            .components(separatedBy: CharacterSet(charactersIn: "\r\n"))
+            .joined(separator: " ")
+    }
+
+    static func multipartHeader(boundary: String, filename: String, mimeType: String) -> Data {
+        let safeFilename = sanitizedMultipartFilename(filename)
+        let safeMimeType = sanitizedMultipartMimeType(mimeType)
+        var header = Data()
+        func append(_ text: String) { header.append(Data(text.utf8)) }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(safeFilename)\"\r\n")
+        append("Content-Type: \(safeMimeType)\r\n\r\n")
+        return header
+    }
+
+    static func multipartFooter(boundary: String) -> Data {
+        Data("\r\n--\(boundary)--\r\n".utf8)
+    }
+
     static func multipartBody(
         boundary: String,
         filename: String,
         mimeType: String,
         data: Data
     ) -> Data {
-        let safeFilename = (filename as NSString).lastPathComponent
-            .components(separatedBy: CharacterSet(charactersIn: "\r\n\"\\"))
-            .joined(separator: "_")
-        let safeMimeType = mimeType
-            .components(separatedBy: CharacterSet(charactersIn: "\r\n"))
-            .joined(separator: " ")
-        var body = Data()
-        func append(_ text: String) { body.append(Data(text.utf8)) }
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(safeFilename)\"\r\n")
-        append("Content-Type: \(safeMimeType)\r\n\r\n")
+        var body = multipartHeader(boundary: boundary, filename: filename, mimeType: mimeType)
         body.append(data)
-        append("\r\n--\(boundary)--\r\n")
+        body.append(multipartFooter(boundary: boundary))
         return body
+    }
+
+    /// Streams a file into a temporary multipart body so uploads do not have to
+    /// hold the whole attachment in memory. The caller owns `destinationURL`.
+    static func writeMultipartFile(
+        sourceURL: URL,
+        destinationURL: URL,
+        boundary: String,
+        filename: String,
+        mimeType: String
+    ) throws {
+        let manager = FileManager.default
+        guard manager.createFile(atPath: destinationURL.path, contents: nil) else {
+            throw WebServiceError.fileReadError(
+                CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: destinationURL.path])
+            )
+        }
+        let output = try FileHandle(forWritingTo: destinationURL)
+        defer { try? output.close() }
+        try output.write(
+            contentsOf: multipartHeader(boundary: boundary, filename: filename, mimeType: mimeType)
+        )
+
+        let input = try FileHandle(forReadingFrom: sourceURL)
+        defer { try? input.close() }
+        while let chunk = try input.read(upToCount: AttachmentUploadPolicy.chunkSize), !chunk.isEmpty {
+            try output.write(contentsOf: chunk)
+        }
+        try output.write(contentsOf: multipartFooter(boundary: boundary))
+    }
+
+    /// Reads the server-configured attachment limit from `/config/client`.
+    /// Mattermost exposes it as `FileSettings.MaxFileSize` in the old config format.
+    static func maxFileSize(fromClientConfig data: Data) -> Int64? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        let candidates: [Any?] = [
+            (json["FileSettings"] as? [String: Any])?["MaxFileSize"],
+            json["MaxFileSize"],
+        ]
+        for candidate in candidates {
+            if let number = candidate as? NSNumber {
+                let value = number.int64Value
+                return value == 0 ? 0 : max(0, value)
+            }
+        }
+        return nil
     }
 
     @discardableResult
@@ -1038,6 +1129,19 @@ final class WebService: NSObject {
         )
     }
     
+    /// Fetches the server's attachment size limit. Returns `nil` when the
+    /// endpoint is unavailable so callers can fall back to the default limit.
+    func fetchMaxFileSize() async -> Int64? {
+        guard let (data, _) = try? await performRequest(
+            path: "/api/v4/config/client",
+            queryItems: [URLQueryItem(name: "format", value: "old")],
+            auth: .optionalToken,
+            accept: "application/json",
+            logPayload: false
+        ) else { return nil }
+        return Self.maxFileSize(fromClientConfig: data)
+    }
+
     func uploadFile(channelId: String, data: Data, filename: String, mimeType: String) async throws -> String {
         let boundary = "Boundary-\(UUID().uuidString)"
         let body = Self.multipartBody(
@@ -1046,11 +1150,6 @@ final class WebService: NSObject {
             mimeType: mimeType,
             data: data
         )
-        
-        struct UploadResponse: Decodable {
-            struct FileInfo: Decodable { let id: String }
-            let file_infos: [FileInfo]
-        }
         let (responseData, _) = try await performRequest(
             path: "/api/v4/files",
             method: "POST",
@@ -1058,7 +1157,98 @@ final class WebService: NSObject {
             rawBody: body,
             contentType: "multipart/form-data; boundary=\(boundary)"
         )
-        let decoded = try JSONDecoder().decode(UploadResponse.self, from: responseData)
+        return try Self.fileId(fromUploadResponse: responseData)
+    }
+
+    /// Streams a file from disk as a multipart upload and reports progress.
+    /// The file is copied to a temporary multipart body so a large attachment
+    /// never has to be held in memory.
+    func uploadFile(
+        channelId: String,
+        fileURL: URL,
+        filename: String,
+        mimeType: String,
+        maxBytes: Int64? = nil,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> String {
+        let size =
+            (try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init)
+            ?? 0
+        if let maxBytes = maxBytes, AttachmentUploadPolicy.exceedsLimit(size: size, limit: maxBytes) {
+            throw WebServiceError.fileTooLarge(size: size, limit: maxBytes)
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let multipartURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mattermost-upload-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: multipartURL) }
+        do {
+            try Self.writeMultipartFile(
+                sourceURL: fileURL,
+                destinationURL: multipartURL,
+                boundary: boundary,
+                filename: filename,
+                mimeType: mimeType
+            )
+        } catch let error as WebServiceError {
+            throw error
+        } catch {
+            throw WebServiceError.fileReadError(error)
+        }
+
+        let request = try makeRequest(
+            path: "/api/v4/files",
+            method: "POST",
+            queryItems: [URLQueryItem(name: "channel_id", value: channelId)],
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
+
+        let observer = UploadProgressObserver { sent, total in
+            guard total > 0 else { return }
+            progress?(AttachmentUploadPolicy.progress(sent: sent, total: total))
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        let session = URLSession(configuration: configuration, delegate: observer, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.upload(for: request, fromFile: multipartURL)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw WebServiceError.networkError(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WebServiceError.invalidResponse
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            var serverMsg: String?
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let msg = json["message"] as? String, !msg.isEmpty {
+                serverMsg = msg
+            }
+            throw WebServiceError.httpStatus(code: httpResponse.statusCode, message: serverMsg)
+        }
+        progress?(1)
+        return try Self.fileId(fromUploadResponse: data)
+    }
+
+    private static func fileId(fromUploadResponse data: Data) throws -> String {
+        struct UploadResponse: Decodable {
+            struct FileInfo: Decodable { let id: String }
+            let file_infos: [FileInfo]
+        }
+        let decoded: UploadResponse
+        do {
+            decoded = try JSONDecoder().decode(UploadResponse.self, from: data)
+        } catch {
+            throw WebServiceError.decodingError(error)
+        }
         guard let fileId = decoded.file_infos.first?.id else {
             throw WebServiceError.invalidResponse
         }
