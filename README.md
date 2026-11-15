@@ -43,6 +43,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Window Frame**: Opens at the web client's viewport (1440×783, clamped to the screen) and remembers the last frame via `NSWindow` autosave.
 - **Unread Badges & Notifications**: Incoming messages for channels you are not looking at bump a blue dot on the menu-bar icon, set the Dock badge, and post a native macOS notification; opening the channel (or returning to the app) clears them.
 - **App Sandbox & Keychain**: The bearer token and account password are stored in the macOS Keychain as generic-password items scoped to this app; plaintext values written by older builds are migrated and deleted at launch.
+- **Privacy Manifest**: Ships `PrivacyInfo.xcprivacy` declaring no tracking or collected data and the single required-reason API in use (`UserDefaults`, reason `CA92.1`).
 - **Transport Security**: HTTPS with port 443 is the default; explicit `http://` endpoints are allowed only for local networks through a scoped App Transport Security exception (`NSAllowsLocalNetworking`).
 
 ---

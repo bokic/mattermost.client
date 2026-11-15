@@ -200,9 +200,13 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     full-bleed opaque square, and the system applies the squircle mask — Finder and the Dock render
     the compass correctly.
 
-- [ ] **No privacy manifest** — `S`
-  - Where: `UserDefaults` is a required-reason API; there is no `PrivacyInfo.xcprivacy`.
-  - Done when: the manifest is added to the app target.
+- [x] **No privacy manifest** — `S`
+  - Done: added `mattermost.client/PrivacyInfo.xcprivacy` (picked up by the synchronized target
+    group and copied to `Contents/Resources/`). It declares `NSPrivacyTracking = false`, no
+    collected data, no tracking domains, and the only required-reason API in use —
+    `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1` (app's own preferences).
+  - Audited the other required-reason categories (file timestamps, system boot time, disk space,
+    active keyboard); none are used.
 
 - [ ] **Raw WebSocket payloads are written to the system log** — `S`
   - Where: `webservice.swift:730,735` `NSLog`s entire frames; `checkToken` logs response bodies.
