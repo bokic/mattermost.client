@@ -352,6 +352,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var dndEndTimeByUser: [String: Int64] = [:]
     private var newMessagesBaseline: Int64 = 0
     private var newMessagesDividerPostId: String?
+    private var newMessagesDividerView: NSView?
+    private var newMessagesCount: Int = 0
+    private var newMessagesDividerArmed = false
+    let newMessagesPill = RoundedEdgePanel()
+    let newMessagesPillIcon = NSImageView()
+    let newMessagesPillLabel = NSTextField(labelWithString: "")
     private var isLoadingOlderPosts = false
     private var didLoadAllHistory = false
     private let postsPerPage = 60
@@ -1378,7 +1384,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         guard !activeChannelId.isEmpty else { return }
         newMessagesBaseline = lastViewedAtByChannel[activeChannelId] ?? 0
         if newMessagesBaseline > 0 {
-            newMessagesDividerPostId = currentChannelPosts.first(where: { $0.create_at > newMessagesBaseline })?.id
+            let unread = currentChannelPosts.filter { $0.create_at > newMessagesBaseline }
+            newMessagesCount = unread.count
+            newMessagesDividerPostId = unread.first?.id
             rebuildTimelineContent(scrollToBottom: false)
         }
     }
@@ -1402,31 +1410,114 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private func createNewMessagesDivider(width: CGFloat) -> NSView {
         let container = TimelineFlippedView()
         container.frame = NSRect(x: 0, y: 0, width: width, height: 34)
-        let blue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
-        
+        // Web `.NotificationSeparator`: 50% orange rule behind a white pill with
+        // 13pt regular orange text and 13pt horizontal padding.
+        let orange = NSColor(red: 1.0, green: 136 / 255, blue: 0, alpha: 1.0)
+        let lineColor = NSColor(red: 1.0, green: 136 / 255, blue: 0, alpha: 0.5)
+
         let line = RoundedEdgePanel()
         line.cornerRadius = 0
-        line.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.35)
+        line.color = lineColor
         line.frame = NSRect(x: 20, y: 16, width: max(0, width - 40), height: 1)
         container.addSubview(line)
-        
-        let font = MMFont.font(ofSize: 12, weight: .semibold)
+
+        let font = MMFont.font(ofSize: 13)
         let text = "New Messages"
-        let textW = ceil((text as NSString).size(withAttributes: [.font: font]).width) + 24
+        let textSize = (text as NSString).size(withAttributes: [.font: font])
+        let textW = ceil(textSize.width)
+        let textH = ceil(textSize.height)
+        let pillW = textW + 26
+        let pillH: CGFloat = 26
         let pill = RoundedEdgePanel()
         pill.color = .white
-        pill.cornerRadius = 13
-        pill.frame = NSRect(x: (width - textW) / 2, y: 4, width: textW, height: 26)
+        pill.cornerRadius = pillH / 2
+        pill.frame = NSRect(x: (width - pillW) / 2, y: 4, width: pillW, height: pillH)
         let label = NSTextField(labelWithString: text)
         label.font = font
-        label.textColor = blue
+        label.textColor = orange
         label.alignment = .center
         label.isEditable = false
         label.isSelectable = false
-        label.frame = NSRect(x: 0, y: 5, width: textW, height: 16)
+        label.frame = NSRect(x: 0, y: (pillH - textH) / 2, width: pillW, height: textH)
         pill.addSubview(label)
         container.addSubview(pill)
         return container
+    }
+
+    /// Blue floating "N new messages" pill (`postlist.toast.newMessages`) shown when
+    /// the first unread post is below the visible part of the timeline.
+    private func setupNewMessagesPill() {
+        newMessagesPill.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        newMessagesPill.cornerRadius = 4
+        newMessagesPill.isHidden = true
+        newMessagesPill.onClick = { [weak self] in
+            self?.jumpToNewMessages()
+        }
+
+        newMessagesPillIcon.image = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: "Jump to new messages")?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .bold))
+        newMessagesPillIcon.contentTintColor = .white
+        newMessagesPill.addSubview(newMessagesPillIcon)
+
+        newMessagesPillLabel.font = MMFont.font(ofSize: 13, weight: .bold)
+        newMessagesPillLabel.textColor = .white
+        newMessagesPillLabel.isEditable = false
+        newMessagesPillLabel.isSelectable = false
+        newMessagesPill.addSubview(newMessagesPillLabel)
+
+        chatPanel.addSubview(newMessagesPill)
+    }
+
+    private func jumpToNewMessages() {
+        guard let divider = newMessagesDividerView else { return }
+        let clip = timelineScrollView.contentView
+        let maxY = max(0, timelineDocView.frame.height - clip.bounds.height)
+        let target = min(maxY, max(0, divider.frame.minY - 16))
+        clip.scroll(to: NSPoint(x: 0, y: target))
+        timelineScrollView.reflectScrolledClipView(clip)
+        updateNewMessagesDividerState()
+    }
+
+    private func layoutNewMessagesPill() {
+        let pillW = newMessagesPill.frame.width
+        guard pillW > 20 else { return }
+        let font = newMessagesPillLabel.font ?? MMFont.font(ofSize: 13, weight: .bold)
+        let textW = ceil((newMessagesPillLabel.stringValue as NSString).size(withAttributes: [.font: font]).width)
+        let groupW = 16 + 6 + textW
+        let startX = max(8, (pillW - groupW) / 2)
+        newMessagesPillIcon.frame = NSRect(x: startX, y: 8, width: 16, height: 16)
+        newMessagesPillLabel.frame = NSRect(x: startX + 22, y: 8, width: textW + 2, height: 16)
+    }
+
+    /// Hides the pill when the divider is on screen, shows it when the first unread
+    /// post is below the viewport, and collapses the divider once the user scrolls
+    /// past it (matching the web client's new-message line behaviour).
+    private func updateNewMessagesDividerState() {
+        guard let divider = newMessagesDividerView, !divider.isHidden else {
+            newMessagesPill.isHidden = true
+            return
+        }
+        let visible = timelineScrollView.contentView.bounds
+        let isAbove = divider.frame.maxY < visible.minY
+        let isBelow = divider.frame.minY > visible.maxY
+
+        if newMessagesDividerArmed && isAbove {
+            divider.isHidden = true
+            newMessagesDividerView = nil
+            newMessagesDividerPostId = nil
+            newMessagesCount = 0
+            newMessagesPill.isHidden = true
+            return
+        }
+
+        if isBelow, newMessagesCount > 0 {
+            let noun = newMessagesCount == 1 ? "message" : "messages"
+            newMessagesPillLabel.stringValue = "\(newMessagesCount) new \(noun)"
+            layoutNewMessagesPill()
+            newMessagesPill.isHidden = false
+        } else {
+            newMessagesPill.isHidden = true
+        }
     }
     
     /// Mirrors the web client: favorited channels move into a dedicated
@@ -3779,7 +3870,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             object: timelineScrollView.contentView
         )
         timelineScrollView.onScrollWheel = { [weak self] in
-            self?.updateTimelineHoverState()
+            guard let self = self else { return }
+            self.newMessagesDividerArmed = true
+            self.updateTimelineHoverState()
+            self.updateNewMessagesDividerState()
         }
         
         // 4. Message Composer (Non-editable placeholder + Formatting Toolbar + Help link)
@@ -3975,6 +4069,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         setupEmojiPanel()
         setupPostInteractionPanels()
         setupLightbox()
+        setupNewMessagesPill()
         setupChannelMenu()
         rebuildTimelineContent(scrollToBottom: true)
     }
@@ -7214,6 +7309,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
         
         timelineDocView.subviews.forEach { $0.removeFromSuperview() }
+        newMessagesDividerView = nil
         
         var currentY: CGFloat = 16
         
@@ -7301,7 +7397,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 )
             ]
         }
-        
+
         if !didLoadAllHistory && !postsToRender.isEmpty {
             let loadRow = RoundedEdgePanel()
             loadRow.cornerRadius = 4
@@ -7350,6 +7446,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 let dividerView = createNewMessagesDivider(width: chatW)
                 dividerView.frame.origin.y = currentY
                 timelineDocView.addSubview(dividerView)
+                newMessagesDividerView = dividerView
                 currentY += 40
             }
             
@@ -7379,12 +7476,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self.timelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
                 self.timelineScrollView.reflectScrolledClipView(self.timelineScrollView.contentView)
                 self.updateTimelineHoverState()
+                self.updateNewMessagesDividerState()
             }
         } else {
             // Rebuilds replace the row views, so restore the hover state under the
             // pointer (toolbar visibility) once the new layout is in place.
             DispatchQueue.main.async { [weak self] in
                 self?.updateTimelineHoverState()
+                self?.updateNewMessagesDividerState()
             }
         }
     }
@@ -7518,6 +7617,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let composerTop = composerBottom + composerH
         let scrollH = max(0, headerY - composerTop)
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
+        let listRight = isRightPanelVisible ? rightPanel.frame.minX : chatW
+        newMessagesPill.frame = NSRect(
+            x: 15,
+            y: composerTop + 8,
+            width: max(0, listRight - 30),
+            height: 32
+        )
+        layoutNewMessagesPill()
         let wasNearBottom = (timelineScrollView.contentView.bounds.maxY >= (timelineDocView.frame.height - 40))
         if abs(chatW - lastTimelineWidth) > 1 {
             lastTimelineWidth = chatW
@@ -7836,6 +7943,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
         newMessagesDividerPostId = nil
+        newMessagesDividerView = nil
+        newMessagesCount = 0
+        newMessagesDividerArmed = false
+        newMessagesPill.isHidden = true
         newMessagesBaseline = lastViewedAtByChannel[ch.id] ?? 0
         refreshFavoriteState()
         (NSApp.delegate as? AppDelegate)?.markChannelRead(ch.id)
@@ -7894,8 +8005,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             guard self.activeChannelId == channelId else { return }
             self.didLoadAllHistory = posts.count < self.postsPerPage
             if self.newMessagesBaseline > 0 {
-                self.newMessagesDividerPostId = posts.first(where: { $0.create_at > self.newMessagesBaseline })?.id
+                let unread = posts.filter { $0.create_at > self.newMessagesBaseline }
+                self.newMessagesCount = unread.count
+                self.newMessagesDividerPostId = unread.first?.id
             }
+            self.newMessagesDividerArmed = false
             applyPostsToTimeline(posts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
@@ -7905,7 +8019,20 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     @MainActor
     private func applyPostsToTimeline(_ posts: [MMPost]) {
         currentChannelPosts = posts
-        rebuildTimelineContent(scrollToBottom: true)
+        if newMessagesDividerPostId != nil {
+            rebuildTimelineContent(scrollToBottom: false)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let divider = self.newMessagesDividerView else { return }
+                let clip = self.timelineScrollView.contentView
+                let maxY = max(0, self.timelineDocView.frame.height - clip.bounds.height)
+                let target = min(maxY, max(0, divider.frame.minY - 16))
+                clip.scroll(to: NSPoint(x: 0, y: target))
+                self.timelineScrollView.reflectScrolledClipView(clip)
+                self.updateNewMessagesDividerState()
+            }
+        } else {
+            rebuildTimelineContent(scrollToBottom: true)
+        }
     }
     
     /// Inserts a WebSocket post directly instead of refetching the channel.
@@ -8157,6 +8284,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     
     @objc private func timelineBoundsDidChange(_ notification: Notification) {
         updateTimelineHoverState()
+        updateNewMessagesDividerState()
         if timelineScrollView.contentView.bounds.minY < 120 {
             loadOlderPosts()
         }

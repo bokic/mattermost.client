@@ -109,8 +109,7 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     shows a "New Messages" divider above the first post newer than the last view. Incoming WS posts
     increment counts for channels you are not looking at, and the tray/dock/notification path shares
     the same state.
-  - Remaining: "mark all as read" (`PUT /users/{id}/teams/{team}/read`), collapsing the divider once
-    scrolled past, and mute-based suppression.
+  - Remaining: "mark all as read" (`PUT /users/{id}/teams/{team}/read`) and mute-based suppression.
 
 - [x] **Post model cannot represent attachments, reactions, pinned posts, edits or deletes** — `M`
   - Done: `MMPost` decodes `metadata.files`/`metadata.reactions` and `file_ids`. The timeline renders
@@ -269,7 +268,20 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     save panel; the overlay follows window resize/zoom.
   - Verified against computed styles from the live web client and screenshots of the timeline and
     lightbox; 19 tests pass.
-- [ ] **"New Messages" divider and unread pill** above the first unread post — `S`
+- [x] **"New Messages" divider and unread pill** above the first unread post — `S`
+  - Done: the divider now matches `.NotificationSeparator` from the web client — a 1pt rule in
+    `rgba(255,136,0,0.5)` behind a white 26pt pill with 13pt regular `#ff8800` text and 13pt
+    horizontal padding. It is inserted immediately above the first post newer than the channel's
+    `last_viewed_at`.
+  - Opening a channel with unread messages now scrolls to the divider instead of the bottom.
+  - Added the web's floating jump pill: when the divider is below the viewport, a 32pt blue
+    (`#1c58d9`) 4pt-radius bar with a down arrow and "N new messages" (13pt bold white) floats
+    above the composer; clicking it scrolls to the divider. It hides when the divider is visible.
+  - Scrolling past the divider hides and retires it (once the user has actually scrolled with the
+    wheel/trackpad), matching the web client's collapse behaviour. A programmatic scroll on open
+    does not collapse it.
+  - Verified with a temporary demo harness: divider styling, pill text/positioning and the
+    collapse state transition; temporary hooks were removed. 21 tests pass.
 - [ ] **Right-hand sidebar** (threads, members, pinned posts, files) with resize/persist — `L`
 - [ ] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
 - [ ] **Emoji picker** (server emoji list + recent) — `M`
