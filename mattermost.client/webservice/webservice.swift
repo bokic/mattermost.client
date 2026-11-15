@@ -382,6 +382,7 @@ struct LoginWebService: Codable {
     let disable_welcome_email: Bool?
     
     let notify_props: Notify_Props?
+    var props: [String: String]? = nil
     struct Notify_Props: Codable {
         let channel: String?
         let comments: String?

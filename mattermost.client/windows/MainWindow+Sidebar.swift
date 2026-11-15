@@ -323,24 +323,55 @@ extension MainWindow {
         }
         sidebarCategories.removeAll()
 
-        let channelsItems = [
-            createSidebarItem(id: "town-square", symbolName: "globe", title: "Town Square", isSelectable: true, isBotBadge: false, showsCloseOnHover: false),
-            createSidebarItem(id: "off-topic", symbolName: "globe", title: "Off-Topic", isSelectable: true, isBotBadge: false, showsCloseOnHover: false),
+        let teamId = activeTeam?.id ?? ""
+        let channels = channelsById.values
+            .filter { channelBelongsToTeam($0, teamId: teamId) }
+            .sorted { channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1)) == .orderedAscending }
+
+        var channelsItems: [SidebarItemView] = channels
+            .filter { !isDirectMessageType($0) }
+            .map { ch in
+                createSidebarItem(
+                    id: ch.id,
+                    symbolName: ch.type == "P" ? "lock.fill" : "globe",
+                    title: channelDisplayName(for: ch),
+                    isSelectable: true,
+                    isBotBadge: false,
+                    showsCloseOnHover: false
+                )
+            }
+        channelsItems.append(
             createSidebarItem(id: "add-channels", symbolName: "plus", title: "Add Channels", isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
-        ]
+        )
         let channelsCat = createSidebarCategory(id: "channels", title: "CHANNELS", showsAddButton: false, items: channelsItems)
         sidebarCategories.append(channelsCat)
 
-        let dmItems = [
-            createSidebarItem(id: "system-bot", symbolName: "cpu", title: "system-bot", isSelectable: true, isBotBadge: true, showsCloseOnHover: true),
+        var dmItems: [SidebarItemView] = channels
+            .filter { isDirectMessageType($0) }
+            .map { ch in
+                createSidebarItem(
+                    id: ch.id,
+                    symbolName: ch.type == "G" ? "person.2.fill" : (isChannelBot(for: ch) ? "cpu" : "person.fill"),
+                    title: channelDisplayName(for: ch),
+                    isSelectable: true,
+                    isBotBadge: isChannelBot(for: ch),
+                    showsCloseOnHover: true
+                )
+            }
+        dmItems.append(
             createSidebarItem(id: "invite-members", symbolName: "plus", title: "Invite Members", isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
-        ]
+        )
         let dmCat = createSidebarCategory(id: "direct_messages", title: "DIRECT MESSAGES", showsAddButton: true, items: dmItems)
         wireDMCategoryAddButton(dmCat)
         sidebarCategories.append(dmCat)
 
         updateSidebarSelectionAppearance()
-        fetchAvatarForUsernameIfNeeded("system-bot")
+        updateSidebarBadges()
+        for ch in channels where ch.type == "D" {
+            if let targetId = resolveDMTargetUserId(for: ch) {
+                fetchAvatarIfNeeded(for: targetId)
+            }
+        }
     }
 
     func isLikelyMattermostId(_ str: String) -> Bool {
@@ -432,6 +463,11 @@ extension MainWindow {
 
         guard !orderedCategories.isEmpty else {
             buildDefaultSidebarCategories()
+            rebuildFavoritesCategory()
+            layoutLeftSidebar(topBarY: mainPanel.bounds.height)
+            updateSidebarSelectionAppearance()
+            updateSidebarBadges()
+            loadUnreadState()
             return
         }
 

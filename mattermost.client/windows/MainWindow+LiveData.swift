@@ -341,6 +341,7 @@ extension MainWindow {
             do {
                 let me = try await ws.fetchCurrentUser()
                 self.currentUser = me
+                self.applyServerCustomStatus(from: me)
                 self.usersById[me.id] = me
                 self.usersByUsername[me.username.lowercased()] = me
                 self.fetchAvatarIfNeeded(for: me.id)

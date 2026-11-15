@@ -174,6 +174,33 @@ extension MainWindow {
         updateDesktopNotificationPreferences(["desktop_sound": desktopSoundsEnabled() ? "false" : "true"])
     }
 
+    func applyServerCustomStatus(from user: LoginWebService) {
+        guard let raw = user.props?["customStatus"],
+              let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+        let text = (json["text"] as? String) ?? ""
+        let emoji = (json["emoji"] as? String) ?? ""
+        let expiresAtString = json["expires_at"] as? String
+        let expiresAt = expiresAtString.flatMap { ISO8601DateFormatter().date(from: $0) }
+        if let expiresAt = expiresAt, expiresAt <= Date() {
+            clearLocalCustomStatus()
+            return
+        }
+        customStatusText = text
+        customStatusEmoji = emoji
+        customStatusExpiresAt = expiresAt
+        UserDefaults.standard.set(text, forKey: "customStatusText")
+        UserDefaults.standard.set(emoji, forKey: "customStatusEmoji")
+        if let expiresAt = expiresAt {
+            UserDefaults.standard.set(expiresAt.timeIntervalSince1970, forKey: "customStatusExpiresAt")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
+        }
+        updateCustomStatusUI()
+    }
+
     func updateCustomStatusUI() {
         guard let row = customStatusMenuRow else { return }
         let label = row.subviews.compactMap { $0 as? NSTextField }.first

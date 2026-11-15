@@ -650,7 +650,7 @@ source revision. The long list of previously completed work is preserved in
     on dark sidebars.
   - Done when these states mirror the web client and custom themes.
 
-- [ ] **The fallback sidebar uses fake IDs and skips unread badges** — `S`
+- [x] **The fallback sidebar uses fake IDs and skips unread badges** — `S`
   - When the categories response is empty, `populateSidebarCategories` returns through
     `buildDefaultSidebarCategories()` before `loadUnreadState()` (`MainWindow+Sidebar.swift:421-424,550`),
     so badges never load. The fallback rows use hardcoded `"town-square"`, `"off-topic"`,
