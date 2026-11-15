@@ -31,6 +31,8 @@ class TimelineFlippedView: NSView {
 
 private class TimelineRowView: RoundedEdgePanel {
     override var isFlipped: Bool { true }
+    /// Add-reaction chip revealed while the row is hovered.
+    var reactionAddChip: NSView?
 }
 
 private class TimelineScrollView: NSScrollView {
@@ -154,10 +156,26 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let connectionLabel = NSTextField(labelWithString: "")
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
-    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse }
+    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread }
     private var rightPanelMode: RightPanelMode = .threads
     private var isRightPanelVisible = false
     private var threadItems: [MMThread] = []
+    private var threadPosts: [MMPost] = []
+    private var threadRootId: String = ""
+    private let threadReplyField = NSTextField()
+    private let threadReplyPanel = RoundedEdgePanel()
+    private let threadSendButton = RoundedEdgePanel()
+    private let threadPlaceholderLabel = NSTextField(labelWithString: "Reply to thread…")
+
+    // Post hover toolbar extras: reaction picker and the "more" menu
+    let reactionPickerPanel = RoundedEdgePanel()
+    private var isReactionPickerOpen = false
+    private var reactionPickerAnchorInChat: NSRect = .zero
+    private var reactionPickerPostId: String = ""
+    let postActionMenu = RoundedEdgePanel()
+    private var isPostActionMenuOpen = false
+    private var postActionMenuAnchorInChat: NSRect = .zero
+    private var postActionMenuPost: MMPost?
     
     // Channel header dropdown menu
     let channelMenu = RoundedEdgePanel()
@@ -2246,6 +2264,18 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                         closeEmojiPanel()
                     }
                 }
+                if isReactionPickerOpen {
+                    let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
+                    if !reactionPickerPanel.frame.contains(chatPoint) && !reactionPickerAnchorInChat.contains(chatPoint) {
+                        closeReactionPicker()
+                    }
+                }
+                if isPostActionMenuOpen {
+                    let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
+                    if !postActionMenu.frame.contains(chatPoint) && !postActionMenuAnchorInChat.contains(chatPoint) {
+                        closePostActionMenu()
+                    }
+                }
                 if isFilterMenuOpen {
                     let mainPoint = mainPanel.convert(event.locationInWindow, from: nil)
                     if !filterMenu.frame.contains(mainPoint) && !filterChannelButton.frame.contains(mainPoint) {
@@ -3884,6 +3914,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         updateComposerSendState()
         setupRightPanel()
         setupEmojiPanel()
+        setupPostInteractionPanels()
         setupChannelMenu()
         rebuildTimelineContent(scrollToBottom: true)
     }
@@ -4238,7 +4269,45 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         rightPanelScroll.autohidesScrollers = true
         rightPanelScroll.documentView = rightPanelDoc
         rightPanel.addSubview(rightPanelScroll)
-        
+
+        threadReplyPanel.color = .white
+        threadReplyPanel.cornerRadius = 4
+        threadReplyPanel.borderWidth = 1
+        threadReplyPanel.borderColor = dividerColor
+        threadReplyPanel.isHidden = true
+
+        threadReplyField.placeholderString = "Reply to thread…"
+        threadReplyField.font = MMFont.font(ofSize: 13)
+        threadReplyField.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        threadReplyField.isBordered = false
+        threadReplyField.drawsBackground = false
+        threadReplyField.focusRingType = .none
+        threadReplyField.target = self
+        threadReplyField.action = #selector(sendThreadReply)
+        threadReplyField.delegate = self
+        threadReplyPanel.addSubview(threadReplyField)
+
+        threadPlaceholderLabel.font = MMFont.font(ofSize: 13)
+        threadPlaceholderLabel.textColor = NSColor(red: 156 / 255, green: 163 / 255, blue: 175 / 255, alpha: 1.0)
+        threadPlaceholderLabel.isEditable = false
+        threadPlaceholderLabel.isSelectable = false
+        threadReplyPanel.addSubview(threadPlaceholderLabel, positioned: .below, relativeTo: threadReplyField)
+
+        threadSendButton.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        threadSendButton.cornerRadius = 4
+        let sendIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send reply") {
+            sendIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+            sendIcon.contentTintColor = .white
+        }
+        sendIcon.frame = NSRect(x: 6, y: 6, width: 14, height: 14)
+        threadSendButton.addSubview(sendIcon)
+        threadSendButton.onClick = { [weak self] in
+            self?.sendThreadReply()
+        }
+        threadReplyPanel.addSubview(threadSendButton)
+        rightPanel.addSubview(threadReplyPanel)
+
         chatPanel.addSubview(rightPanel)
     }
     
@@ -4270,6 +4339,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .browse:
             rightPanelTitle.stringValue = "Browse Channels"
             loadBrowseChannels()
+        case .thread:
+            rightPanelTitle.stringValue = "Thread"
+            loadThread()
         }
     }
     
@@ -4296,6 +4368,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .saved: loadSavedPosts()
         case .settings: loadSettingsPanel()
         case .browse: loadBrowseChannels()
+        case .thread: loadThread()
         }
     }
     
@@ -4339,7 +4412,134 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
         }
     }
-    
+
+    // MARK: - Thread view
+
+    private func showThread(for post: MMPost) {
+        let root = (post.root_id?.isEmpty == false) ? post.root_id! : post.id
+        threadRootId = root
+        threadPosts = [post]
+        rightPanelMode = .thread
+        isRightPanelVisible = true
+        rightPanel.isHidden = false
+        rightPanelTitle.stringValue = "Thread"
+        layoutRightChatPanel()
+        loadThread()
+    }
+
+    private func loadThread() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              !threadRootId.isEmpty else {
+            renderThreadPanel(empty: "Could not load thread")
+            return
+        }
+        let rootId = threadRootId
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let list = try? await ws.fetchPostThread(postId: rootId) else {
+                self.renderThreadPanel(empty: "Could not load thread")
+                return
+            }
+            let posts = list.order.compactMap { list.posts[$0] }
+            // The thread endpoint accepts any post in the thread; normalise the
+            // reply target to the actual root post.
+            if let root = posts.first(where: { ($0.root_id ?? "").isEmpty }) {
+                self.threadRootId = root.id
+            }
+            self.threadPosts = posts
+            self.hydrateUsers(posts.map { $0.user_id }) {
+                self.renderThreadPanel()
+            }
+        }
+    }
+
+    private func renderThreadPanel(empty: String? = nil) {
+        let panelWidth = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
+        rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
+
+        guard !threadPosts.isEmpty else {
+            let label = NSTextField(labelWithString: empty ?? "No replies yet")
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 12, y: 24, width: panelWidth - 24, height: 20)
+            rightPanelDoc.addSubview(label)
+            rightPanelDoc.frame = NSRect(x: 0, y: 0, width: panelWidth, height: 64)
+            return
+        }
+
+        let contentWidth = max(200, panelWidth - 24)
+        let rootId = threadRootId
+        var y: CGFloat = 8
+        var lastUserId: String?
+        var lastTimestamp: Int64 = 0
+        var replyHeaderAdded = false
+
+        for post in threadPosts {
+            let isReply = post.id != rootId
+            if isReply && !replyHeaderAdded {
+                replyHeaderAdded = true
+                let replyCount = max(0, threadPosts.count - 1)
+                let header = NSTextField(labelWithString: "\(replyCount) \(replyCount == 1 ? "reply" : "replies")")
+                header.font = MMFont.font(ofSize: 11, weight: .semibold)
+                header.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+                header.isEditable = false
+                header.isSelectable = false
+                header.frame = NSRect(x: 13, y: y + 4, width: contentWidth - 2, height: 16)
+                rightPanelDoc.addSubview(header)
+                y += 28
+                lastUserId = nil
+                lastTimestamp = 0
+            }
+
+            let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
+            let isSystem = (post.type?.hasPrefix("system_") ?? false)
+            let withinGroupingWindow = (post.create_at - lastTimestamp) <= 5 * 60 * 1000
+            let isConsecutive = (!isSystem && post.user_id == lastUserId
+                && !post.user_id.isEmpty && withinGroupingWindow)
+            let (rowView, rowH) = createPostRow(
+                post: post,
+                width: contentWidth,
+                timeStr: Self.localizedTimeFormatter.string(from: postDate),
+                isConsecutive: isConsecutive
+            )
+            rowView.frame.origin = CGPoint(x: 12, y: y)
+            rightPanelDoc.addSubview(rowView)
+            y += rowH + (isConsecutive ? 2 : 4)
+            lastUserId = post.user_id
+            lastTimestamp = post.create_at
+        }
+
+        y += 8
+        rightPanelDoc.frame = NSRect(x: 0, y: 0, width: panelWidth, height: max(y, 1))
+        rightPanelScroll.contentView.scroll(to: .zero)
+        rightPanelScroll.reflectScrolledClipView(rightPanelScroll.contentView)
+    }
+
+    @objc private func sendThreadReply() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              !threadRootId.isEmpty else { return }
+        let text = threadReplyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let channelId = threadPosts.first(where: { $0.id == threadRootId })?.channel_id ?? activeChannelId
+        let rootId = threadRootId
+        threadReplyField.stringValue = ""
+        threadPlaceholderLabel.isHidden = false
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.createPost(channelId: channelId, message: text, rootId: rootId)
+                self.loadThread()
+            } catch {
+                NSLog("Thread reply failed: \(error.localizedDescription)")
+                self.threadReplyField.stringValue = text
+                self.threadPlaceholderLabel.isHidden = true
+            }
+        }
+    }
+
     private func loadChannelMembers() {
         guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
               !activeChannelId.isEmpty else {
@@ -5120,48 +5320,542 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
 
     /// Draws reaction chips starting at `x` and returns the consumed height.
+    /// Metrics mirror `.Reaction` in the web client: 24pt tall, 4pt radius, 1pt border,
+    /// 5pt horizontal padding, 11pt semibold count, a 16pt emoji and a 4pt trailing gap.
     @discardableResult
     private func addReactionChips(for post: MMPost, to row: NSView, x: CGFloat, y: CGFloat) -> CGFloat {
         let groups = groupedReactions(post)
         guard !groups.isEmpty else { return 0 }
+
+        let blue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        let centerColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        let chipY = y + 4
         var chipX = x
+        let emojiW: CGFloat = 16
+        let countFont = MMFont.font(ofSize: 11, weight: .semibold)
+
         for (emoji, count) in groups {
-            let chip = RoundedEdgePanel()
-            chip.cornerRadius = 12
-            chip.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            let reacted = currentUserReacted(post, emoji: emoji)
             let glyph = emojiGlyph(for: emoji)
-            let text = count > 1 ? "\(glyph) \(count)" : glyph
-            let chipLabel = NSTextField(labelWithString: text)
-            chipLabel.font = MMFont.font(ofSize: 13)
-            chipLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.9)
-            chipLabel.alignment = .center
-            chipLabel.isEditable = false
-            chipLabel.isSelectable = false
-            let textW = ceil((text as NSString).size(withAttributes: [.font: MMFont.font(ofSize: 13)]).width) + 18
-            chip.frame = NSRect(x: chipX, y: y, width: max(32, textW), height: 26)
-            chipLabel.frame = NSRect(x: 0, y: 5, width: max(32, textW), height: 16)
-            chip.addSubview(chipLabel)
+            let countText = String(count)
+            let countW = ceil((countText as NSString).size(withAttributes: [.font: countFont]).width)
+            let spacing: CGFloat = 2
+            let chipW = max(28, ceil(5 + emojiW + spacing + countW + 5))
+
+            let chip = RoundedEdgePanel()
+            chip.cornerRadius = 4
+            chip.color = reacted
+                ? NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
+                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            chip.borderWidth = 1
+            chip.borderColor = reacted ? blue : .clear
+            chip.frame = NSRect(x: chipX, y: chipY, width: chipW, height: 24)
+
+            let emojiLabel = NSTextField(labelWithString: glyph)
+            emojiLabel.font = MMFont.font(ofSize: 15)
+            emojiLabel.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
+            emojiLabel.alignment = .center
+            emojiLabel.isEditable = false
+            emojiLabel.isSelectable = false
+            emojiLabel.frame = NSRect(x: 5, y: 3, width: emojiW, height: 18)
+            chip.addSubview(emojiLabel)
+
+            var chipCountLabel: NSTextField?
+            if !countText.isEmpty {
+                let countLabel = NSTextField(labelWithString: countText)
+                countLabel.font = countFont
+                countLabel.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
+                countLabel.isEditable = false
+                countLabel.isSelectable = false
+                countLabel.frame = NSRect(x: 5 + emojiW + spacing, y: 5, width: countW + 1, height: 16)
+                chip.addSubview(countLabel)
+                chipCountLabel = countLabel
+            }
+
+            let postId = post.id
+            let emojiName = emoji
+            chip.onHoverChanged = { [weak chip, weak emojiLabel, weak chipCountLabel] isHovered in
+                // `.Reaction:hover` uses the post background for both states; reacted
+                // chips keep their blue border and text.
+                guard let chip = chip else { return }
+                let idleFill = reacted
+                    ? NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
+                    : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                chip.color = isHovered ? .white : idleFill
+                chip.borderColor = reacted
+                    ? blue
+                    : (isHovered ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16) : .clear)
+                emojiLabel?.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
+                chipCountLabel?.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
+                chip.setNeedsAppearanceUpdate()
+            }
+            chip.onClick = { [weak self] in
+                self?.toggleReaction(postId: postId, emojiName: emojiName)
+            }
             row.addSubview(chip)
-            chipX += max(32, textW) + 6
+            chipX += chipW + 4
         }
-        return 34
+
+        // The add-reaction chip only exists when a post already has reactions, and
+        // is revealed while the row is hovered (`.post:hover .Reaction__add`).
+        let addChip = RoundedEdgePanel()
+        addChip.cornerRadius = 4
+        addChip.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+        addChip.borderWidth = 1
+        addChip.borderColor = .clear
+        addChip.frame = NSRect(x: chipX, y: chipY, width: 28, height: 24)
+        let plus = NSTextField(labelWithString: "+")
+        plus.font = MMFont.font(ofSize: 17, weight: .medium)
+        plus.textColor = centerColor.withAlphaComponent(0.75)
+        plus.alignment = .center
+        plus.isEditable = false
+        plus.isSelectable = false
+        plus.frame = NSRect(x: 0, y: 2, width: 28, height: 20)
+        addChip.addSubview(plus)
+        addChip.onHoverChanged = { [weak addChip] isHovered in
+            addChip?.color = isHovered
+                ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.12)
+                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            addChip?.setNeedsAppearanceUpdate()
+        }
+        addChip.onClick = { [weak self, weak addChip] in
+            guard let self = self, let addChip = addChip else { return }
+            self.showReactionPicker(for: post, anchor: addChip)
+        }
+        addChip.isHidden = true
+        row.addSubview(addChip)
+        (row as? TimelineRowView)?.reactionAddChip = addChip
+
+        return 32
+    }
+
+    /// Builds the floating hover toolbar (`ul.post-menu` in the web client):
+    /// 94×38pt, white, 1pt border, 4pt padding, three 28pt icon buttons.
+    /// Compact rows use a shorter variant that fits inside their 24pt height.
+    private func addHoverToolbar(for post: MMPost, to row: NSView, width: CGFloat, compact: Bool = false) -> RoundedEdgePanel {
+        let toolbar = RoundedEdgePanel()
+        toolbar.cornerRadius = 4
+        toolbar.color = .white
+        toolbar.borderWidth = 1
+        toolbar.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        toolbar.shadowColor = .black
+        toolbar.shadowOpacity = 0.08
+        toolbar.shadowRadius = 3
+        toolbar.shadowOffset = CGSize(width: 0, height: -2)
+
+        let buttonSize: CGFloat = compact ? 24 : 28
+        let toolbarHeight: CGFloat = compact ? 24 : 38
+        let toolbarWidth = buttonSize * 3 + (compact ? 4 : 8)
+        let inset: CGFloat = compact ? 2 : 4
+        toolbar.frame = NSRect(
+            x: width - toolbarWidth,
+            y: compact ? 0 : 4,
+            width: toolbarWidth,
+            height: toolbarHeight
+        )
+        toolbar.isHidden = true
+
+        let postRef = post
+        let entries: [(symbol: String, label: String, action: () -> Void)] = [
+            ("face.smiling", "Add Reaction", { [weak self, weak toolbar] in
+                guard let self = self, let toolbar = toolbar else { return }
+                self.showReactionPicker(for: postRef, anchorRect: self.postToolbarAnchor(toolbar))
+            }),
+            ("arrowshape.turn.up.left", "Reply", { [weak self] in
+                self?.showThread(for: postRef)
+            }),
+            ("ellipsis", "More", { [weak self, weak toolbar] in
+                guard let self = self, let toolbar = toolbar else { return }
+                self.showPostActionMenu(for: postRef, anchorRect: self.postToolbarAnchor(toolbar))
+            })
+        ]
+
+        for (index, entry) in entries.enumerated() {
+            let button = RoundedEdgePanel()
+            button.cornerRadius = 4
+            button.color = .clear
+            button.frame = NSRect(
+                x: inset + CGFloat(index) * buttonSize,
+                y: inset,
+                width: buttonSize,
+                height: buttonSize
+            )
+
+            let icon = NSImageView()
+            if let image = NSImage(systemSymbolName: entry.symbol, accessibilityDescription: entry.label) {
+                icon.image = image.withSymbolConfiguration(.init(pointSize: compact ? 13 : 15, weight: .regular))
+                icon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+            }
+            let iconInset: CGFloat = compact ? 5 : 6
+            icon.frame = NSRect(x: iconInset, y: iconInset, width: 16, height: 16)
+            button.addSubview(icon)
+            button.onHoverChanged = { [weak button, weak icon] isHovered in
+                button?.color = isHovered
+                    ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                    : .clear
+                icon?.contentTintColor = NSColor(
+                    red: 63 / 255, green: 67 / 255, blue: 80 / 255,
+                    alpha: isHovered ? 0.8 : 0.64
+                )
+                button?.setNeedsAppearanceUpdate()
+            }
+            button.onClick = entry.action
+            toolbar.addSubview(button)
+        }
+
+        row.addSubview(toolbar)
+        return toolbar
+    }
+
+    /// Converts the toolbar's third ("more") button into chat-panel coordinates so
+    /// the floating menu can be anchored to the icon the user clicked.
+    private func postToolbarAnchor(_ toolbar: RoundedEdgePanel) -> NSRect {
+        guard let button = toolbar.subviews.compactMap({ $0 as? RoundedEdgePanel }).last else {
+            return toolbar.convert(toolbar.bounds, to: chatPanel)
+        }
+        return button.convert(button.bounds, to: chatPanel)
+    }
+
+    private func frameInChat(_ view: NSView) -> NSRect {
+        return view.convert(view.bounds, to: chatPanel)
+    }
+
+    private func currentUserReacted(_ post: MMPost, emoji: String) -> Bool {
+        guard let myId = currentUserId(), !myId.isEmpty else { return false }
+        return (post.metadata?.reactions ?? []).contains {
+            $0.user_id == myId && $0.emoji_name == emoji
+        }
+    }
+
+    private func currentUserId() -> String? {
+        if let id = currentUser?.id, !id.isEmpty { return id }
+        let id = (NSApp.delegate as? AppDelegate)?.webService.currentUserId ?? ""
+        return id.isEmpty ? nil : id
+    }
+
+    private func toggleReaction(postId: String, emojiName: String) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let userId = currentUserId() else { return }
+        let post = currentChannelPosts.first(where: { $0.id == postId })
+            ?? threadPosts.first(where: { $0.id == postId })
+        guard let post = post else { return }
+        let reacted = currentUserReacted(post, emoji: emojiName)
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                if reacted {
+                    try await ws.removeReaction(userId: userId, postId: postId, emojiName: emojiName)
+                } else {
+                    try await ws.addReaction(userId: userId, postId: postId, emojiName: emojiName)
+                }
+                if let updated = try? await ws.fetchPost(postId: postId) {
+                    self.applyUpdatedPost(updated)
+                }
+            } catch {
+                NSLog("Reaction update failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func applyUpdatedPost(_ post: MMPost) {
+        if let index = currentChannelPosts.firstIndex(where: { $0.id == post.id }) {
+            currentChannelPosts[index] = post
+        }
+        if let index = threadPosts.firstIndex(where: { $0.id == post.id }) {
+            threadPosts[index] = post
+        }
+        if isRightPanelVisible && rightPanelMode == .thread {
+            renderThreadPanel()
+        } else {
+            rebuildTimelineContent()
+        }
+    }
+
+    // MARK: - Reaction picker & post overflow menu
+
+    private func setupPostInteractionPanels() {
+        reactionPickerPanel.color = .white
+        reactionPickerPanel.cornerRadius = 6
+        reactionPickerPanel.borderWidth = 1
+        reactionPickerPanel.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        reactionPickerPanel.shadowColor = .black
+        reactionPickerPanel.shadowOpacity = 0.12
+        reactionPickerPanel.shadowRadius = 8
+        reactionPickerPanel.shadowOffset = CGSize(width: 0, height: -2)
+        reactionPickerPanel.isHidden = true
+        chatPanel.addSubview(reactionPickerPanel)
+
+        postActionMenu.color = .white
+        postActionMenu.cornerRadius = 6
+        postActionMenu.borderWidth = 1
+        postActionMenu.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.2)
+        postActionMenu.shadowColor = .black
+        postActionMenu.shadowOpacity = 0.12
+        postActionMenu.shadowRadius = 8
+        postActionMenu.shadowOffset = CGSize(width: 0, height: -2)
+        postActionMenu.isHidden = true
+        chatPanel.addSubview(postActionMenu)
+    }
+
+    private func showReactionPicker(for post: MMPost, anchor: NSView) {
+        showReactionPicker(for: post, anchorRect: frameInChat(anchor))
+    }
+
+    private func showReactionPicker(for post: MMPost, anchorRect: NSRect) {
+        guard !activeChannelId.isEmpty else { return }
+        closePostActionMenu()
+        reactionPickerPostId = post.id
+        reactionPickerAnchorInChat = anchorRect
+
+        let columns = 8
+        let cell: CGFloat = 28
+        let gap: CGFloat = 4
+        let margin: CGFloat = 8
+        let rows = (Self.quickReactions.count + columns - 1) / columns
+        let width = margin * 2 + CGFloat(columns) * cell + CGFloat(columns - 1) * gap
+        let height = margin * 2 + CGFloat(rows) * cell + CGFloat(rows - 1) * gap
+
+        reactionPickerPanel.subviews.forEach { $0.removeFromSuperview() }
+
+        for (index, emoji) in Self.quickReactions.enumerated() {
+            let column = index % columns
+            let row = index / columns
+            let button = RoundedEdgePanel()
+            button.cornerRadius = 4
+            button.color = .clear
+            button.frame = NSRect(
+                x: margin + CGFloat(column) * (cell + gap),
+                y: margin + CGFloat(rows - 1 - row) * (cell + gap),
+                width: cell,
+                height: cell
+            )
+            let label = NSTextField(labelWithString: emoji.glyph)
+            label.font = MMFont.font(ofSize: 18)
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 0, y: 4, width: cell, height: 22)
+            button.addSubview(label)
+            button.onHoverChanged = { [weak button] isHovered in
+                button?.color = isHovered
+                    ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                    : .clear
+                button?.setNeedsAppearanceUpdate()
+            }
+            let emojiName = emoji.name
+            button.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.closeReactionPicker()
+                self.toggleReaction(postId: self.reactionPickerPostId, emojiName: emojiName)
+            }
+            reactionPickerPanel.addSubview(button)
+        }
+
+        let chatW = chatPanel.bounds.width
+        let chatH = chatPanel.bounds.height
+        var x = anchorRect.midX - width / 2
+        x = min(max(8, x), max(8, chatW - width - 8))
+        var y = anchorRect.minY - height - 6
+        if y < 8 {
+            y = anchorRect.maxY + 6
+        }
+        y = min(max(8, y), max(8, chatH - height - 8))
+        reactionPickerPanel.frame = NSRect(x: x, y: y, width: width, height: height)
+        reactionPickerPanel.isHidden = false
+        reactionPickerPanel.superview?.addSubview(reactionPickerPanel)
+        isReactionPickerOpen = true
+    }
+
+    private func closeReactionPicker() {
+        reactionPickerPanel.isHidden = true
+        isReactionPickerOpen = false
+    }
+
+    private func showPostActionMenu(for post: MMPost, anchor: NSView) {
+        showPostActionMenu(for: post, anchorRect: frameInChat(anchor))
+    }
+
+    private func showPostActionMenu(for post: MMPost, anchorRect: NSRect) {
+        closeReactionPicker()
+        postActionMenuPost = post
+        postActionMenuAnchorInChat = anchorRect
+
+        let myId = currentUserId()
+        let isMine = !post.user_id.isEmpty && post.user_id == myId
+        let canEdit = isMine && (post.delete_at ?? 0) == 0
+        var rows: [(symbol: String, title: String, action: () -> Void)] = [
+            ("arrowshape.turn.up.left", "Reply", { [weak self] in
+                self?.closePostActionMenu()
+                self?.showThread(for: post)
+            }),
+            ("link", "Copy Link", { [weak self] in
+                self?.closePostActionMenu()
+                self?.copyPostLink(post)
+            })
+        ]
+        if canEdit {
+            rows.append((post.is_pinned == true ? "pin.slash" : "pin", post.is_pinned == true ? "Unpin from Channel" : "Pin to Channel", { [weak self] in
+                self?.closePostActionMenu()
+                self?.togglePin(post)
+            }))
+            rows.append(("trash", "Delete", { [weak self] in
+                self?.closePostActionMenu()
+                self?.confirmDeletePost(post)
+            }))
+        }
+
+        postActionMenu.subviews.forEach { $0.removeFromSuperview() }
+
+        let rowHeight: CGFloat = 32
+        let width: CGFloat = 210
+        let height = CGFloat(rows.count) * rowHeight + 8
+        let chatW = chatPanel.bounds.width
+        let chatH = chatPanel.bounds.height
+        var x = anchorRect.minX
+        x = min(max(8, x), max(8, chatW - width - 8))
+        var y = anchorRect.minY - height - 4
+        if y < 8 {
+            y = min(anchorRect.maxY + 4, chatH - height - 8)
+        }
+        postActionMenu.frame = NSRect(x: x, y: max(8, y), width: width, height: height)
+
+        let textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        let iconColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        for (index, item) in rows.enumerated() {
+            let row = RoundedEdgePanel()
+            row.cornerRadius = 4
+            row.color = .clear
+            row.frame = NSRect(
+                x: 4,
+                y: height - 4 - CGFloat(index + 1) * rowHeight,
+                width: width - 8,
+                height: rowHeight
+            )
+            let icon = NSImageView()
+            if let image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: item.title) {
+                icon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+                icon.contentTintColor = iconColor
+            }
+            icon.frame = NSRect(x: 8, y: 8, width: 16, height: 16)
+            row.addSubview(icon)
+
+            let label = NSTextField(labelWithString: item.title)
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = textColor
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 32, y: 7, width: width - 48, height: 18)
+            row.addSubview(label)
+
+            row.onHoverChanged = { [weak row] isHovered in
+                row?.color = isHovered
+                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    : .clear
+                row?.setNeedsAppearanceUpdate()
+            }
+            row.onClick = item.action
+            postActionMenu.addSubview(row)
+        }
+
+        postActionMenu.isHidden = false
+        postActionMenu.superview?.addSubview(postActionMenu)
+        isPostActionMenuOpen = true
+    }
+
+    private func closePostActionMenu() {
+        postActionMenu.isHidden = true
+        isPostActionMenuOpen = false
+    }
+
+    private func copyPostLink(_ post: MMPost) {
+        var host = UserDefaults.standard.string(forKey: "host") ?? ""
+        let port = UserDefaults.standard.integer(forKey: "port")
+        if port > 0 && !host.hasSuffix(":\(port)") {
+            host += ":\(port)"
+        }
+        let teamName = activeTeam?.name ?? ""
+        let url = "\(host)/\(teamName)/pl/\(post.id)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+        composerHelpLabel.stringValue = "Link copied"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.composerHelpLabel.stringValue = "Help"
+        }
+    }
+
+    private func togglePin(_ post: MMPost) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        let shouldPin = post.is_pinned != true
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                if shouldPin {
+                    try await ws.pinPost(postId: post.id)
+                } else {
+                    try await ws.unpinPost(postId: post.id)
+                }
+                if let updated = try? await ws.fetchPost(postId: post.id) {
+                    self.applyUpdatedPost(updated)
+                }
+            } catch {
+                NSLog("Pin update failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func confirmDeletePost(_ post: MMPost) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        let alert = NSAlert()
+        alert.messageText = "Delete this message?"
+        alert.informativeText = "This will remove the message for everyone in the channel."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                do {
+                    try await ws.deletePost(postId: post.id)
+                    self.currentChannelPosts.removeAll { $0.id == post.id }
+                    self.threadPosts.removeAll { $0.id == post.id }
+                    if self.isRightPanelVisible && self.rightPanelMode == .thread {
+                        self.renderThreadPanel()
+                    } else {
+                        self.rebuildTimelineContent()
+                    }
+                } catch {
+                    NSLog("Delete post failed: \(error.localizedDescription)")
+                }
+            }
+        }
     }
     
+    /// Shortcodes used by the reaction picker and the chip renderer.
+    private static let emojiGlyphs: [String: String] = [
+        "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎", "-1": "👎",
+        "smile": "😄", "grinning": "😀", "joy": "😂", "heart": "❤️",
+        "red_heart": "❤️", "tada": "🎉", "eyes": "👀", "fire": "🔥",
+        "wave": "👋", "clap": "👏", "pray": "🙏", "rocket": "🚀",
+        "white_check_mark": "✅", "x": "❌", "thinking_face": "🤔",
+        "cry": "😢", "sob": "😭", "sunglasses": "😎", "100": "💯",
+        "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐",
+        "coffee": "☕", "computer": "💻", "palm_tree": "🌴", "beer": "🍺",
+        "pizza": "🍕", "cake": "🎂", "sunny": "☀️", "rainbow": "🌈",
+        "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔"
+    ]
+
+    /// The first page of the reaction picker, mirroring Mattermost's common reactions.
+    private static let quickReactions: [(name: String, glyph: String)] = [
+        ("thumbsup", "👍"), ("thumbsdown", "👎"), ("smile", "😄"), ("joy", "😂"),
+        ("heart", "❤️"), ("tada", "🎉"), ("eyes", "👀"), ("fire", "🔥"),
+        ("wave", "👋"), ("clap", "👏"), ("rocket", "🚀"), ("white_check_mark", "✅"),
+        ("thinking_face", "🤔"), ("sob", "😭"), ("sunglasses", "😎"), ("100", "💯")
+    ]
+
     /// Maps common Mattermost emoji shortcodes to glyphs for reaction chips.
     private func emojiGlyph(for name: String) -> String {
-        let map: [String: String] = [
-            "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎", "-1": "👎",
-            "smile": "😄", "grinning": "😀", "joy": "😂", "heart": "❤️",
-            "red_heart": "❤️", "tada": "🎉", "eyes": "👀", "fire": "🔥",
-            "wave": "👋", "clap": "👏", "pray": "🙏", "rocket": "🚀",
-            "white_check_mark": "✅", "x": "❌", "thinking_face": "🤔",
-            "cry": "😢", "sob": "😭", "sunglasses": "😎", "100": "💯",
-            "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐",
-            "coffee": "☕", "computer": "💻", "palm_tree": "🌴", "beer": "🍺",
-            "pizza": "🍕", "cake": "🎂", "sunny": "☀️", "rainbow": "🌈",
-            "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔"
-        ]
-        if let glyph = map[name.lowercased()] { return glyph }
+        if let glyph = Self.emojiGlyphs[name.lowercased()] { return glyph }
         // Already a unicode emoji?
         if name.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) { return name }
         return ":" + name + ":"
@@ -5388,10 +6082,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             let totalRowH = max(24, contentY)
             row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
 
-            row.onHoverChanged = { [weak row, weak hoverTimeLabel] isHovered in
+            let toolbar = (isSystem || isDeleted)
+                ? nil
+                : addHoverToolbar(for: post, to: row, width: width, compact: true)
+
+            row.onHoverChanged = { [weak row, weak hoverTimeLabel, weak toolbar] isHovered in
                 row?.color = isHovered ? msgHoverBg : .clear
                 row?.setNeedsAppearanceUpdate()
                 hoverTimeLabel?.isHidden = !isHovered
+                toolbar?.isHidden = !isHovered
+                (row as? TimelineRowView)?.reactionAddChip?.isHidden = !isHovered
             }
             return (row, totalRowH)
         }
@@ -5643,9 +6343,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             updateStatusCheck(in: usrDot, status: stat)
         }
 
-        row.onHoverChanged = { [weak row] isHovered in
+        let toolbar = (isSystem || isDeleted)
+            ? nil
+            : addHoverToolbar(for: post, to: row, width: width)
+        row.onHoverChanged = { [weak row, weak toolbar] isHovered in
             row?.color = isHovered ? msgHoverBg : .clear
             row?.setNeedsAppearanceUpdate()
+            toolbar?.isHidden = !isHovered
+            row?.reactionAddChip?.isHidden = !isHovered
         }
         return (row, totalRowH)
     }
@@ -6103,6 +6808,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 let maxY = max(0, self.timelineDocView.frame.height - self.timelineScrollView.contentView.bounds.height)
                 self.timelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
                 self.timelineScrollView.reflectScrolledClipView(self.timelineScrollView.contentView)
+                self.updateTimelineHoverState()
+            }
+        } else {
+            // Rebuilds replace the row views, so restore the hover state under the
+            // pointer (toolbar visibility) once the new layout is in place.
+            DispatchQueue.main.async { [weak self] in
+                self?.updateTimelineHoverState()
             }
         }
     }
@@ -6123,7 +6835,23 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             rightPanel.frame = NSRect(x: chatW - panelWidth, y: composerArea, width: panelWidth, height: panelHeight)
             rightPanelTitle.frame = NSRect(x: 16, y: panelHeight - 40, width: panelWidth - 64, height: 20)
             rightPanelCloseButton.frame = NSRect(x: panelWidth - 38, y: panelHeight - 44, width: 24, height: 24)
-            rightPanelScroll.frame = NSRect(x: 0, y: 0, width: panelWidth, height: max(0, panelHeight - 48))
+
+            let isThreadMode = (rightPanelMode == .thread)
+            let replyBarHeight: CGFloat = isThreadMode ? 52 : 0
+            rightPanelScroll.frame = NSRect(
+                x: 0,
+                y: replyBarHeight,
+                width: panelWidth,
+                height: max(0, panelHeight - 48 - replyBarHeight)
+            )
+            threadReplyPanel.isHidden = !isThreadMode
+            if isThreadMode {
+                threadReplyPanel.frame = NSRect(x: 8, y: 8, width: panelWidth - 16, height: 36)
+                threadReplyField.frame = NSRect(x: 10, y: 9, width: panelWidth - 16 - 52, height: 18)
+                threadPlaceholderLabel.frame = NSRect(x: 10, y: 11, width: panelWidth - 16 - 52, height: 16)
+                threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
+                threadSendButton.frame = NSRect(x: panelWidth - 16 - 34, y: 11, width: 26, height: 26)
+            }
         }
         
         chatTimelineContainer.frame = NSRect(x: 0, y: 0, width: chatW, height: headerY)
@@ -6355,6 +7083,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self.handleIncomingPost(post)
             }
         }
+
+        ws.onReactionChanged = { [weak self] postId in
+            Task { @MainActor [weak self] in
+                guard let self = self,
+                      let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+                if let updated = try? await ws.fetchPost(postId: postId) {
+                    self.applyUpdatedPost(updated)
+                }
+            }
+        }
         
         ws.onWebSocketStateChanged = { [weak self] connected, message in
             Task { @MainActor [weak self] in
@@ -6520,6 +7258,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
         }
     }
+
     
     private func loadChannelPosts(forSidebarItemId itemId: String) {
         let normalized = itemId.lowercased()
@@ -6760,6 +7499,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
     
     func controlTextDidChange(_ notification: Notification) {
+        if (notification.object as? NSTextField) === threadReplyField {
+            threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
+            return
+        }
         guard (notification.object as? NSTextField) === findChannelLabel else { return }
         channelFilterQuery = findChannelLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)

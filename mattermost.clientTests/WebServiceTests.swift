@@ -344,6 +344,57 @@ final class WebServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - Reactions & thread endpoints
+
+    func testParseWebSocketReactionEvents() {
+        let ws = WebService(host: "chat.example.com", port: 8065)
+
+        let addedPayload = """
+        {
+            "event": "reaction_added",
+            "data": {
+                "reaction": "{\\"user_id\\":\\"u1\\",\\"post_id\\":\\"post_abc\\",\\"emoji_name\\":\\"thumbsup\\"}"
+            },
+            "broadcast": {"channel_id": "ch_town_square"},
+            "seq": 2
+        }
+        """
+        let added = ws.parseWebSocketMessage(addedPayload)
+        if case .reactionChanged(let postId) = added.event {
+            XCTAssertEqual(postId, "post_abc")
+        } else {
+            XCTFail("Expected .reactionChanged from a stringified reaction payload")
+        }
+
+        let removedPayload = #"{"event":"reaction_removed","data":{"post_id":"post_xyz"},"seq":3}"#
+        let removed = ws.parseWebSocketMessage(removedPayload)
+        if case .reactionChanged(let postId) = removed.event {
+            XCTAssertEqual(postId, "post_xyz")
+        } else {
+            XCTFail("Expected .reactionChanged from a top-level post_id")
+        }
+    }
+
+    func testReactionAndThreadEndpointURLs() {
+        let ws = WebService(host: "chat.example.com", port: 8065)
+        XCTAssertEqual(
+            ws.buildURL(path: "/api/v4/reactions")?.absoluteString,
+            "https://chat.example.com:8065/api/v4/reactions"
+        )
+        XCTAssertEqual(
+            ws.buildURL(path: "/api/v4/users/u1/posts/p1/reactions/thumbsup")?.absoluteString,
+            "https://chat.example.com:8065/api/v4/users/u1/posts/p1/reactions/thumbsup"
+        )
+        XCTAssertEqual(
+            ws.buildURL(path: "/api/v4/posts/p1/thread")?.absoluteString,
+            "https://chat.example.com:8065/api/v4/posts/p1/thread"
+        )
+        XCTAssertEqual(
+            ws.buildURL(path: "/api/v4/posts/p1/pin")?.absoluteString,
+            "https://chat.example.com:8065/api/v4/posts/p1/pin"
+        )
+    }
+
     func testDecodeMMUserStatus() throws {
         let statusJSON = """
         {

@@ -224,7 +224,28 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ## P3 — Web-parity backlog
 
-- [ ] **Post hover toolbar** (emoji/reply/more) and reaction chips — `M`
+- [x] **Post hover toolbar** (emoji/reply/more) and reaction chips — `M`
+  - Done: every post row reveals a hover toolbar at its top-right, matching `ul.post-menu` in
+    the web client — 38pt tall, white, 1pt `rgba(63,67,80,0.2)` border, 4pt radius, three 28pt
+    icon buttons (emoji, reply, more) with 64%-opacity icons that darken to 80% and get an 8%
+    hover fill. Compact (grouped) rows use a 24pt-tall variant so the toolbar stays inside the
+    row. System and deleted posts get no toolbar.
+  - Emoji opens a reaction picker anchored to the button; reply opens a thread view in the right
+    sidebar; more opens a menu with Reply, Copy Link, Pin/Unpin and Delete (own posts only).
+  - Reaction chips now mirror `.Reaction`: 24pt tall, 4pt radius, 1pt border, 0/5pt padding,
+    4pt gap, 16pt emoji, 11pt semibold count. Own reactions use the button blue border and 8%
+    blue fill; unreacted chips hover to white with a 16% border. Reaction chips are clickable and
+    toggle via `POST /reactions` / `DELETE /users/{u}/posts/{p}/reactions/{emoji}`.
+  - Added a matching `+` add-reaction chip (revealed on row hover) and a reaction picker with
+    16 common emoji.
+  - The thread view reuses the timeline row renderer: root post, "N replies" divider, grouped
+    replies, and an inline "Reply to thread…" composer that posts with `root_id`. Opening a reply
+    normalises the target to the thread's root.
+  - Realtime: `reaction_added` / `reaction_removed` WebSocket events (including the stringified
+    `data.reaction` payload) refresh the affected post.
+  - Verified by an in-app harness (synthetic clicks are blocked in the locked desktop session):
+    reaction add → remove → restore, thread load, and reply count 2 → 3. Added WebSocket reaction
+    parsing and endpoint URL tests (19 tests pass).
 - [ ] **Attachments and inline images** with correct web sizing, thumbnail previews and lightbox — `M`
 - [ ] **"New Messages" divider and unread pill** above the first unread post — `S`
 - [ ] **Right-hand sidebar** (threads, members, pinned posts, files) with resize/persist — `L`

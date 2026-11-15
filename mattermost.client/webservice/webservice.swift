@@ -225,6 +225,7 @@ enum MMWebSocketEvent {
     case addedToTeam(teamId: String, userId: String)
     case leaveTeam(teamId: String, userId: String)
     case sidebarCategoriesUpdated
+    case reactionChanged(postId: String)
     case other(event: String, data: [String: Any])
 }
 
@@ -917,6 +918,65 @@ final class WebService: NSObject {
             body: payload
         )
     }
+
+    func fetchPost(postId: String) async throws -> MMPost {
+        return try await performAuthenticatedRequest(path: "/api/v4/posts/\(postId)")
+    }
+
+    /// Returns the root post plus every reply of a thread.
+    func fetchPostThread(postId: String) async throws -> MMPostList {
+        return try await performAuthenticatedRequest(path: "/api/v4/posts/\(postId)/thread")
+    }
+
+    // MARK: - Reactions
+
+    @discardableResult
+    func addReaction(userId: String, postId: String, emojiName: String) async throws -> MMReaction {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/reactions",
+            method: "POST",
+            body: [
+                "user_id": userId,
+                "post_id": postId,
+                "emoji_name": emojiName,
+                "create_at": 0
+            ]
+        )
+    }
+
+    func removeReaction(userId: String, postId: String, emojiName: String) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/posts/\(postId)/reactions/\(emojiName)",
+            method: "DELETE"
+        )
+    }
+
+    // MARK: - Post actions
+
+    func pinPost(postId: String) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/posts/\(postId)/pin",
+            method: "POST"
+        )
+    }
+
+    func unpinPost(postId: String) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/posts/\(postId)/unpin",
+            method: "POST"
+        )
+    }
+
+    func deletePost(postId: String) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/posts/\(postId)",
+            method: "DELETE"
+        )
+    }
     
     // MARK: - WebSocket Logic
     
@@ -940,6 +1000,7 @@ final class WebService: NSObject {
     var onTeamUpdated: ((MMTeam) -> Void)?
     var onUserTeamsChanged: (() -> Void)?
     var onSidebarCategoriesUpdated: (() -> Void)?
+    var onReactionChanged: ((String) -> Void)?
     
     private func notifySocketState(_ connected: Bool, _ message: String) {
         DebugLog.log("WS STATE notify connected=\(connected) msg=\(message)")
@@ -1208,6 +1269,26 @@ final class WebService: NSObject {
                     parsedEvent = .leaveTeam(teamId: teamId, userId: userId)
                 case "sidebar_category_updated", "sidebar_category_created", "sidebar_category_deleted", "sidebar_category_order_updated":
                     parsedEvent = .sidebarCategoriesUpdated
+                case "reaction_added", "reaction_removed":
+                    var postId = (eventData["post_id"] as? String) ?? ""
+                    if postId.isEmpty {
+                        if let reactionString = eventData["reaction"] as? String,
+                           let reactionData = reactionString.data(using: .utf8),
+                           let object = try? JSONSerialization.jsonObject(with: reactionData),
+                           let reaction = object as? [String: Any],
+                           let parsedPostId = reaction["post_id"] as? String {
+                            postId = parsedPostId
+                        } else if let reaction = eventData["reaction"] as? [String: Any],
+                                  let parsedPostId = reaction["post_id"] as? String {
+                            postId = parsedPostId
+                        }
+                    }
+                    if postId.isEmpty {
+                        postId = (broadcast["post_id"] as? String) ?? ""
+                    }
+                    if !postId.isEmpty {
+                        parsedEvent = .reactionChanged(postId: postId)
+                    }
                 default:
                     parsedEvent = .other(event: eventName, data: eventData)
                 }
@@ -1254,6 +1335,8 @@ final class WebService: NSObject {
                     self.onUserTeamsChanged?()
                 case .sidebarCategoriesUpdated:
                     self.onSidebarCategoriesUpdated?()
+                case .reactionChanged(let postId):
+                    self.onReactionChanged?(postId)
                 case .other:
                     break
                 }
