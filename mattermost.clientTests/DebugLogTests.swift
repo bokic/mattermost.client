@@ -8,6 +8,7 @@ import XCTest
 @testable import mattermost_client
 #endif
 
+@MainActor
 final class DebugLogTests: XCTestCase {
 
     func testSensitiveLoggingIsGated() throws {

@@ -713,7 +713,7 @@ extension MainWindow {
         filterMenu.shadowOffset = CGSize(width: 0, height: -4)
         filterMenu.isHidden = true
 
-        let makeRow: (String, CGFloat, Bool) -> (RoundedEdgePanel, NSImageView) = { title, y, favorites in
+        let makeRow: (String, CGFloat, Bool) -> (RoundedEdgePanel, NSImageView) = { [weak self] title, y, favorites in
             let row = RoundedEdgePanel()
             row.frame = NSRect(x: 6, y: y, width: 168, height: 28)
             row.cornerRadius = 4
@@ -837,7 +837,7 @@ extension MainWindow {
             return
         }
         guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
-              let team = activeTeam, let contentView = contentView else {
+              activeTeam != nil, let contentView = contentView else {
             showInfoAlert("Sign in to start a direct message.")
             return
         }
@@ -1031,8 +1031,7 @@ extension MainWindow {
     }
 
     func showChannelMenu() {
-        guard !activeChannelId.isEmpty, let channel = channelsById[activeChannelId] else { return }
-        let channelName = channelDisplayName(for: channel)
+        guard !activeChannelId.isEmpty, channelsById[activeChannelId] != nil else { return }
         let favoriteTitle = isChannelFavorited ? "Remove from Favorites" : "Add to Favorites"
         let rows: [(symbol: String, title: String, action: () -> Void)] = [
             ("info.circle", "View Info", { [weak self] in

@@ -14,13 +14,10 @@ extension MainWindow {
     func setupRightChatPanel() {
         let darkText = Theme.shared.centerText
         let mutedText = Theme.shared.centerTextMuted
-        let lightPlaceholder = Theme.shared.centerTextPlaceholder
         let dividerColor = Theme.shared.divider
         let hoverBg = Theme.shared.centerHover
-        let msgHoverBg = Theme.shared.centerHoverSubtle
         let brandBlue = Theme.shared.buttonBg
         let brandBlueHover = Theme.shared.buttonBg.blended(withFraction: 0.2, of: .black) ?? Theme.shared.buttonBg
-        let starGold = Theme.shared.awayIndicator
 
         // 0. Timeline clipping container (clips messages & hero text to channelHeaderBorder below star icon)
         chatTimelineContainer.wantsLayer = true

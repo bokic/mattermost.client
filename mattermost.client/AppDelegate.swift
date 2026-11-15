@@ -2,7 +2,8 @@ import Cocoa
 import os
 import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
     var mainWindow: MainWindow!
     var loginWindow: LoginWindow!
     var statusBarItem: NSStatusItem!
@@ -60,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         
         Task.detached { [weak self] in
             let token = KeychainHelper.get(forKey: "token")
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 guard let self = self else { return }
                 if let host = host, !host.isEmpty, let token = token, !token.isEmpty {
                     NSLog("Calling checkToken webservice: \(host):\(port)")
@@ -86,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func loginWithStoredPassword(host: String?, port: UInt16) {
         Task.detached { [weak self] in
             let password = KeychainHelper.get(forKey: "password")
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 self?.loginWithStoredCredentials(host: host, port: port, password: password)
             }
         }

@@ -41,6 +41,7 @@ private final class ZoomHUDTextView: NSView {
     }
 }
 
+@MainActor
 final class ZoomHUD {
 
     static let shared = ZoomHUD()
@@ -107,7 +108,9 @@ final class ZoomHUD {
 
         hideTimer?.invalidate()
         let timer = Timer(timeInterval: displayDuration, repeats: false) { [weak self] _ in
-            self?.hide()
+            MainActor.assumeIsolated {
+                self?.hide()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         hideTimer = timer
@@ -119,8 +122,10 @@ final class ZoomHUD {
             context.duration = 0.25
             panel.animator().alphaValue = 0
         }, completionHandler: {
-            panel.isHidden = true
-            panel.alphaValue = 0
+            MainActor.assumeIsolated {
+                panel.isHidden = true
+                panel.alphaValue = 0
+            }
         })
     }
 

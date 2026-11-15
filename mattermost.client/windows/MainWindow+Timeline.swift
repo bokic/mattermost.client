@@ -418,7 +418,7 @@ extension MainWindow {
         }
     }
 
-    func loadGiphyAnimatedImage(from urlString: String, completion: @escaping (NSImage?) -> Void) {
+    func loadGiphyAnimatedImage(from urlString: String, completion: @escaping @MainActor @Sendable (NSImage?) -> Void) {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
         if let dir = cacheDir {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -444,21 +444,20 @@ extension MainWindow {
         var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
-            var resultImage: NSImage? = nil
-            if let data = data, let image = NSImage(data: data) {
-                resultImage = image
-                if let dir = cacheDir {
-                    let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
-                    let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
-                    let diskURL = dir.appendingPathComponent(filename)
-                    try? data.write(to: diskURL)
-                }
-            } else {
-                resultImage = self?.createFallbackAnimatedGif()
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            let responseData = data
+            if let data = responseData, let dir = cacheDir {
+                let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
+                let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+                let diskURL = dir.appendingPathComponent(filename)
+                try? data.write(to: diskURL)
             }
-            DispatchQueue.main.async {
-                completion(resultImage)
+            Task { @MainActor in
+                if let data = responseData, let image = NSImage(data: data) {
+                    completion(image)
+                } else {
+                    completion(self.createFallbackAnimatedGif())
+                }
             }
         }.resume()
     }
@@ -915,10 +914,11 @@ extension MainWindow {
         } else if let remoteURL = remoteURL, let url = URL(string: remoteURL) {
             var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
-            URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
-                guard let data = data, let full = NSImage(data: data) else { return }
-                DispatchQueue.main.async {
-                    guard let self = self, self.lightboxLoadToken == token else { return }
+            URLSession.shared.dataTask(with: request) { data, _, _ in
+                guard let data = data else { return }
+                Task { @MainActor in
+                    guard self.lightboxLoadToken == token,
+                          let full = NSImage(data: data) else { return }
                     self.lightboxImageView.image = full
                     self.lightboxNaturalSize = self.pixelSize(of: full)
                     self.layoutLightboxImage()
@@ -1027,10 +1027,10 @@ extension MainWindow {
             downloadAttachment(file)
         } else if let remoteURL = lightboxRemoteURL, let url = URL(string: remoteURL) {
             let name = url.lastPathComponent.isEmpty ? "image" : url.lastPathComponent
-            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            URLSession.shared.dataTask(with: url) { data, _, _ in
                 guard let data = data else { return }
-                DispatchQueue.main.async {
-                    self?.saveFileData(data, suggestedName: name)
+                Task { @MainActor in
+                    self.saveFileData(data, suggestedName: name)
                 }
             }.resume()
         }
@@ -1668,7 +1668,7 @@ extension MainWindow {
                 row?.setNeedsAppearanceUpdate()
                 hoverTimeLabel?.isHidden = !isHovered
                 toolbar?.isHidden = !isHovered
-                (row as? TimelineRowView)?.reactionAddChip?.isHidden = !isHovered
+                row?.reactionAddChip?.isHidden = !isHovered
             }
             return (row, totalRowH)
         }

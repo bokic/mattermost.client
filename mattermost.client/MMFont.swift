@@ -10,6 +10,7 @@
 import AppKit
 import CoreText
 
+@MainActor
 enum MMFont {
 
     /// Family used by the Mattermost web client (`font--open_sans` body class).

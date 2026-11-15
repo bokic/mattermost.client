@@ -15,10 +15,17 @@ enum DebugLog {
     
     /// Raw payload logging is off unless explicitly requested at launch
     /// (`--debug-ws`) or via the `debugWebSocketLogging` default.
-    static var isSensitiveLoggingEnabled: Bool = {
+    /// The flag is mutable for tests, so guard it with a lock instead of leaving
+    /// nonisolated shared mutable state behind.
+    private static let sensitiveLoggingState = OSAllocatedUnfairLock(initialState:
         CommandLine.arguments.contains("--debug-ws")
             || UserDefaults.standard.bool(forKey: "debugWebSocketLogging")
-    }()
+    )
+
+    static var isSensitiveLoggingEnabled: Bool {
+        get { sensitiveLoggingState.withLock { $0 } }
+        set { sensitiveLoggingState.withLock { $0 = newValue } }
+    }
     
     /// Logs message/user payloads only when frame debugging is enabled.
     static func logSensitive(_ message: @autoclosure () -> String) {
@@ -296,6 +303,10 @@ struct LoginWebService: Codable {
 
 typealias webservice = WebService
 
+/// All REST and WebSocket state (`mToken`, the socket task, ping/reconnect
+/// timers and event callbacks) is main-actor isolated. Network work still runs
+/// off the main thread inside URLSession; callbacks hop back explicitly.
+@MainActor
 final class WebService: NSObject {
     var mHost: String = ""
     var mPort: UInt16 = 0
@@ -1118,11 +1129,12 @@ final class WebService: NSObject {
         var request = URLRequest(url: url)
         request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
         
-        webSocketTask = URLSession.shared.webSocketTask(with: request)
-        webSocketTask?.resume()
+        let task = URLSession.shared.webSocketTask(with: request)
+        webSocketTask = task
+        task.resume()
         notifySocketState(false, "Connecting to Mattermost…")
         
-        receiveWebSocketMessage()
+        receiveWebSocketMessage(from: task)
         sendWebSocketAuthentication(token: mToken)
         startPingTimer()
     }
@@ -1138,11 +1150,12 @@ final class WebService: NSObject {
     
     private func startPingTimer() {
         stopPingTimer()
-        DispatchQueue.main.async { [weak self] in
-            self?.pingTimer = Timer.scheduledTimer(withTimeInterval: 25.0, repeats: true) { [weak self] _ in
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 25.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
                 guard let self = self, let task = self.webSocketTask, task.state == .running else { return }
                 task.sendPing { [weak self] error in
-                    if let error = error {
+                    guard let error = error else { return }
+                    Task { @MainActor in
                         self?.logger.error("WebSocket ping failed: \(error.localizedDescription)")
                         self?.scheduleReconnect()
                     }
@@ -1167,10 +1180,11 @@ final class WebService: NSObject {
         reconnectAttempts += 1
         DebugLog.log("WS RECONNECT in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempts))")
         
-        DispatchQueue.main.async { [weak self] in
-            self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                self?.reconnectTimer = nil
-                self?.connectWebSocket()
+        reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.reconnectTimer = nil
+                self.connectWebSocket()
             }
         }
     }
@@ -1234,38 +1248,50 @@ final class WebService: NSObject {
         sendWebSocketMessage(action: "authentication_challenge", data: ["token": token])
     }
     
-    private func receiveWebSocketMessage() {
-        webSocketTask?.receive { [weak self] result in
-            guard let self = self else { return }
-            
+    private nonisolated func receiveWebSocketMessage(from task: URLSessionWebSocketTask) {
+        task.receive { result in
+            // URLSession delivers this on a background queue, so hand the
+            // Sendable text/error back to the main actor before touching state.
             switch result {
             case .failure(let error):
-                DebugLog.log("WS RECV FAILURE: \(error.localizedDescription)")
-                self.logger.error("WebSocket receive error: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    self.onWebSocketDisconnected?(error)
+                Task { @MainActor in
+                    self.handleWebSocketFailure(error, task: task)
                 }
-                self.notifySocketState(false, "Reconnecting to Mattermost…")
-                self.scheduleReconnect()
             case .success(let message):
+                let text: String?
                 switch message {
-                case .string(let text):
-                    DebugLog.logSensitive("WS RECV: \(text)")
-                    self.handleIncomingWebSocketMessage(text)
+                case .string(let value):
+                    text = value
                 case .data(let data):
-                    if let text = String(data: data, encoding: .utf8) {
-                        DebugLog.logSensitive("WS RECV: \(text)")
-                        self.handleIncomingWebSocketMessage(text)
-                    }
+                    text = String(data: data, encoding: .utf8)
                 @unknown default:
-                    break
+                    text = nil
                 }
-                
-                if self.webSocketTask != nil {
-                    self.receiveWebSocketMessage()
+                Task { @MainActor in
+                    self.handleWebSocketText(text, task: task)
                 }
             }
         }
+    }
+
+    private func handleWebSocketText(_ text: String?, task: URLSessionWebSocketTask) {
+        guard task === webSocketTask else { return }
+        if let text = text {
+            DebugLog.logSensitive("WS RECV: \(text)")
+            handleIncomingWebSocketMessage(text)
+        }
+        if webSocketTask != nil {
+            receiveWebSocketMessage(from: task)
+        }
+    }
+
+    private func handleWebSocketFailure(_ error: Error, task: URLSessionWebSocketTask) {
+        guard task === webSocketTask else { return }
+        DebugLog.log("WS RECV FAILURE: \(error.localizedDescription)")
+        logger.error("WebSocket receive error: \(error.localizedDescription)")
+        onWebSocketDisconnected?(error)
+        notifySocketState(false, "Reconnecting to Mattermost…")
+        scheduleReconnect()
     }
     
     func parseWebSocketMessage(_ text: String) -> (didConnect: Bool, event: MMWebSocketEvent?) {
@@ -1399,43 +1425,40 @@ final class WebService: NSObject {
             DebugLog.log("WS UNPARSED MSG: \(text)")
         }
         
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            if didConnect {
-                self.reconnectAttempts = 0
-                self.notifySocketState(true, "Connected")
-                self.onWebSocketConnected?()
-                self.requestStatuses()
-            }
-            if let event = parsedEvent {
-                self.onWebSocketEvent?(event)
-                switch event {
-                case .hello:
-                    break
-                case .posted(let post, let senderName, _, _, _):
-                    self.onPostReceived?(post, senderName)
-                case .statusChange(let userId, let status):
-                    self.onStatusChanged?(userId, status)
-                case .userStatuses(let statuses):
-                    self.onMultipleStatusesReceived?(statuses)
-                    for (userId, status) in statuses {
-                        self.onStatusChanged?(userId, status)
-                    }
-                case .typing(let userId, let channelId, let parentId):
-                    self.onUserTyping?(userId, channelId, parentId)
-                case .updateTeam(let team):
-                    self.onTeamUpdated?(team)
-                case .addedToTeam, .leaveTeam:
-                    self.onUserTeamsChanged?()
-                case .sidebarCategoriesUpdated:
-                    self.onSidebarCategoriesUpdated?()
-                case .reactionChanged(let postId):
-                    self.onReactionChanged?(postId)
-                case .other:
-                    break
-                }
-            }
-            self.onWebSocketMessage?(text)
+        if didConnect {
+            reconnectAttempts = 0
+            notifySocketState(true, "Connected")
+            onWebSocketConnected?()
+            requestStatuses()
         }
+        if let event = parsedEvent {
+            onWebSocketEvent?(event)
+            switch event {
+            case .hello:
+                break
+            case .posted(let post, let senderName, _, _, _):
+                onPostReceived?(post, senderName)
+            case .statusChange(let userId, let status):
+                onStatusChanged?(userId, status)
+            case .userStatuses(let statuses):
+                onMultipleStatusesReceived?(statuses)
+                for (userId, status) in statuses {
+                    onStatusChanged?(userId, status)
+                }
+            case .typing(let userId, let channelId, let parentId):
+                onUserTyping?(userId, channelId, parentId)
+            case .updateTeam(let team):
+                onTeamUpdated?(team)
+            case .addedToTeam, .leaveTeam:
+                onUserTeamsChanged?()
+            case .sidebarCategoriesUpdated:
+                onSidebarCategoriesUpdated?()
+            case .reactionChanged(let postId):
+                onReactionChanged?(postId)
+            case .other:
+                break
+            }
+        }
+        onWebSocketMessage?(text)
     }
 }

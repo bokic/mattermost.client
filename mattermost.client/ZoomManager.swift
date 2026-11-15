@@ -7,6 +7,7 @@
 
 import Cocoa
 
+@MainActor
 final class ZoomManager {
     static let shared = ZoomManager()
     

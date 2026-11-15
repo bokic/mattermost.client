@@ -9,6 +9,7 @@
 
 import AppKit
 
+@MainActor
 enum Theme {
     static var shared: MMTheme { ThemeManager.shared.theme }
 }
@@ -348,6 +349,7 @@ struct MMTheme {
     }
 }
 
+@MainActor
 final class ThemeManager {
     static let shared = ThemeManager()
 

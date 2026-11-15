@@ -8,6 +8,7 @@ import XCTest
 @testable import mattermost_client
 #endif
 
+@MainActor
 final class KeychainHelperTests: XCTestCase {
 
     /// Debug builds must never touch the Keychain: the app is ad-hoc signed during

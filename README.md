@@ -61,6 +61,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 
 - **Operating System**: macOS 14.0 or newer (the app and tests build against a 14.0 deployment target)
 - **Development Tools**: Xcode 16.0+ with Command Line Tools
+- **Swift**: Swift 6 language mode with complete strict-concurrency checking
 - **Mattermost Server**: Compatible with Mattermost Server v7.0+ (REST API v4 and WebSocket v4)
 
 ---
@@ -119,6 +120,9 @@ Build a Release configuration and create a standalone `.dmg` installer:
 - `MainWindowSupport.swift` holds shared custom views, drag-and-drop helpers and the emoji catalog.
 - `WindowZoomController` owns app-level zoom for every window (bounds scaling, resize/zoom
   observers, shortcuts and HUD), with the coordinate-space model documented in the file.
+- `WebService` is `@MainActor`: token, socket task, timers and callbacks are main-actor isolated,
+  while URLSession performs network I/O off the main thread and hops back explicitly. The project
+  builds in Swift 6 language mode with complete concurrency checking.
 
 ## Project Structure
 

@@ -423,8 +423,24 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     layout points map to `zoomFactor` screen points. Layout code consumes `bounds.size`.
   - Verified at 125% zoom: the full workspace reflows correctly, then reset to 100%. Build and all
     27 tests pass.
-- [ ] **Actor-isolate `WebService`** (`mToken`, `webSocketTask`, reconnect timer) and enable Swift 6
-  strict concurrency. — `M`
+- [x] **Actor-isolate `WebService` and enable Swift 6 strict concurrency** — `M`
+  - `WebService` is now `@MainActor`: the bearer token, host/port, socket task, sequence counter,
+    ping/reconnect timers, connection flag and all event callbacks are main-actor isolated.
+    URLSession still performs network I/O off the main thread; receive/ping callbacks hop back with
+    `Task { @MainActor in … }` and the socket receive loop is `nonisolated` while taking the task as a
+    parameter, so no non-Sendable WebService state crosses a concurrency boundary. Stale callbacks
+    are ignored by comparing the task identity.
+  - Marked the remaining UI singletons/helpers `@MainActor` (`AppDelegate`, `ZoomManager`,
+    `ZoomHUD`, `WindowZoomController`, `Theme`/`ThemeManager`, `MMFont`) and used
+    `MainActor.assumeIsolated` inside main-run-loop `Timer` callbacks. `WindowZoomController`'s
+    observer tokens are `nonisolated(unsafe)` so `deinit` can release them.
+  - `DebugLog.isSensitiveLoggingEnabled` is now lock-protected (`OSAllocatedUnfairLock`) instead of
+    nonisolated mutable global state, so tests can still flip it.
+  - Enabled Swift 6 language mode and `SWIFT_STRICT_CONCURRENCY = complete` for both targets in the
+    Xcode project, and marked the XCTest classes `@MainActor`. A clean build now has zero
+    concurrency warnings or errors.
+  - Verified against the live server: login/session restore, workspace render, WebSocket connect and
+    a realtime post all work; all 27 tests pass.
 - [ ] **Inject `WebService`** instead of repeated `NSApp.delegate as? AppDelegate` lookups. — `M`
 - [ ] **Remove dead/legacy code**: hidden `treeView` + `sidebarTopBorder`, hidden `entryView`,
   `appendRealtimePost`, `dateSep1/2*` views, `sysAuthorLabelRef`/`usr*Ref` leftovers. — `S`

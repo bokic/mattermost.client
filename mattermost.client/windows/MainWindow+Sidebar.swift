@@ -749,7 +749,7 @@ extension MainWindow {
         if let chevImg = NSImage(systemSymbolName: symbolName, accessibilityDescription: sidebarCategories[idx].titleLabel.stringValue) {
             sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
         }
-        if let contentView = contentView {
+        if contentView != nil {
             layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         }
     }

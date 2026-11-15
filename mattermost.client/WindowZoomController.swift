@@ -19,13 +19,16 @@
 
 import AppKit
 
+@MainActor
 final class WindowZoomController {
     private weak var window: NSWindow?
     private let onLayout: (() -> Void)?
     private let showsHUD: Bool
 
-    private var resizeObserver: NSObjectProtocol?
-    private var zoomObserver: NSObjectProtocol?
+    // Observer tokens must be released from `deinit`, which is not isolated, so
+    // they are nonisolated while all other access stays on the main actor.
+    nonisolated(unsafe) private var resizeObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var zoomObserver: NSObjectProtocol?
 
     init(window: NSWindow, showsHUD: Bool = true, onLayout: (() -> Void)? = nil) {
         self.window = window
@@ -37,7 +40,9 @@ final class WindowZoomController {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            self?.applyCurrentZoom()
+            MainActor.assumeIsolated {
+                self?.applyCurrentZoom()
+            }
         }
 
         zoomObserver = NotificationCenter.default.addObserver(
@@ -45,7 +50,9 @@ final class WindowZoomController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.applyCurrentZoom(showHUD: true)
+            MainActor.assumeIsolated {
+                self?.applyCurrentZoom(showHUD: true)
+            }
         }
     }
 
@@ -53,7 +60,7 @@ final class WindowZoomController {
         stop()
     }
 
-    func stop() {
+    nonisolated func stop() {
         if let resizeObserver = resizeObserver {
             NotificationCenter.default.removeObserver(resizeObserver)
             self.resizeObserver = nil

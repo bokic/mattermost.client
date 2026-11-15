@@ -399,7 +399,7 @@ extension MainWindow {
         if isSearchPopoverOpen { setSearchPopoverOpen(false); return true }
         if !searchResultsPanel.isHidden { closeSearchResults(); return true }
         if isRightPanelVisible { closeRightPanel(); return true }
-        if editingPostId != nil { cancelEditing(); return true }
+        if editingPostId != nil { _ = cancelEditing(); return true }
         return false
     }
 

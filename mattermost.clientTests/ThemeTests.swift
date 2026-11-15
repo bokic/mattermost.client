@@ -9,6 +9,7 @@ import XCTest
 @testable import mattermost_client
 #endif
 
+@MainActor
 final class ThemeTests: XCTestCase {
 
     private func components(_ color: NSColor) -> (CGFloat, CGFloat, CGFloat) {

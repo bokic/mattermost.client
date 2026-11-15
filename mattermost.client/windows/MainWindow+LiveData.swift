@@ -160,7 +160,9 @@ extension MainWindow {
 
         statusPollingTimer?.invalidate()
         statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
-            self?.refreshUserStatuses()
+            MainActor.assumeIsolated {
+                self?.refreshUserStatuses()
+            }
         }
 
         guard ws.isLogged() else { return }

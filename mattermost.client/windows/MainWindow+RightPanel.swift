@@ -195,7 +195,8 @@ extension MainWindow {
             }
             self.threadItems = threads
             let authorIds = threads.compactMap { $0.post?.user_id }
-            self.hydrateUsers(authorIds) {
+            self.hydrateUsers(authorIds) { [weak self] in
+                guard let self = self else { return }
                 let rows = threads.compactMap { thread -> RightPanelRow? in
                     guard let post = thread.post else { return nil }
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
@@ -390,7 +391,8 @@ extension MainWindow {
                 return
             }
             let posts = list.order.compactMap { list.posts[$0] }
-            self.hydrateUsers(posts.map { $0.user_id }) {
+            self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
+                guard let self = self else { return }
                 let dateFormatter = Self.localizedDateTimeFormatter
                 let rows = posts.map { post -> RightPanelRow in
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
@@ -502,7 +504,7 @@ extension MainWindow {
                 thumb.addSubview(imageView)
                 card.addSubview(thumb)
                 if let ws = (NSApp.delegate as? AppDelegate)?.webService {
-                    Task { @MainActor [weak imageView, weak thumb] in
+                    Task { @MainActor [weak imageView] in
                         if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
                            let image = NSImage(data: data) {
                             imageView?.image = image
@@ -571,7 +573,8 @@ extension MainWindow {
                 return
             }
             let posts = list.order.compactMap { list.posts[$0] }
-            self.hydrateUsers(posts.map { $0.user_id }) {
+            self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
+                guard let self = self else { return }
                 let dateFormatter = Self.localizedDateTimeFormatter
                 let rows = posts.map { post -> RightPanelRow in
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
@@ -612,7 +615,8 @@ extension MainWindow {
                 return
             }
             let posts = list.order.compactMap { list.posts[$0] }
-            self.hydrateUsers(posts.map { $0.user_id }) {
+            self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
+                guard let self = self else { return }
                 let dateFormatter = Self.localizedDateTimeFormatter
                 let rows = posts.map { post -> RightPanelRow in
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
