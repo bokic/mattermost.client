@@ -4906,7 +4906,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             let host = (url.host ?? "").lowercased()
             let path = url.path.lowercased()
             if host.contains("giphy.com") || host.contains("gph.is") { return true }
-            if path.hasSuffix(".gif") || path.hasSuffix(".webp") { return true }
+            let imageExtensions = [".gif", ".webp", ".png", ".jpg", ".jpeg", ".bmp"]
+            if imageExtensions.contains(where: { path.hasSuffix($0) }) { return true }
             return false
         }
 
@@ -5601,6 +5602,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        if let url = link as? URL, url.scheme == "mattermost-channel" {
+            let name = (url.host ?? "").lowercased()
+            if let channel = channelsByName[name] ?? channelsByName[name.replacingOccurrences(of: "-", with: " ")] {
+                openChannel(withId: channel.id)
+                return true
+            }
+            return true
+        }
         let rawURL: URL?
         if let url = link as? URL {
             rawURL = url
@@ -5671,6 +5680,62 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
 
     private func formattedMessage(_ message: String, font: NSFont, color: NSColor) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        var codeRanges: [NSRange] = []
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        let codeColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+        
+        // Render fenced code blocks verbatim; everything else goes through the
+        // inline Markdown pipeline.
+        for segment in splitCodeBlocks(message) {
+            if segment.isCode {
+                let start = result.length
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedSystemFont(ofSize: max(11, font.pointSize - 0.5), weight: .regular),
+                    .foregroundColor: color,
+                    .backgroundColor: codeColor,
+                    .paragraphStyle: paragraphStyle
+                ]
+                result.append(NSAttributedString(string: segment.text, attributes: attrs))
+                codeRanges.append(NSRange(location: start, length: result.length - start))
+            } else {
+                result.append(inlineMarkdown(segment.text, font: font, color: color))
+            }
+        }
+        
+        applyInlineEnhancements(to: result, codeRanges: codeRanges, font: font)
+        return result
+    }
+    
+    /// Splits a message into plain-text and fenced-code segments.
+    private func splitCodeBlocks(_ message: String) -> [(text: String, isCode: Bool)] {
+        var segments: [(String, Bool)] = []
+        var buffer = ""
+        var inCode = false
+        for line in message.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                if inCode {
+                    segments.append((buffer, true))
+                    buffer = ""
+                    inCode = false
+                } else {
+                    if !buffer.isEmpty { segments.append((buffer, false)) }
+                    buffer = ""
+                    inCode = true
+                }
+                continue
+            }
+            buffer += line + "\n"
+        }
+        if !buffer.isEmpty {
+            let trimmed = buffer.trimmingCharacters(in: .newlines)
+            if !trimmed.isEmpty { segments.append((trimmed, inCode)) }
+        }
+        return segments
+    }
+    
+    private func inlineMarkdown(_ message: String, font: NSFont, color: NSColor) -> NSAttributedString {
         let processedMessage = preprocessMarkdown(message)
         var options = AttributedString.MarkdownParsingOptions()
         options.interpretedSyntax = .inlineOnlyPreservingWhitespace
@@ -5703,6 +5768,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 .paragraphStyle: paragraphStyle
             ]
 
+            if isCode {
+                attrs[.backgroundColor] = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            }
+
             if intent.contains(.strikethrough) {
                 attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             }
@@ -5716,6 +5785,53 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         }
 
         return result
+    }
+    
+    /// Styles @mentions and ~channel/#channel links, and expands :emoji: shortcodes.
+    private func applyInlineEnhancements(to result: NSMutableAttributedString, codeRanges: [NSRange], font: NSFont) {
+        let brandBlue = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        let mentionBg = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.10)
+        let string = result.string as NSString
+        let fullRange = NSRange(location: 0, length: string.length)
+        
+        func isCode(_ range: NSRange) -> Bool {
+            codeRanges.contains { NSIntersectionRange($0, range).length > 0 }
+        }
+        
+        // @mentions
+        if let regex = try? NSRegularExpression(pattern: #"(?<![\w@])@([A-Za-z0-9._-]+)"#) {
+            for match in regex.matches(in: result.string, options: [], range: fullRange) where !isCode(match.range) {
+                result.addAttributes([
+                    .foregroundColor: brandBlue,
+                    .backgroundColor: mentionBg
+                ], range: match.range)
+            }
+        }
+        
+        // ~channel and #channel links
+        if let regex = try? NSRegularExpression(pattern: #"(?<![\w])[~#]([A-Za-z0-9][A-Za-z0-9_-]+)"#) {
+            for match in regex.matches(in: result.string, options: [], range: fullRange) where !isCode(match.range) {
+                let name = string.substring(with: match.range(at: 1)).lowercased()
+                guard channelsByName[name] != nil || channelsByName[name.replacingOccurrences(of: "-", with: " ")] != nil else { continue }
+                result.addAttributes([
+                    .foregroundColor: brandBlue,
+                    .link: URL(string: "mattermost-channel://\(name)") as Any,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ], range: match.range)
+            }
+        }
+        
+        // :emoji: shortcodes (replacement changes lengths, so run last and backwards)
+        if let regex = try? NSRegularExpression(pattern: #":[a-zA-Z0-9_+\-]+:"#) {
+            let matches = regex.matches(in: result.string, options: [], range: fullRange)
+            for match in matches.reversed() where !isCode(match.range) {
+                let token = (result.string as NSString).substring(with: match.range)
+                let name = String(token.dropFirst().dropLast())
+                let glyph = emojiGlyph(for: name)
+                guard glyph != ":" + name + ":" else { continue }
+                result.replaceCharacters(in: match.range, with: glyph)
+            }
+        }
     }
 
     private func resolveFont(from base: NSFont, isBold: Bool, isItalic: Bool, isCode: Bool) -> NSFont {

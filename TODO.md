@@ -138,10 +138,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Where: `rebuildTimelineContent` (≈3827) fabricates "sarah.connor" posts when not logged in.
   - Done when: demo content is behind an explicit `--demo` flag or removed.
 
-- [ ] **Message rendering gaps** — `M`
-  - Where: `formattedMessage` handles bold/italic/strike/link/quote/lists; no code blocks with
-    syntax styling, inline images, `@mentions`, `#channel` links, emoji shortcodes, or tables.
-  - Done when: these render like the web client and links open in the default browser.
+- [x] **Message rendering gaps** — `M`
+  - Done: fenced code blocks and inline code render monospaced on a tinted background; `@mentions`
+    get the blue highlight; `~channel`/`#channel` links are styled and open the channel in-app;
+    `:emoji:` shortcodes expand to glyphs; Markdown images (png/jpg/jpeg/gif/webp/bmp and Giphy) are
+    extracted and rendered as inline images. External links still open in the default browser.
+  - Remaining: Markdown tables and syntax highlighting inside code blocks.
 
 - [ ] **WebSocket reconnect is a fixed 3 s retry** — `S`  
   _Progress: exponential backoff with jitter (1→30 s), reset on connect, and immediate reconnect on `NSWorkspace.didWakeNotification`. Still missing a visible connection state._
