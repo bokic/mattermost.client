@@ -112,10 +112,15 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Remaining: "mark all as read" (`PUT /users/{id}/teams/{team}/read`), collapsing the divider once
     scrolled past, and mute-based suppression.
 
-- [ ] **Post model cannot represent attachments, reactions, pinned posts, edits or deletes** — `M`
-  - Where: `MMPost` (`webservice.swift:118`) only decodes `message` + ids; no `metadata.files`,
-    `metadata.reactions`, `props`, `is_pinned` handling beyond decoding.
-  - Done when: files/reactions/edited/deleted states render and survive decoding tests.
+- [x] **Post model cannot represent attachments, reactions, pinned posts, edits or deletes** — `M`
+  - Done: `MMPost` decodes `metadata.files`/`metadata.reactions` and `file_ids`. The timeline renders
+    image previews (`/files/{id}/preview`) and file chips (name + size, click opens the download),
+    grouped reaction chips with shortcode→glyph mapping, a gold pin on pinned posts, the ✎ Edited
+    indicator, and a "This message was deleted." tombstone for `delete_at > 0`.
+  - Also fixed consecutive grouping to break after five minutes, and attachments/reactions on
+    grouped (consecutive) rows.
+  - Remaining: interactive reactions (add/remove), file thumbnails beyond the preview endpoint, and
+    `props`-driven custom attributes.
 
 - [ ] **Custom status is inert; DND expiry is not refreshed** — `S`
   - Where: status menu "Set custom status" row only closes the menu; `dnd_end_time` is sent but not

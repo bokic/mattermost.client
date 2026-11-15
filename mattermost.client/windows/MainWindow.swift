@@ -4904,6 +4904,157 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         attributedString.append(NSAttributedString(string: " Edited", attributes: tooltipAttrs))
     }
 
+    /// Draws reaction chips starting at `x` and returns the consumed height.
+    @discardableResult
+    private func addReactionChips(for post: MMPost, to row: NSView, x: CGFloat, y: CGFloat) -> CGFloat {
+        let groups = groupedReactions(post)
+        guard !groups.isEmpty else { return 0 }
+        var chipX = x
+        for (emoji, count) in groups {
+            let chip = RoundedEdgePanel()
+            chip.cornerRadius = 12
+            chip.color = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+            let glyph = emojiGlyph(for: emoji)
+            let text = count > 1 ? "\(glyph) \(count)" : glyph
+            let chipLabel = NSTextField(labelWithString: text)
+            chipLabel.font = MMFont.font(ofSize: 13)
+            chipLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.9)
+            chipLabel.alignment = .center
+            chipLabel.isEditable = false
+            chipLabel.isSelectable = false
+            let textW = ceil((text as NSString).size(withAttributes: [.font: MMFont.font(ofSize: 13)]).width) + 18
+            chip.frame = NSRect(x: chipX, y: y, width: max(32, textW), height: 26)
+            chipLabel.frame = NSRect(x: 0, y: 5, width: max(32, textW), height: 16)
+            chip.addSubview(chipLabel)
+            row.addSubview(chip)
+            chipX += max(32, textW) + 6
+        }
+        return 34
+    }
+    
+    /// Maps common Mattermost emoji shortcodes to glyphs for reaction chips.
+    private func emojiGlyph(for name: String) -> String {
+        let map: [String: String] = [
+            "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎", "-1": "👎",
+            "smile": "😄", "grinning": "😀", "joy": "😂", "heart": "❤️",
+            "red_heart": "❤️", "tada": "🎉", "eyes": "👀", "fire": "🔥",
+            "wave": "👋", "clap": "👏", "pray": "🙏", "rocket": "🚀",
+            "white_check_mark": "✅", "x": "❌", "thinking_face": "🤔",
+            "cry": "😢", "sob": "😭", "sunglasses": "😎", "100": "💯",
+            "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐"
+        ]
+        if let glyph = map[name.lowercased()] { return glyph }
+        // Already a unicode emoji?
+        if name.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) { return name }
+        return ":" + name + ":"
+    }
+    
+    private func groupedReactions(_ post: MMPost) -> [(String, Int)] {
+        let reactions = post.metadata?.reactions ?? []
+        var counts: [String: Int] = [:]
+        for reaction in reactions {
+            guard let name = reaction.emoji_name, !name.isEmpty else { continue }
+            counts[name, default: 0] += 1
+        }
+        return counts.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+    
+    private func createAttachmentView(_ file: MMFileInfo, maxWidth: CGFloat) -> (NSView, CGFloat) {
+        let isImage = (file.mime_type ?? "").hasPrefix("image/")
+        if isImage {
+            var displayWidth = min(maxWidth, 320)
+            var displayHeight: CGFloat = 160
+            if let w = file.width, let h = file.height, w > 0, h > 0 {
+                let ratio = CGFloat(w) / CGFloat(h)
+                displayHeight = min(220, displayWidth / ratio)
+                if displayHeight < 60 {
+                    displayHeight = 60
+                    displayWidth = min(maxWidth, displayHeight * ratio)
+                }
+            }
+            let container = RoundedEdgePanel()
+            container.cornerRadius = 8
+            container.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+            container.frame = NSRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
+            
+            let imageView = NSImageView()
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.imageAlignment = .alignLeft
+            imageView.frame = NSRect(x: 1, y: 1, width: displayWidth - 2, height: displayHeight - 2)
+            container.addSubview(imageView)
+            
+            container.onClick = { [weak self] in
+                self?.openAttachment(file)
+            }
+            container.onHoverChanged = { [weak container] isHovered in
+                container?.color = isHovered
+                    ? NSColor(red: 233 / 255, green: 235 / 255, blue: 239 / 255, alpha: 1.0)
+                    : NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                container?.setNeedsAppearanceUpdate()
+            }
+            
+            if let ws = (NSApp.delegate as? AppDelegate)?.webService {
+                Task { @MainActor [weak imageView] in
+                    if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
+                       let image = NSImage(data: data) {
+                        imageView?.image = image
+                    }
+                }
+            }
+            return (container, displayHeight)
+        }
+        
+        let height: CGFloat = 52
+        let container = RoundedEdgePanel()
+        container.cornerRadius = 6
+        container.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+        container.frame = NSRect(x: 0, y: 0, width: maxWidth, height: height)
+        
+        let icon = NSImageView()
+        if let image = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: "File") {
+            icon.image = image.withSymbolConfiguration(.init(pointSize: 16, weight: .regular))
+            icon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+        }
+        icon.frame = NSRect(x: 12, y: (height - 18) / 2, width: 18, height: 18)
+        container.addSubview(icon)
+        
+        let name = NSTextField(labelWithString: file.name ?? file.id)
+        name.font = MMFont.font(ofSize: 13, weight: .semibold)
+        name.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        name.lineBreakMode = .byTruncatingMiddle
+        name.isEditable = false
+        name.isSelectable = false
+        name.frame = NSRect(x: 38, y: 16, width: maxWidth - 50, height: 18)
+        container.addSubview(name)
+        
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        let sizeText = file.size.map { formatter.string(fromByteCount: $0) } ?? ""
+        let detail = NSTextField(labelWithString: sizeText)
+        detail.font = MMFont.font(ofSize: 11)
+        detail.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        detail.isEditable = false
+        detail.isSelectable = false
+        detail.frame = NSRect(x: 38, y: 4, width: maxWidth - 50, height: 14)
+        container.addSubview(detail)
+        
+        container.onClick = { [weak self] in
+            self?.openAttachment(file)
+        }
+        return (container, height)
+    }
+    
+    private func openAttachment(_ file: MMFileInfo) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        Task { @MainActor in
+            guard let data = try? await ws.fetchFileData(fileId: file.id) else { return }
+            let filename = file.name ?? file.id
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+            try? data.write(to: url)
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
     private func createPostRow(post: MMPost, width: CGFloat, timeStr: String, isConsecutive: Bool = false) -> (NSView, CGFloat) {
         let row = TimelineRowView()
         row.cornerRadius = 0
@@ -4921,10 +5072,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         // Parse message for text & Giphy GIF URLs
         let rawMessage = post.message.isEmpty ? (isSystem ? "System update" : "") : post.message
         let parsed = parseGiphyInMessage(rawMessage)
-        let bodyText = parsed.text
-        let gifURLs = parsed.gifURLs
+        let isDeleted = (post.delete_at ?? 0) > 0
+        let bodyText = isDeleted ? "This message was deleted." : parsed.text
+        let gifURLs = isDeleted ? [] : parsed.gifURLs
         let hasBodyText = !bodyText.isEmpty
-        let isEdited = (post.edit_at != nil && post.edit_at! > 0)
+        let isEdited = !isDeleted && (post.edit_at != nil && post.edit_at! > 0)
         let editDate = isEdited ? Date(timeIntervalSince1970: TimeInterval(post.edit_at!) / 1000.0) : nil
 
         let bodyFont = MMFont.font(ofSize: 14)
@@ -4932,7 +5084,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         let formattedBody: NSAttributedString
         if hasBodyText {
-            let bodyColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+            let bodyColor = isDeleted
+                ? NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 0.9)
+                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
             let mutable = NSMutableAttributedString(attributedString: formattedMessage(bodyText, font: bodyFont, color: bodyColor))
             if isEdited {
                 appendEditedIndicator(to: mutable, font: bodyFont, editDate: editDate)
@@ -5002,6 +5156,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 row.addSubview(giphyView)
                 contentY += gifH + 6
             }
+            
+            if !isDeleted {
+                for file in post.metadata?.files ?? [] {
+                    let (attachmentView, fileH) = createAttachmentView(file, maxWidth: bodyMaxW)
+                    attachmentView.frame.origin = CGPoint(x: 79, y: contentY)
+                    row.addSubview(attachmentView)
+                    contentY += fileH + 6
+                }
+            }
+            contentY += addReactionChips(for: post, to: row, x: 79, y: contentY)
 
             let totalRowH = max(24, contentY)
             row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
@@ -5046,9 +5210,20 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             gifViews.append((giphyView, gifH))
         }
 
+        var attachmentViews: [(NSView, CGFloat)] = []
+        if !isDeleted {
+            for file in post.metadata?.files ?? [] {
+                attachmentViews.append(createAttachmentView(file, maxWidth: bodyMaxW))
+            }
+        }
+        let reactionGroups = groupedReactions(post)
+        let reactionsHeight: CGFloat = reactionGroups.isEmpty ? 0 : 34
+        
         var stackHeight: CGFloat = 0
         if hasDisplayableText { stackHeight += bodyH + 3 }
         for (_, gifH) in gifViews { stackHeight += gifH + 6 }
+        for (_, fileH) in attachmentViews { stackHeight += fileH + 6 }
+        stackHeight += reactionsHeight
 
         let totalRowH = topPad + headerH + stackHeight + bottomPad
         row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
@@ -5181,6 +5356,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let timeH = max(17, ceil(timeSize.height))
         timeLabel.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - timeH) / 2, width: timeW, height: timeH)
         row.addSubview(timeLabel)
+        
+        if post.is_pinned == true {
+            let pinView = NSImageView()
+            if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned") {
+                pinView.image = pinImage.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+                pinView.contentTintColor = NSColor(red: 245 / 255, green: 171 / 255, blue: 0 / 255, alpha: 1.0)
+            }
+            pinView.frame = NSRect(x: timeLabel.frame.maxX + 6, y: headerTopY + 5, width: 13, height: 13)
+            row.addSubview(pinView)
+        }
 
         // Body + GIFs stacked below the header.
         var stackTop = headerTopY + headerH
@@ -5209,6 +5394,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             giphyView.frame.origin = CGPoint(x: contentX, y: stackTop)
             row.addSubview(giphyView)
             stackTop += gifH + 6
+        }
+        
+        for (attachmentView, fileH) in attachmentViews {
+            attachmentView.frame.origin = CGPoint(x: contentX, y: stackTop)
+            row.addSubview(attachmentView)
+            stackTop += fileH + 6
+        }
+        
+        if !reactionGroups.isEmpty {
+            _ = addReactionChips(for: post, to: row, x: contentX, y: stackTop)
+            stackTop += reactionsHeight
         }
 
         if !isSystem && !isBotUser {
@@ -5536,6 +5732,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         var lastDateStr: String? = nil
         var lastUserId: String? = nil
         var lastWasSystem = false
+        var lastPostTimestamp: Int64 = 0
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
             let dateStr = separatorString(for: postDate)
@@ -5557,7 +5754,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 currentY += 40
             }
             
-            let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId && !post.user_id.isEmpty)
+            // Group with the previous post only when it is the same author and
+            // within five minutes (matching the web client).
+            let withinGroupingWindow = (post.create_at - lastPostTimestamp) <= 5 * 60 * 1000
+            let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId
+                && !post.user_id.isEmpty && withinGroupingWindow)
             let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: timeFmt.string(from: postDate), isConsecutive: isConsecutive)
             rowView.frame.origin.y = currentY
             timelineDocView.addSubview(rowView)
@@ -5565,6 +5766,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             
             lastUserId = post.user_id
             lastWasSystem = isSystem
+            lastPostTimestamp = post.create_at
         }
         
         currentY += 16

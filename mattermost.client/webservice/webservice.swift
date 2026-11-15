@@ -115,6 +115,28 @@ struct MMSidebarCategoriesResponse: Codable {
     let order: [String]
 }
 
+struct MMFileInfo: Codable {
+    let id: String
+    let name: String?
+    let `extension`: String?
+    let mime_type: String?
+    let size: Int64?
+    let width: Int?
+    let height: Int?
+}
+
+struct MMReaction: Codable {
+    let user_id: String?
+    let post_id: String?
+    let emoji_name: String?
+    let create_at: Int64?
+}
+
+struct MMPostMetadata: Codable {
+    let files: [MMFileInfo]?
+    let reactions: [MMReaction]?
+}
+
 struct MMPost: Codable {
     let id: String
     let create_at: Int64
@@ -128,6 +150,8 @@ struct MMPost: Codable {
     let original_id: String?
     let message: String
     let type: String?
+    var file_ids: [String]? = nil
+    var metadata: MMPostMetadata? = nil
 }
 
 struct MMThreadParticipant: Decodable {
@@ -708,6 +732,18 @@ final class WebService: NSObject {
             body: ["channel_id": channelId, "collapsed_threads_supported": true]
         )
         return response.last_viewed_at_times?[channelId]
+    }
+    
+    func fetchFileData(fileId: String, preview: Bool = false) async throws -> Data {
+        let path = preview ? "/api/v4/files/\(fileId)/preview" : "/api/v4/files/\(fileId)"
+        guard let url = buildURL(path: path) else { throw WebServiceError.invalidHostname }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
+        }
+        return data
     }
     
     func fetchPublicChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
