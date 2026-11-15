@@ -2044,35 +2044,118 @@ extension MainWindow {
         }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let channels = try? await ws.fetchPublicChannels(teamId: team.id) else {
-                guard self.rightPanelMode == .browse else { return }
-                self.renderRightPanel(empty: "Could not load channels", rows: [])
+
+            // Discover channels: public channels + discoverable private channels + known team channels
+            let publicList = (try? await ws.fetchPublicChannels(teamId: team.id)) ?? []
+            let privateList = (try? await ws.fetchPrivateChannels(teamId: team.id)) ?? []
+            let localTeamChannels = self.channelsById.values.filter {
+                ($0.team_id == team.id || ($0.team_id ?? "").isEmpty) && ($0.type == "O" || $0.type == "P")
+            }
+
+            var seenIds = Set<String>()
+            var allDiscovered: [MMChannel] = []
+            for ch in (publicList + privateList + Array(localTeamChannels)) {
+                guard (ch.type == "O" || ch.type == "P"), !seenIds.contains(ch.id) else { continue }
+                seenIds.insert(ch.id)
+                allDiscovered.append(ch)
+            }
+
+            guard self.rightPanelMode == .browse else { return }
+            if allDiscovered.isEmpty {
+                self.renderRightPanel(empty: "No channels found", rows: [])
                 return
             }
-            guard self.rightPanelMode == .browse else { return }
+
             let joinedIds = Set(self.channelsById.keys)
-            let rows = channels
-                .filter { $0.type == "O" }
-                .sorted { $0.display_name.localizedCaseInsensitiveCompare($1.display_name) == .orderedAscending }
-                .map { channel -> RightPanelRow in
-                    let isJoined = joinedIds.contains(channel.id)
-                    let subtitle = (channel.purpose ?? channel.header ?? "").isEmpty
-                        ? "Public channel" : (channel.purpose ?? channel.header ?? "")
-                    return RightPanelRow(
-                        title: channel.display_name,
-                        subtitle: subtitle,
-                        meta: isJoined ? "Joined" : "Click to join",
-                        action: { [weak self] in
-                            if isJoined {
-                                self?.openChannel(withId: channel.id)
-                                self?.closeRightPanel()
-                            } else {
-                                self?.joinChannel(channel)
-                            }
-                        }
-                    )
+            let sorted = allDiscovered.sorted {
+                $0.display_name.localizedCaseInsensitiveCompare($1.display_name) == .orderedAscending
+            }
+
+            let rows = sorted.map { channel -> RightPanelRow in
+                let isPrivate = channel.type == "P"
+                let isJoined = joinedIds.contains(channel.id)
+                let isPending = self.pendingJoinRequestChannelIds.contains(channel.id)
+
+                let desc = channel.purpose ?? channel.header ?? ""
+                let subtitle: String
+                if !desc.isEmpty {
+                    subtitle = "\(isPrivate ? "Private" : "Public") • \(desc)"
+                } else {
+                    subtitle = isPrivate ? "Private channel" : "Public channel"
                 }
-            self.renderRightPanel(empty: "No public channels", rows: rows)
+
+                let meta: String
+                let action: () -> Void
+                if isJoined {
+                    meta = "Joined"
+                    action = { [weak self] in
+                        self?.openChannel(withId: channel.id)
+                        self?.closeRightPanel()
+                    }
+                } else if !isPrivate {
+                    meta = "Click to join"
+                    action = { [weak self] in
+                        self?.joinChannel(channel)
+                    }
+                } else if isPending {
+                    meta = "Request pending"
+                    action = { [weak self] in
+                        self?.showInfoAlert(
+                            "Your request to join \(channel.display_name) has been sent and is awaiting administrator approval."
+                        )
+                    }
+                } else {
+                    meta = "Request to join"
+                    action = { [weak self] in
+                        self?.requestToJoinChannel(channel)
+                    }
+                }
+
+                let title = isPrivate ? "🔒 \(channel.display_name)" : channel.display_name
+                return RightPanelRow(
+                    title: title,
+                    subtitle: subtitle,
+                    meta: meta,
+                    action: action
+                )
+            }
+            self.renderRightPanel(empty: "No channels found", rows: rows)
+        }
+    }
+
+    func requestToJoinChannel(_ channel: MMChannel) {
+        guard let ws = webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+
+        pendingJoinRequestChannelIds.insert(channel.id)
+        loadBrowseChannels()
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.requestToJoinChannel(channelId: channel.id)
+                // If the user was actually joined immediately (e.g. admin or open join policy):
+                if let updatedChannels = try? await ws.fetchChannels(teamId: team.id),
+                   let joined = updatedChannels.first(where: { $0.id == channel.id }) {
+                    self.pendingJoinRequestChannelIds.remove(channel.id)
+                    self.channelsById[channel.id] = joined
+                    self.channelsByName[joined.name.lowercased()] = joined
+                    self.channelsByName[joined.display_name.lowercased()] = joined
+                    if let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                        self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
+                    }
+                    self.loadBrowseChannels()
+                    self.showInfoAlert("You have joined \(channel.display_name).")
+                } else {
+                    self.showInfoAlert("Your request to join \(channel.display_name) has been submitted to channel administrators.")
+                }
+            } catch {
+                self.pendingJoinRequestChannelIds.remove(channel.id)
+                self.loadBrowseChannels()
+                self.showInfoAlert("Could not submit request to join \(channel.display_name): \(error.localizedDescription)")
+            }
         }
     }
 
@@ -2093,7 +2176,7 @@ extension MainWindow {
                 }
                 self.loadBrowseChannels()
             } catch {
-                NSLog("Failed to join channel \(channel.name): \(error.localizedDescription)")
+                self.showInfoAlert("Could not join \(channel.display_name): \(error.localizedDescription)")
             }
         }
     }

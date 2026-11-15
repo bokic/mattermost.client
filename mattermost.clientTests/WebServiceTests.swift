@@ -561,5 +561,17 @@ final class WebServiceTests: XCTestCase {
 
         let searchUrl = ws.buildURL(path: "/api/v4/users/search")
         XCTAssertEqual(searchUrl?.absoluteString, "https://chat.example.com:8065/api/v4/users/search")
+
+        let privateChannelsUrl = ws.buildURL(path: "/api/v4/teams/team123/channels/private")
+        XCTAssertEqual(
+            privateChannelsUrl?.absoluteString,
+            "https://chat.example.com:8065/api/v4/teams/team123/channels/private"
+        )
+
+        let joinRequestUrl = ws.buildURL(path: "/api/v4/channels/ch123/join_request")
+        XCTAssertEqual(
+            joinRequestUrl?.absoluteString,
+            "https://chat.example.com:8065/api/v4/channels/ch123/join_request"
+        )
     }
 }

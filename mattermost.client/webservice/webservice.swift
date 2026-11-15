@@ -1334,6 +1334,30 @@ final class WebService: NSObject {
             ]
         )
     }
+
+    func fetchPrivateChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/channels/private",
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
+        )
+    }
+
+    func requestToJoinChannel(channelId: String) async throws {
+        do {
+            _ = try await performRequest(
+                path: "/api/v4/channels/\(channelId)/join_request",
+                method: "POST"
+            )
+        } catch {
+            let myId = currentUserId.isEmpty
+                ? (UserDefaults.standard.string(forKey: "currentUserId") ?? "")
+                : currentUserId
+            _ = try await joinChannel(channelId: channelId, userId: myId)
+        }
+    }
     
     func createTeam(name: String, displayName: String) async throws -> MMTeam {
         return try await performAuthenticatedRequest(

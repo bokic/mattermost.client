@@ -78,6 +78,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread, files, channelInfo }
     var rightPanelMode: RightPanelMode = .threads
     var isRightPanelVisible = false
+    var pendingJoinRequestChannelIds: Set<String> = []
     var threadItems: [MMThread] {
         get { viewModel.threadItems }
         set { viewModel.threadItems = newValue }

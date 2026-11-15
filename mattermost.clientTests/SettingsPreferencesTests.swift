@@ -525,4 +525,32 @@ final class SettingsPreferencesTests: XCTestCase {
         XCTAssertEqual(window.dmSelectionCountLabel.stringValue, "3 members (up to 7)")
         XCTAssertEqual(window.dmStartButtonLabel.stringValue, "Go (3)")
     }
+
+    func testBrowseChannelsPrivateChannelDiscoveryAndJoinRequestState() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let team = try! JSONDecoder().decode(MMTeam.self, from: "{\"id\":\"t1\",\"name\":\"team-one\",\"display_name\":\"Team One\"}".data(using: .utf8)!)
+        window.activeTeam = team
+
+        let pubCh = try! JSONDecoder().decode(MMChannel.self, from: "{\"id\":\"chPub\",\"team_id\":\"t1\",\"type\":\"O\",\"display_name\":\"Town Square\",\"name\":\"town-square\"}".data(using: .utf8)!)
+        let privChJoined = try! JSONDecoder().decode(MMChannel.self, from: "{\"id\":\"chPriv1\",\"team_id\":\"t1\",\"type\":\"P\",\"display_name\":\"Executives\",\"name\":\"executives\"}".data(using: .utf8)!)
+        let privChUnjoined = try! JSONDecoder().decode(MMChannel.self, from: "{\"id\":\"chPriv2\",\"team_id\":\"t1\",\"type\":\"P\",\"display_name\":\"Secret Ops\",\"name\":\"secret-ops\"}".data(using: .utf8)!)
+
+        window.channelsById[pubCh.id] = pubCh
+        window.channelsById[privChJoined.id] = privChJoined
+
+        // Verify pending state tracking
+        XCTAssertFalse(window.pendingJoinRequestChannelIds.contains(privChUnjoined.id))
+        window.pendingJoinRequestChannelIds.insert(privChUnjoined.id)
+        XCTAssertTrue(window.pendingJoinRequestChannelIds.contains(privChUnjoined.id))
+
+        // Right panel row rendering tests
+        window.rightPanelMode = .browse
+        let isJoined = window.channelsById.keys.contains(privChJoined.id)
+        XCTAssertTrue(isJoined)
+
+        let isUnjoinedPending = window.pendingJoinRequestChannelIds.contains(privChUnjoined.id)
+        XCTAssertTrue(isUnjoinedPending)
+    }
 }

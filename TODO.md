@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **169/169 pass** |
+| `./test.sh` | **170/170 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,11 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **Browse Channels only lists public channels** — `S`
-  - `loadBrowseChannels` filters `type == "O"` (`MainWindow+RightPanel.swift:688-724`), so
-    private channels are invisible and join requests are unsupported. Add private-channel
-    discovery (where the API allows) and a join-request flow.
 
 - [ ] **No team administration** — `M`
   - Only create/switch team exist (`MainWindow+Menus.swift:1199-1242`). There is no leave
