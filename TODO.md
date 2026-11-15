@@ -297,7 +297,23 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Added a Files button to the channel header and a Files item to the channel menu.
   - Verified against computed styles from the live web client and screenshots of the Files view at
     400pt and after resizing to 480pt; `rhsWidth` was persisted and restored. 22 tests pass.
-- [ ] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
+- [x] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
+  - Saved posts and Recent Mentions are server-backed RHS lists (`GET /users/{id}/posts/flagged`
+    and post search with `@username`). Both now jump to the exact post: the channel opens, context
+    is fetched with the `around={post_id}` pagination parameter when the post is outside the latest
+    page, and the row scrolls into view with a short blue highlight.
+  - Settings remains the gear panel with Reset zoom, Reconnect, Account/server details and Log out.
+  - Invite Members (sidebar row and welcome hero) sends a real team email invite through
+    `POST /teams/{team}/invite/email`, with email validation and success/error feedback.
+  - Browse Channels lists public team channels, marks joined channels, joins on click through
+    `POST /channels/{id}/members`, and refreshes the sidebar categories afterwards.
+  - Direct Message creation: the `+` in the DIRECT MESSAGES header now opens a searchable user
+    picker (`GET /users?in_team=…`); choosing a user creates or reuses the DM with
+    `POST /channels/direct`, adds the user to the directory, refreshes categories, and opens the
+    conversation. The picker closes on outside click, the anchor button, or `Esc`.
+  - Also fixed the welcome hero description to wrap instead of truncating long DM intros.
+  - Verified DM creation end-to-end against the live server (test1234) and the picker/search UI;
+    22 tests pass.
 - [ ] **Emoji picker** (server emoji list + recent) — `M`
 - [ ] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`
 - [ ] **Keyboard shortcuts**: ⌘K search, ⌘F in-channel search, `Esc` to close overlays, `↑` to edit

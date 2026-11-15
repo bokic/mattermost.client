@@ -540,6 +540,31 @@ final class WebService: NSObject {
     func fetchUserByUsername(_ username: String) async throws -> LoginWebService {
         return try await performAuthenticatedRequest(path: "/api/v4/users/username/\(username)")
     }
+
+    /// Team members used by the Direct Message picker.
+    func fetchTeamUsers(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [LoginWebService] {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users",
+            queryItems: [
+                URLQueryItem(name: "in_team", value: teamId),
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage)),
+                URLQueryItem(name: "active", value: "true")
+            ]
+        )
+    }
+
+    /// Creates (or returns) the direct channel between the current user and `userId`.
+    func createDirectChannel(userId: String) async throws -> MMChannel {
+        let myId = currentUserId.isEmpty
+            ? (UserDefaults.standard.string(forKey: "currentUserId") ?? "")
+            : currentUserId
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/channels/direct",
+            method: "POST",
+            body: [myId, userId]
+        )
+    }
     
     func fetchUserImage(userId: String) async throws -> Data {
         guard !userId.isEmpty else {
@@ -899,13 +924,16 @@ final class WebService: NSObject {
         return response.threads
     }
     
-    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60, before: String? = nil) async throws -> MMPostList {
+    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60, before: String? = nil, around: String? = nil) async throws -> MMPostList {
         var queryItems = [
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "per_page", value: String(perPage))
         ]
         if let before = before, !before.isEmpty {
             queryItems.append(URLQueryItem(name: "before", value: before))
+        }
+        if let around = around, !around.isEmpty {
+            queryItems.append(URLQueryItem(name: "around", value: around))
         }
         return try await performAuthenticatedRequest(
             path: "/api/v4/channels/\(channelId)/posts",

@@ -164,7 +164,7 @@ final class ComposerTextView: NSTextView {
     }
 }
 
-class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
+class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFieldDelegate {
     let mainPanel = RoundedEdgePanel()
     let chatPanel = RoundedEdgePanel()
     let chatEntryPanel = OutlinePanel()
@@ -338,6 +338,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let filesTabLabel = NSTextField(labelWithString: "Files")
     private var isSearchPopoverOpen = false
     private var isSearchFilesTabSelected = false
+
+    // Direct Message picker (opened from the + in the Direct Messages header)
+    let dmPickerPanel = RoundedEdgePanel()
+    let dmSearchField = NSSearchField()
+    let dmScroll = NSScrollView()
+    let dmDoc = TimelineFlippedView()
+    private var dmUsers: [LoginWebService] = []
+    private var isDMPickerOpen = false
+    private var dmAnchorFrame: NSRect = .zero
     
     // Help popup menu
     let helpMenu = RoundedEdgePanel()
@@ -446,6 +455,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private let timelineScrollView = TimelineScrollView()
     private let timelineDocView = TimelineFlippedView()
     private var currentChannelPosts: [MMPost] = []
+    private var pendingJumpPostId: String?
     private var lastTimelineWidth: CGFloat = 0
     let timelineHeroContainer = RoundedEdgePanel()
     let heroIllustrationCircle = RoundedEdgePanel()
@@ -2444,6 +2454,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
     
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == 53, isDMPickerOpen {
+            closeDMPicker()
+            return
+        }
         if event.type == .leftMouseDown || event.type == .rightMouseDown {
             if let contentView = contentView {
                 let point = contentView.convert(event.locationInWindow, from: nil)
@@ -2496,6 +2510,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                     if !filterMenu.frame.contains(mainPoint) && !filterChannelButton.frame.contains(mainPoint) {
                         setFilterMenuOpen(false)
                     }
+                }
+                if isDMPickerOpen && !dmPickerPanel.frame.contains(point) && !dmAnchorFrame.contains(point) {
+                    closeDMPicker()
                 }
             }
         }
@@ -2681,6 +2698,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             createSidebarItem(id: "invite-members", symbolName: "plus", title: "Invite Members", isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
         ]
         let dmCat = createSidebarCategory(id: "direct_messages", title: "DIRECT MESSAGES", showsAddButton: true, items: dmItems)
+        wireDMCategoryAddButton(dmCat)
         sidebarCategories.append(dmCat)
         
         updateSidebarSelectionAppearance()
@@ -3055,6 +3073,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 items: items,
                 isCollapsed: isCollapsed
             )
+            if cat.type == "direct_messages" {
+                wireDMCategoryAddButton(categoryView)
+            }
             sidebarCategories.append(categoryView)
         }
         
@@ -3908,6 +3929,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         heroDescriptionLabel.textColor = mutedText
         heroDescriptionLabel.alignment = .center
         heroDescriptionLabel.maximumNumberOfLines = 2
+        heroDescriptionLabel.lineBreakMode = .byWordWrapping
+        heroDescriptionLabel.cell?.wraps = true
+        heroDescriptionLabel.cell?.isScrollable = false
         heroDescriptionLabel.isEditable = false
         heroDescriptionLabel.isSelectable = false
         timelineHeroContainer.addSubview(heroDescriptionLabel)
@@ -4154,6 +4178,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         setupLightbox()
         setupNewMessagesPill()
         setupChannelMenu()
+        setupDMPicker()
         rebuildTimelineContent(scrollToBottom: true)
     }
     
@@ -4189,6 +4214,242 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         isChannelMenuOpen = false
     }
     
+    // MARK: - Direct Message picker
+
+    private func wireDMCategoryAddButton(_ category: SidebarCategoryView) {
+        category.addButton?.onClick = { [weak self, weak addButton = category.addButton] in
+            self?.toggleDMPicker(anchor: addButton)
+        }
+    }
+
+    private func setupDMPicker() {
+        let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        dmPickerPanel.color = .white
+        dmPickerPanel.cornerRadius = 8
+        dmPickerPanel.borderWidth = 1
+        dmPickerPanel.borderColor = dividerColor
+        dmPickerPanel.shadowColor = .black
+        dmPickerPanel.shadowOpacity = 0.18
+        dmPickerPanel.shadowRadius = 12
+        dmPickerPanel.shadowOffset = CGSize(width: 0, height: -4)
+        dmPickerPanel.isHidden = true
+        dmPickerPanel.appearance = NSAppearance(named: .aqua)
+        dmSearchField.appearance = NSAppearance(named: .aqua)
+
+        dmSearchField.placeholderString = "Search for a user"
+        dmSearchField.font = MMFont.font(ofSize: 13)
+        dmSearchField.delegate = self
+        dmSearchField.sendsSearchStringImmediately = true
+        dmPickerPanel.addSubview(dmSearchField)
+
+        dmScroll.drawsBackground = false
+        dmScroll.hasVerticalScroller = true
+        dmScroll.autohidesScrollers = true
+        dmScroll.documentView = dmDoc
+        dmPickerPanel.addSubview(dmScroll)
+
+        contentView?.addSubview(dmPickerPanel)
+    }
+
+    private func toggleDMPicker(anchor: NSView?) {
+        if isDMPickerOpen {
+            closeDMPicker()
+            return
+        }
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam, let contentView = contentView else {
+            showInfoAlert("Sign in to start a direct message.")
+            return
+        }
+
+        let anchorRect: NSRect
+        if let anchor = anchor {
+            anchorRect = anchor.convert(anchor.bounds, to: contentView)
+        } else {
+            anchorRect = NSRect(x: 280, y: contentView.bounds.midY, width: 1, height: 1)
+        }
+        dmAnchorFrame = anchorRect
+
+        let width: CGFloat = 300
+        let height = min(360, max(220, contentView.bounds.height - 140))
+        var x = anchorRect.maxX + 8
+        var y = anchorRect.midY - height / 2
+        if x + width > contentView.bounds.width - 8 {
+            x = max(8, anchorRect.minX - width - 8)
+        }
+        y = min(max(8, y), contentView.bounds.height - height - 8)
+        dmPickerPanel.frame = NSRect(x: x, y: y, width: width, height: height)
+        dmSearchField.frame = NSRect(x: 12, y: height - 46, width: width - 24, height: 26)
+        dmScroll.frame = NSRect(x: 0, y: 0, width: width, height: height - 58)
+        dmSearchField.stringValue = ""
+        dmPickerPanel.isHidden = false
+        contentView.addSubview(dmPickerPanel)
+        isDMPickerOpen = true
+
+        if dmUsers.isEmpty {
+            loadDMUsers()
+        } else {
+            renderDMUsers()
+        }
+        makeFirstResponder(dmSearchField)
+    }
+
+    private func closeDMPicker() {
+        dmPickerPanel.isHidden = true
+        isDMPickerOpen = false
+        dmSearchField.stringValue = ""
+    }
+
+    private func loadDMUsers() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let users = try? await ws.fetchTeamUsers(teamId: team.id) else {
+                self.dmUsers = []
+                self.renderDMUsers(empty: "Could not load users")
+                return
+            }
+            let myId = self.currentUser?.id ?? ws.currentUserId
+            for user in users {
+                self.usersById[user.id] = user
+                self.usersByUsername[user.username.lowercased()] = user
+                self.fetchAvatarIfNeeded(for: user.id)
+            }
+            self.dmUsers = users
+                .filter { $0.id != myId }
+                .sorted { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+            self.renderDMUsers()
+        }
+    }
+
+    private func renderDMUsers(empty: String = "No users found") {
+        let width = dmScroll.bounds.width
+        dmDoc.subviews.forEach { $0.removeFromSuperview() }
+
+        let query = dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = dmUsers.filter { user in
+            guard !query.isEmpty else { return true }
+            let haystack = [
+                user.username,
+                user.first_name ?? "",
+                user.last_name ?? "",
+                user.nickname ?? ""
+            ].joined(separator: " ").lowercased()
+            return haystack.contains(query)
+        }
+
+        var y: CGFloat = 6
+        if filtered.isEmpty {
+            let label = NSTextField(labelWithString: empty)
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 12, y: 18, width: max(0, width - 24), height: 20)
+            dmDoc.addSubview(label)
+            dmDoc.frame = NSRect(x: 0, y: 0, width: width, height: 60)
+            return
+        }
+
+        let palette: [NSColor] = [
+            NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0),
+            NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0),
+            NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
+            NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
+            NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
+            NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0)
+        ]
+
+        for user in filtered {
+            let row = RoundedEdgePanel()
+            row.cornerRadius = 4
+            row.color = .clear
+            row.frame = NSRect(x: 6, y: y, width: max(0, width - 12), height: 44)
+
+            let avatarPanel = RoundedEdgePanel()
+            avatarPanel.cornerRadius = 14
+            avatarPanel.clipContentToBounds = true
+            avatarPanel.frame = NSRect(x: 8, y: 8, width: 28, height: 28)
+            if let avatar = userAvatarsById[user.id] {
+                avatarPanel.color = .clear
+                let imageView = NSImageView(frame: NSRect(origin: .zero, size: avatarPanel.frame.size))
+                imageView.image = avatar
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                avatarPanel.addSubview(imageView)
+            } else {
+                avatarPanel.color = palette[abs(user.username.hashValue) % palette.count]
+                let initial = user.username.first.map { String($0).uppercased() } ?? "U"
+                let initialLabel = NSTextField(labelWithString: initial)
+                initialLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+                initialLabel.textColor = .white
+                initialLabel.alignment = .center
+                initialLabel.isEditable = false
+                initialLabel.isSelectable = false
+                initialLabel.frame = NSRect(x: 0, y: 5, width: 28, height: 18)
+                avatarPanel.addSubview(initialLabel)
+            }
+            row.addSubview(avatarPanel)
+
+            let name = NSTextField(labelWithString: user.username)
+            name.font = MMFont.font(ofSize: 13, weight: .semibold)
+            name.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+            name.isEditable = false
+            name.isSelectable = false
+            name.frame = NSRect(x: 44, y: 5, width: max(0, width - 70), height: 17)
+            row.addSubview(name)
+
+            let fullName = [user.first_name, user.last_name].compactMap { $0 }.joined(separator: " ")
+            if !fullName.isEmpty {
+                let subtitle = NSTextField(labelWithString: fullName)
+                subtitle.font = MMFont.font(ofSize: 11)
+                subtitle.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+                subtitle.isEditable = false
+                subtitle.isSelectable = false
+                subtitle.frame = NSRect(x: 44, y: 22, width: max(0, width - 70), height: 15)
+                row.addSubview(subtitle)
+            }
+
+            row.onHoverChanged = { [weak row] isHovered in
+                row?.color = isHovered
+                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    : .clear
+                row?.setNeedsAppearanceUpdate()
+            }
+            row.onClick = { [weak self] in
+                self?.startDirectMessage(with: user)
+            }
+            dmDoc.addSubview(row)
+            y += 48
+        }
+
+        dmDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y + 6, 1))
+    }
+
+    private func startDirectMessage(with user: LoginWebService) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let channel = try await ws.createDirectChannel(userId: user.id)
+                self.usersById[user.id] = user
+                self.channelsById[channel.id] = channel
+                self.channelsByName[channel.name.lowercased()] = channel
+                if let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
+                }
+                self.closeDMPicker()
+                self.selectedSidebarItemId = channel.id
+                self.updateSidebarSelectionAppearance()
+                self.loadChannelPosts(forSidebarItemId: channel.id)
+            } catch {
+                self.showInfoAlert("Could not start a direct message: \(error.localizedDescription)")
+            }
+        }
+    }
+
     private func showChannelMenu() {
         guard !activeChannelId.isEmpty, let channel = channelsById[activeChannelId] else { return }
         let channelName = channelDisplayName(for: channel)
@@ -4674,8 +4935,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                         subtitle: [author, channelName].filter { !$0.isEmpty }.joined(separator: " · "),
                         meta: "\(replies) repl\(replies == 1 ? "y" : "ies")",
                         action: { [weak self] in
-                            self?.openChannel(withId: post.channel_id)
-                            self?.closeRightPanel()
+                            guard let self = self else { return }
+                            self.pendingJumpPostId = post.id
+                            self.openChannel(withId: post.channel_id)
+                            self.closeRightPanel()
                         }
                     )
                 }
@@ -4867,8 +5130,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                         subtitle: "\(author) · \(when)",
                         meta: "",
                         action: { [weak self] in
-                            self?.openChannel(withId: post.channel_id)
-                            self?.closeRightPanel()
+                            guard let self = self else { return }
+                            self.pendingJumpPostId = post.id
+                            self.openChannel(withId: post.channel_id)
+                            self.closeRightPanel()
                         }
                     )
                 }
@@ -5048,8 +5313,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                         subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
                         meta: "",
                         action: { [weak self] in
-                            self?.openChannel(withId: post.channel_id)
-                            self?.closeRightPanel()
+                            guard let self = self else { return }
+                            self.pendingJumpPostId = post.id
+                            self.openChannel(withId: post.channel_id)
+                            self.closeRightPanel()
                         }
                     )
                 }
@@ -5087,8 +5354,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                         subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
                         meta: "Saved",
                         action: { [weak self] in
-                            self?.openChannel(withId: post.channel_id)
-                            self?.closeRightPanel()
+                            guard let self = self else { return }
+                            self.pendingJumpPostId = post.id
+                            self.openChannel(withId: post.channel_id)
+                            self.closeRightPanel()
                         }
                     )
                 }
@@ -6888,6 +7157,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     
     private func createPostRow(post: MMPost, width: CGFloat, timeStr: String, isConsecutive: Bool = false) -> (NSView, CGFloat) {
         let row = TimelineRowView()
+        row.identifier = NSUserInterfaceItemIdentifier("postRow_\(post.id)")
         row.cornerRadius = 0
         row.color = .clear
         
@@ -8257,7 +8527,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
         do {
             let postList = try await ws.fetchChannelPosts(channelId: channelId)
-            let posts = postList.chronologicalPosts
+            var posts = postList.chronologicalPosts
+            if let jumpId = self.pendingJumpPostId,
+               !posts.contains(where: { $0.id == jumpId }),
+               let context = try? await ws.fetchChannelPosts(channelId: channelId, around: jumpId) {
+                posts = context.chronologicalPosts
+            }
             for post in posts {
                 fetchAvatarIfNeeded(for: post.user_id)
             }
@@ -8298,7 +8573,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     @MainActor
     private func applyPostsToTimeline(_ posts: [MMPost]) {
         currentChannelPosts = posts
-        if newMessagesDividerPostId != nil {
+        if pendingJumpPostId != nil {
+            rebuildTimelineContent(scrollToBottom: false)
+            scrollToPendingPostIfNeeded()
+        } else if newMessagesDividerPostId != nil {
             rebuildTimelineContent(scrollToBottom: false)
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, let divider = self.newMessagesDividerView else { return }
@@ -8311,6 +8589,37 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
         } else {
             rebuildTimelineContent(scrollToBottom: true)
+        }
+    }
+
+    private func scrollToPendingPostIfNeeded() {
+        guard let postId = pendingJumpPostId else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.pendingJumpPostId == postId else { return }
+            guard let row = self.timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_\(postId)"
+            }) else {
+                self.pendingJumpPostId = nil
+                return
+            }
+            let clip = self.timelineScrollView.contentView
+            let maxY = max(0, self.timelineDocView.frame.height - clip.bounds.height)
+            let target = min(maxY, max(0, row.frame.minY - 80))
+            clip.scroll(to: NSPoint(x: 0, y: target))
+            self.timelineScrollView.reflectScrolledClipView(clip)
+            self.updateTimelineHoverState()
+            self.updateNewMessagesDividerState()
+            self.pendingJumpPostId = nil
+
+            if let panel = row as? RoundedEdgePanel {
+                let previous = panel.color
+                panel.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.08)
+                panel.setNeedsAppearanceUpdate()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    panel.color = previous
+                    panel.setNeedsAppearanceUpdate()
+                }
+            }
         }
     }
     
@@ -8476,6 +8785,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     }
     
     func controlTextDidChange(_ notification: Notification) {
+        if (notification.object as? NSTextField) === dmSearchField {
+            renderDMUsers()
+            return
+        }
         if (notification.object as? NSTextField) === threadReplyField {
             threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
             return

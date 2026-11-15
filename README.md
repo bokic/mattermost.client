@@ -24,6 +24,9 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 ### 3. Right Chat Panel (`#FFFFFF`)
 - **Channel Header**: Favorite star toggle (`☆`, persisted), channel title dropdown (View Info, Pinned Posts, favorite toggle, Copy Link, Leave Channel), member count badge (opens the Members panel), and pinned posts indicator (opens Pinned Posts).
 - **Right-hand Panel**: Threads, Members, Pinned Posts, Files, Mentions, Saved Posts, Settings and Browse Channels, with hover states, empty states and click-to-open. The panel has a web-matching header (title + channel subtitle), a draggable left edge, and a persisted width (`rhsWidth`, default 400pt).
+- **Saved Posts & Mentions**: Server-backed RHS lists; clicking an item opens its channel, fetches surrounding context with `around={post_id}` when needed, scrolls to the message and briefly highlights it.
+- **Direct Messages**: The `+` beside DIRECT MESSAGES opens a searchable team-user picker; selecting a user creates or reuses a DM (`POST /channels/direct`) and opens it.
+- **Settings, Invite & Browse**: The gear panel exposes zoom, reconnect, account/server and logout; invite sends a real team email invitation; Browse Channels lists public channels with joined state and join-on-click.
 - **Welcome Hero**: Channel introduction illustration, welcome title, description, and workspace invitation action.
 - **Message Timeline**: White date-separator pills (13 pt bold over a 1 pt rule) for *Today*, *Yesterday*, weekday, or full date, with 32 pt avatars, 14 pt semibold authors, and 12.6 pt timestamps measured from the web DOM. Scrolling to the top loads older pages (60 at a time) via `before` pagination without losing your place.
 - **Unread Markers**: An orange "New Messages" divider above the first unread post, plus a floating blue "N new messages" jump pill when that divider is below the viewport; the divider collapses once you scroll past it.
