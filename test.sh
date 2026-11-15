@@ -41,10 +41,13 @@ run_with_timeout() {
     local pid=$!
     (
         sleep "$limit"
+        # Kill children first; otherwise they can keep a pipe/log handle open and
+        # outlive the parent that the watchdog signalled.
+        pkill -TERM -P "$pid" 2>/dev/null
         kill -TERM "$pid" 2>/dev/null
         sleep 5
-        kill -KILL "$pid" 2>/dev/null
         pkill -KILL -P "$pid" 2>/dev/null
+        kill -KILL "$pid" 2>/dev/null
     ) &
     local watchdog=$!
     wait "$pid"
@@ -56,7 +59,8 @@ run_with_timeout() {
 
 echo "Building and running mattermost.clientTests..."
 set +e
-echo "=== xcodebuild ===" | tee "$LOG_FILE"
+: > "$LOG_FILE"
+echo "=== xcodebuild ===" >> "$LOG_FILE"
 # Build for the host architecture so the test target matches the app module
 # produced by build.sh (the app scheme uses the active arch only).
 run_with_timeout 600 xcodebuild -project mattermost.client.xcodeproj \
@@ -66,20 +70,22 @@ run_with_timeout 600 xcodebuild -project mattermost.client.xcodeproj \
     ONLY_ACTIVE_ARCH=YES \
     SYMROOT="$(pwd)/build/Build/Products" \
     OBJROOT="$(pwd)/build/Build/Intermediates.noindex" \
-    build 2>&1 | tee -a "$LOG_FILE"
-STATUS=${PIPESTATUS[0]}
+    build >> "$LOG_FILE" 2>&1
+STATUS=$?
 
 if [ "$STATUS" -eq 0 ]; then
-    echo "=== xctest ===" | tee -a "$LOG_FILE"
-    run_with_timeout 180 xcrun xctest build/Build/Products/Debug/mattermost.clientTests.xctest 2>&1 | tee -a "$LOG_FILE"
-    STATUS=${PIPESTATUS[0]}
+    echo "=== xctest ===" >> "$LOG_FILE"
+    run_with_timeout 180 xcrun xctest build/Build/Products/Debug/mattermost.clientTests.xctest >> "$LOG_FILE" 2>&1
+    STATUS=$?
 fi
 set -e
 
 if [ "$STATUS" -ne 0 ]; then
     write_diagnostics "$STATUS"
     echo "Tests failed (exit $STATUS). Full log: $LOG_FILE"
+    tail -80 "$LOG_FILE"
     exit "$STATUS"
 fi
 
+grep -E "Test Suite 'All tests'|Executed [0-9]+ tests" "$LOG_FILE" | tail -4
 echo "All unit tests passed!"
