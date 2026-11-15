@@ -358,7 +358,7 @@ extension MainWindow {
         case .channel:
             let query = trigger.query.lowercased()
             items = channelsById.values
-                .filter { $0.type == "O" || $0.type == "P" }
+                .filter { $0.type == "O" || $0.type == "P" || $0.type == "G" }
                 .filter { channel in
                     query.isEmpty
                         || channel.name.lowercased().contains(query)
@@ -368,9 +368,9 @@ extension MainWindow {
                 .map { channel in
                     CompletionItem(
                         kind: .channel,
-                        title: "#" + channel.name,
+                        title: "~" + (channel.type == "G" ? channel.display_name : channel.name),
                         subtitle: channel.display_name,
-                        insertText: "#" + channel.name + " ",
+                        insertText: "~" + channel.name + " ",
                         glyph: nil
                     )
                 }
@@ -655,39 +655,63 @@ extension MainWindow {
               !activeChannelId.isEmpty,
               let ws = webService else { return }
         let channelId = activeChannelId
-        composerHelpLabel.stringValue = files.count == 1 ? "Uploading…" : "Uploading \(files.count) files…"
+        // Mattermost's default Team Edition limit is 50 MB; surface it before
+        // reading a huge file into memory.
+        let maxFileSize: Int64 = 50 * 1024 * 1024
+        composerHelpLabel.stringValue = files.count == 1 ? "Uploading…" : "Uploading 1/\(files.count)…"
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             var uploaded: [PendingAttachment] = []
-            for url in files {
+            var failures: [String] = []
+            for (index, url) in files.enumerated() {
+                guard self.activeChannelId == channelId else { return }
+                self.composerHelpLabel.stringValue = "Uploading \(index + 1)/\(files.count)…"
                 let accessed = url.startAccessingSecurityScopedResource()
-                let data = try? Data(contentsOf: url)
-                if accessed { url.stopAccessingSecurityScopedResource() }
-                guard let data = data else { continue }
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init)
+                if let size = size, size > maxFileSize {
+                    failures.append("\(url.lastPathComponent) exceeds 50 MB")
+                    continue
+                }
+                guard let data = try? Data(contentsOf: url) else {
+                    failures.append("\(url.lastPathComponent) could not be read")
+                    continue
+                }
+                guard Int64(data.count) <= maxFileSize else {
+                    failures.append("\(url.lastPathComponent) exceeds 50 MB")
+                    continue
+                }
                 let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-                if let fileId = try? await ws.uploadFile(
-                    channelId: channelId,
-                    data: data,
-                    filename: url.lastPathComponent,
-                    mimeType: mime
-                ) {
+                do {
+                    let fileId = try await ws.uploadFile(
+                        channelId: channelId,
+                        data: data,
+                        filename: url.lastPathComponent,
+                        mimeType: mime
+                    )
                     uploaded.append(PendingAttachment(id: fileId, name: url.lastPathComponent, size: Int64(data.count)))
+                } catch {
+                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
                 }
             }
-            guard !uploaded.isEmpty else {
-                self.composerHelpLabel.stringValue = "Upload failed"
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-                    self?.composerHelpLabel.stringValue = "Help"
-                }
-                return
+            guard self.activeChannelId == channelId else { return }
+            if !uploaded.isEmpty {
+                self.pendingAttachments.append(contentsOf: uploaded)
+                self.renderPendingAttachments()
+                self.layoutRightChatPanel()
+                self.scrollTimelineToBottom()
+                self.updateComposerSendState()
             }
-            self.pendingAttachments.append(contentsOf: uploaded)
-            self.layoutRightChatPanel()
-            self.renderPendingAttachments()
-            self.scrollTimelineToBottom()
-            self.updateComposerSendState()
-            self.composerHelpLabel.stringValue = "Attached \(self.pendingAttachments.count) file\(self.pendingAttachments.count == 1 ? "" : "s")"
+            if !failures.isEmpty {
+                self.composerHelpLabel.stringValue = failures.count == 1
+                    ? "Upload failed: \(failures[0])"
+                    : "\(failures.count) files could not be uploaded"
+                self.showInfoAlert("Some files could not be uploaded:\n\n" + failures.joined(separator: "\n"))
+            } else {
+                self.composerHelpLabel.stringValue = "Attached \(self.pendingAttachments.count) file\(self.pendingAttachments.count == 1 ? "" : "s")"
+            }
         }
     }
 
@@ -778,6 +802,77 @@ extension MainWindow {
         composerAttachmentTray.isHidden = true
         updateComposerSendState()
         layoutRightChatPanel()
+    }
+
+    // MARK: - Per-channel drafts
+
+    func saveComposerDraft(for channelId: String) {
+        guard !channelId.isEmpty else { return }
+        let draft = ComposerDraft(
+            text: entryView.string,
+            attachments: pendingAttachments,
+            editingPostId: editingPostId
+        )
+        if draft.text.isEmpty && draft.attachments.isEmpty && draft.editingPostId == nil {
+            composerDraftsByChannelId.removeValue(forKey: channelId)
+        } else {
+            composerDraftsByChannelId[channelId] = draft
+        }
+    }
+
+    func restoreComposerDraft(for channelId: String) {
+        let draft = composerDraftsByChannelId[channelId]
+        editingPostId = draft?.editingPostId
+        entryView.string = draft?.text ?? ""
+        entryView.needsDisplay = true
+        pendingAttachments = draft?.attachments ?? []
+        renderPendingAttachments()
+        updateComposerSendState()
+        if editingPostId != nil {
+            composerHelpLabel.stringValue = "Editing • Esc to cancel"
+        } else if pendingAttachments.isEmpty {
+            composerHelpLabel.stringValue = "Help"
+        } else {
+            composerHelpLabel.stringValue = "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+        }
+        layoutRightChatPanel()
+    }
+
+    func clearComposerDraft(for channelId: String) {
+        guard !channelId.isEmpty else { return }
+        composerDraftsByChannelId.removeValue(forKey: channelId)
+    }
+
+    // MARK: - Per-thread drafts
+
+    /// The status that should be visible when no ephemeral message (typing,
+    /// uploading, sending, …) is occupying the composer help label.
+    func defaultComposerStatusText() -> String {
+        if editingPostId != nil { return "Editing • Esc to cancel" }
+        if !pendingAttachments.isEmpty {
+            return "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+        }
+        return "Help"
+    }
+
+    func saveThreadDraft() {
+        guard !threadRootId.isEmpty else { return }
+        let text = threadReplyField.stringValue
+        if text.isEmpty {
+            threadDraftsByRootId.removeValue(forKey: threadRootId)
+        } else {
+            threadDraftsByRootId[threadRootId] = text
+        }
+    }
+
+    func restoreThreadDraft() {
+        threadReplyField.stringValue = threadDraftsByRootId[threadRootId] ?? ""
+        threadPlaceholderLabel.isHidden = !threadReplyField.stringValue.isEmpty
+    }
+
+    func clearThreadDraft(for rootId: String) {
+        guard !rootId.isEmpty else { return }
+        threadDraftsByRootId.removeValue(forKey: rootId)
     }
 
     func setComposerDropHighlight(_ active: Bool) {
@@ -874,67 +969,117 @@ extension MainWindow {
         }
 
         closeCompletion()
+
+        if let editingId = editingId {
+            entryView.string = ""
+            entryView.needsDisplay = true
+            updateComposerSendState()
+            composerHelpLabel.stringValue = "Saving edit…"
+            Task { @MainActor [weak self] in
+                guard let self = self, let ws = self.webService else { return }
+                do {
+                    let updated = try await ws.patchPost(postId: editingId, message: message)
+                    if self.activeChannelId == channelId {
+                        self.editingPostId = nil
+                        self.applyUpdatedPost(updated)
+                        self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+                    }
+                    self.clearComposerDraft(for: channelId)
+                } catch {
+                    if self.activeChannelId == channelId {
+                        self.composerHelpLabel.stringValue = "Edit failed"
+                        if self.entryView.string.isEmpty {
+                            self.entryView.string = message
+                            self.updateComposerSendState()
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+                            guard let self = self, self.activeChannelId == channelId else { return }
+                            self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+                        }
+                    } else {
+                        var draft = self.composerDraftsByChannelId[channelId]
+                            ?? ComposerDraft(text: "", attachments: [], editingPostId: editingId)
+                        if draft.text.isEmpty { draft.text = message }
+                        draft.editingPostId = editingId
+                        self.composerDraftsByChannelId[channelId] = draft
+                    }
+                    NSLog("Failed to save edit: \(error.localizedDescription)")
+                }
+            }
+            return
+        }
+
+        // Optimistic send: show the post immediately with a sending state and
+        // keep it retryable if the request fails.
+        let clip = timelineScrollView.contentView
+        let wasNearBottom = clip.bounds.maxY >= (timelineDocView.frame.height - 40)
+        let pending = PendingOutgoingPost(
+            id: UUID().uuidString,
+            channelId: channelId,
+            message: message,
+            fileIds: fileIds,
+            status: .sending
+        )
+        pendingOutgoingPosts.append(pending)
         entryView.string = ""
         entryView.needsDisplay = true
+        pendingAttachments.removeAll()
+        renderPendingAttachments()
         updateComposerSendState()
-        composerHelpLabel.stringValue = editingId != nil ? "Saving edit…" : "Sending…"
+        clearComposerDraft(for: channelId)
+        composerHelpLabel.stringValue = "Sending…"
+        layoutRightChatPanel()
+        rebuildTimelineContent(scrollToBottom: wasNearBottom)
+        sendPendingPost(id: pending.id)
+    }
 
+    func sendPendingPost(id: String) {
+        guard let index = pendingOutgoingPosts.firstIndex(where: { $0.id == id }),
+              let ws = webService else { return }
+        let pending = pendingOutgoingPosts[index]
+        pendingOutgoingPosts[index].status = .sending
+        if pending.channelId == activeChannelId {
+            rebuildTimelineContent(scrollToBottom: false)
+        }
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = self.webService else { return }
+            guard let self = self else { return }
             do {
-                if let editingId = editingId {
-                    let updated = try await ws.patchPost(postId: editingId, message: message)
-                    self.editingPostId = nil
-                    self.applyUpdatedPost(updated)
-                } else {
-                    let post = try await ws.createPost(
-                        channelId: channelId,
-                        message: message,
-                        fileIds: fileIds
-                    )
-                    if self.activeChannelId == channelId {
+                let post = try await ws.createPost(
+                    channelId: pending.channelId,
+                    message: pending.message,
+                    fileIds: pending.fileIds
+                )
+                self.pendingOutgoingPosts.removeAll { $0.id == id }
+                if self.activeChannelId == pending.channelId {
+                    if !self.currentChannelPosts.contains(where: { $0.id == post.id }) {
                         self.currentChannelPosts.append(post)
-                        self.rebuildTimelineContent(scrollToBottom: true)
                     }
-                    if !fileIds.isEmpty {
-                        self.pendingAttachments.removeAll()
-                        self.renderPendingAttachments()
-                        self.layoutRightChatPanel()
-                        self.scrollTimelineToBottom()
-                    }
+                    self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+                    self.rebuildTimelineContent(scrollToBottom: true)
                 }
-                self.composerHelpLabel.stringValue = "Help"
             } catch {
-                self.editingPostId = editingId
-                self.composerHelpLabel.stringValue = editingId != nil ? "Edit failed" : "Message failed to send"
-                if self.entryView.string.isEmpty {
-                    self.entryView.string = message
-                    self.updateComposerSendState()
+                if let failedIndex = self.pendingOutgoingPosts.firstIndex(where: { $0.id == id }) {
+                    self.pendingOutgoingPosts[failedIndex].status = .failed(error.localizedDescription)
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-                    self?.composerHelpLabel.stringValue = "Help"
+                if self.activeChannelId == pending.channelId {
+                    self.composerHelpLabel.stringValue = "Message failed to send"
+                    self.rebuildTimelineContent(scrollToBottom: false)
                 }
                 NSLog("Failed to send post: \(error.localizedDescription)")
             }
         }
     }
 
-    func sendActiveChannelPost(message: String) {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !activeChannelId.isEmpty else { return }
-        let channelId = activeChannelId
-        Task { @MainActor [weak self] in
-            guard let self = self, let ws = self.webService else { return }
-            do {
-                let post = try await ws.createPost(channelId: channelId, message: trimmed)
-                if self.activeChannelId == channelId {
-                    self.currentChannelPosts.append(post)
-                    self.rebuildTimelineContent(scrollToBottom: true)
-                }
-            } catch {
-                NSLog("Failed to send post: \(error.localizedDescription)")
-            }
-        }
+    func retryPendingPost(id: String) {
+        guard let index = pendingOutgoingPosts.firstIndex(where: { $0.id == id }) else { return }
+        if case .sending = pendingOutgoingPosts[index].status { return }
+        pendingOutgoingPosts[index].status = .sending
+        sendPendingPost(id: id)
+    }
+
+    func deletePendingPost(id: String) {
+        pendingOutgoingPosts.removeAll { $0.id == id }
+        rebuildTimelineContent(scrollToBottom: false)
     }
 
     func controlTextDidChange(_ notification: Notification) {

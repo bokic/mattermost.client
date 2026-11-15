@@ -24,17 +24,85 @@ extension MainWindow {
 
     func markActiveChannelViewed() {
         guard !activeChannelId.isEmpty,
-              (unreadByChannel[activeChannelId] ?? 0) > 0 || (mentionsByChannel[activeChannelId] ?? 0) > 0,
               let ws = webService, ws.isLogged() else { return }
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            if let viewedAt = try? await ws.markChannelViewed(channelId: channelId) {
+            do {
+                let viewedAt = try await ws.markChannelViewed(channelId: channelId)
                 self.lastViewedAtByChannel[channelId] = viewedAt
+                // Only clear local badges after the server accepted the view;
+                // otherwise a transient failure would hide real unread state.
+                self.unreadByChannel[channelId] = 0
+                self.mentionsByChannel[channelId] = 0
+                self.updateSidebarBadges()
+                (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
+            } catch {
+                DebugLog.error("markActiveChannelViewed failed for \(channelId): \(error)")
             }
-            self.unreadByChannel[channelId] = 0
-            self.mentionsByChannel[channelId] = 0
-            self.updateSidebarBadges()
+        }
+    }
+
+    func markAllChannelsRead() {
+        guard let ws = webService, ws.isLogged(), let team = activeTeam else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        let teamChannelIds = Set(channelsById.values.filter {
+            channelBelongsToTeam($0, teamId: team.id)
+        }.map { $0.id })
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.markAllChannelsRead(userId: userId, teamId: team.id)
+                for channelId in teamChannelIds {
+                    self.unreadByChannel[channelId] = 0
+                    self.mentionsByChannel[channelId] = 0
+                    self.lastViewedAtByChannel[channelId] = Int64(Date().timeIntervalSince1970 * 1000)
+                }
+                self.updateSidebarBadges()
+                self.updateNewMessagesBaseline()
+                if let appDelegate = NSApp.delegate as? AppDelegate {
+                    for channelId in teamChannelIds {
+                        appDelegate.markChannelRead(channelId)
+                    }
+                }
+                self.composerHelpLabel.stringValue = "All channels marked as read"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    guard let self = self, self.composerHelpLabel.stringValue == "All channels marked as read" else { return }
+                    self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+                }
+            } catch {
+                self.showInfoAlert("Could not mark all channels as read: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func markActiveChannelRead() {
+        guard !activeChannelId.isEmpty else { return }
+        let channelId = activeChannelId
+        unreadByChannel[channelId] = 0
+        mentionsByChannel[channelId] = 0
+        updateSidebarBadges()
+        markActiveChannelViewed()
+        (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
+    }
+
+    func markActiveChannelUnread() {
+        guard let ws = webService, ws.isLogged(),
+              !activeChannelId.isEmpty,
+              let lastPost = currentChannelPosts.last(where: { ($0.root_id ?? "").isEmpty }) else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        let channelId = activeChannelId
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.markChannelUnread(userId: userId, channelId: channelId, postId: lastPost.id)
+                self.unreadByChannel[channelId, default: 0] = max(1, self.unreadByChannel[channelId] ?? 0)
+                self.updateSidebarBadges()
+            } catch {
+                self.showInfoAlert("Could not mark the channel unread: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -79,13 +147,57 @@ extension MainWindow {
             message: ws.isWebSocketConnected ? "Connected" : "Connecting to Mattermost…"
         )
 
-        ws.onWebSocketEvent = { event in
+        ws.onWebSocketEvent = { [weak self] event in
             DebugLog.logSensitive("ws.onWebSocketEvent: \(event)")
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                switch event {
+                case .postEdited(let post):
+                    self.applyUpdatedPost(post)
+                case .postDeleted(let postId, let channelId):
+                    self.handleRealtimePostDeleted(postId: postId, channelId: channelId)
+                case .channelViewed(let channelId):
+                    self.handleRemoteChannelViewed(channelId)
+                case .channelUpdated(let channel):
+                    self.channelsById[channel.id] = channel
+                    self.channelsByName[channel.name.lowercased()] = channel
+                    self.channelsByName[channel.display_name.lowercased()] = channel
+                    if channel.id == self.activeChannelId {
+                        self.channelTitleLabel.stringValue = self.channelDisplayName(for: channel)
+                        self.heroTitleLabel.stringValue = self.channelDisplayName(for: channel)
+                        self.rebuildTimelineContent(scrollToBottom: false)
+                    }
+                case .preferencesChanged(let userId):
+                    let myId = self.currentUser?.id ?? self.webService?.currentUserId ?? ""
+                    if !myId.isEmpty && userId == myId {
+                        self.loadFavoriteChannels()
+                        if self.isRightPanelVisible && self.rightPanelMode == .settings {
+                            self.loadSettingsPanel()
+                        }
+                    }
+                case .threadUpdated(let rootId):
+                    if self.isRightPanelVisible && self.rightPanelMode == .thread && self.threadRootId == rootId {
+                        self.loadThread()
+                    } else if self.isRightPanelVisible && self.rightPanelMode == .threads {
+                        self.loadThreads()
+                    }
+                default:
+                    break
+                }
+            }
         }
 
         ws.onWebSocketConnected = { [weak self] in
             DebugLog.log("ws.onWebSocketConnected callback triggered")
-            self?.refreshUserStatuses()
+            guard let self = self else { return }
+            self.refreshUserStatuses()
+            self.loadUnreadState()
+            let channelId = self.activeChannelId
+            if !channelId.isEmpty {
+                Task { @MainActor [weak self] in
+                    await self?.fetchAndRenderPosts(channelId: channelId)
+                }
+            }
         }
 
         ws.onMultipleStatusesReceived = { [weak self] statuses in
@@ -112,14 +224,44 @@ extension MainWindow {
             }
         }
 
-        ws.onUserTyping = { [weak self] userId, channelId, _ in
+        ws.onUserTyping = { [weak self] userId, channelId, parentId in
             guard let self = self, channelId == self.activeChannelId else { return }
             if let myId = self.currentUser?.id, myId == userId { return }
             let typer = self.usersById[userId]?.username ?? "Someone"
-            self.composerHelpLabel.stringValue = "\(typer) is typing..."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                self?.composerHelpLabel.stringValue = "Help"
+
+            if let parentId = parentId, !parentId.isEmpty {
+                // Thread typing belongs to its thread composer, not the main one.
+                guard self.rightPanelMode == .thread, self.threadRootId == parentId else { return }
+                self.threadTypingIndicatorWorkItem?.cancel()
+                let typingPlaceholder = "\(typer) is typing…"
+                self.threadReplyField.placeholderString = typingPlaceholder
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self = self,
+                          self.threadReplyField.placeholderString == typingPlaceholder else { return }
+                    self.threadReplyField.placeholderString = "Reply to thread…"
+                }
+                self.threadTypingIndicatorWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
+                return
             }
+
+            // Don't replace a real status (editing/upload/send) with a typing hint.
+            let currentStatus = self.composerHelpLabel.stringValue
+            guard self.editingPostId == nil,
+                  !currentStatus.hasPrefix("Uploading"),
+                  !currentStatus.hasPrefix("Sending"),
+                  !currentStatus.hasPrefix("Saving"),
+                  currentStatus != "Drop files to attach" else { return }
+
+            self.typingIndicatorWorkItem?.cancel()
+            let typingStatus = "\(typer) is typing..."
+            self.composerHelpLabel.stringValue = typingStatus
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self, self.composerHelpLabel.stringValue == typingStatus else { return }
+                self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+            }
+            self.typingIndicatorWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
         }
 
         ws.onTeamUpdated = { [weak self] updatedTeam in
@@ -167,6 +309,7 @@ extension MainWindow {
         statusPollingTimer?.invalidate()
         statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.clearExpiredCustomStatusIfNeeded()
                 self?.refreshUserStatuses()
             }
         }
@@ -195,15 +338,19 @@ extension MainWindow {
 
                 let teams = try await ws.fetchTeams()
                 self.userTeams = teams
-                guard let team = teams.first else { return }
+                let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
+                guard let team = teams.first(where: { $0.id == savedTeamId }) ?? teams.first else { return }
                 self.updateTeamHeader(with: team)
+                UserDefaults.standard.set(team.id, forKey: "lastTeamId")
 
                 let channels = try await ws.fetchChannels(teamId: team.id)
                 var allChannels = channels
                 if let myChannels = try? await ws.fetchAllChannels() {
                     var chMap: [String: MMChannel] = [:]
                     for c in channels { chMap[c.id] = c }
-                    for c in myChannels { chMap[c.id] = c }
+                    for c in myChannels where self.channelBelongsToTeam(c, teamId: team.id) {
+                        chMap[c.id] = c
+                    }
                     allChannels = Array(chMap.values)
                 }
                 for ch in allChannels {
@@ -218,10 +365,13 @@ extension MainWindow {
                     self.populateSidebarCategories(from: categoriesResponse, channels: allChannels)
                 }
 
+                let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
+                let savedChannel = savedChannelId.flatMap { self.channelsById[$0] }
                 let botCh = self.channelsByName["system-bot"]
                     ?? self.channelsByName["system bot"]
                     ?? allChannels.first(where: { self.isChannelBot(for: $0) })
                 let defaultCh = (CommandLine.arguments.contains("--system-bot") ? botCh : nil)
+                    ?? savedChannel
                     ?? self.channelsByName["town-square"]
                     ?? self.channelsByName["town square"]
                     ?? channels.first
@@ -242,10 +392,17 @@ extension MainWindow {
     func loadChannelPosts(forSidebarItemId itemId: String) {
         let normalized = itemId.lowercased()
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
+        let previousChannelId = activeChannelId
+        let channelChanged = !previousChannelId.isEmpty && previousChannelId != ch.id
+        if channelChanged {
+            saveComposerDraft(for: previousChannelId)
+            saveChannelScrollPosition(for: previousChannelId)
+            if rightPanelMode == .thread { saveThreadDraft() }
+        }
         activeChannelId = ch.id
-        _ = cancelEditing()
+        UserDefaults.standard.set(ch.id, forKey: "lastChannelId")
+        if let teamId = activeTeam?.id { UserDefaults.standard.set(teamId, forKey: "lastTeamId") }
         closeCompletion()
-        clearPendingAttachments()
         newMessagesDividerPostId = nil
         newMessagesDividerView = nil
         newMessagesCount = 0
@@ -253,7 +410,6 @@ extension MainWindow {
         newMessagesPill.isHidden = true
         newMessagesBaseline = lastViewedAtByChannel[ch.id] ?? 0
         refreshFavoriteState()
-        (NSApp.delegate as? AppDelegate)?.markChannelRead(ch.id)
         markActiveChannelViewed()
         reloadRightPanelIfNeeded()
         let resolvedTitle = channelDisplayName(for: ch)
@@ -266,8 +422,15 @@ extension MainWindow {
         entryView.placeholderString = composerPlaceholderLabel.stringValue
         if ch.type == "D" {
             heroDescriptionLabel.stringValue = "This is the start of your direct message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
+        } else if ch.type == "G" {
+            heroDescriptionLabel.stringValue = "This is the start of your group message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
         } else {
             heroDescriptionLabel.stringValue = "Welcome to \(resolvedTitle). Post messages here that you want everyone to see. Everyone\nautomatically becomes a member of this channel when they join the team."
+        }
+        if channelChanged {
+            restoreComposerDraft(for: ch.id)
+        } else {
+            updateComposerSendState()
         }
         layoutRightChatPanel()
         closeSearchResults()
@@ -275,8 +438,20 @@ extension MainWindow {
         didLoadAllHistory = false
         currentChannelPosts = []
         rebuildTimelineContent(scrollToBottom: false)
+        refreshChannelMemberCount(channelId: ch.id)
         Task { @MainActor [weak self] in
             await self?.fetchAndRenderPosts(channelId: ch.id)
+        }
+    }
+
+    func refreshChannelMemberCount(channelId: String) {
+        guard let ws = webService, ws.isLogged(), !channelId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self,
+                  let members = try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200),
+                  self.activeChannelId == channelId else { return }
+            self.channelMembersCountLabel.stringValue = members.count >= 200 ? "200+" : "\(members.count)"
+            self.layoutRightChatPanel()
         }
     }
 
@@ -316,14 +491,15 @@ extension MainWindow {
             }
             // Discard results for a channel that is no longer open.
             guard self.activeChannelId == channelId else { return }
+            let topLevelPosts = posts.filter { ($0.root_id ?? "").isEmpty }
             self.didLoadAllHistory = posts.count < self.postsPerPage
             if self.newMessagesBaseline > 0 {
-                let unread = posts.filter { $0.create_at > self.newMessagesBaseline }
+                let unread = topLevelPosts.filter { $0.create_at > self.newMessagesBaseline }
                 self.newMessagesCount = unread.count
                 self.newMessagesDividerPostId = unread.first?.id
             }
             self.newMessagesDividerArmed = false
-            applyPostsToTimeline(posts)
+            applyPostsToTimeline(topLevelPosts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
         }
@@ -344,6 +520,11 @@ extension MainWindow {
                 clip.scroll(to: NSPoint(x: 0, y: target))
                 self.timelineScrollView.reflectScrolledClipView(clip)
                 self.updateNewMessagesDividerState()
+            }
+        } else if channelScrollPositions[activeChannelId] != nil {
+            rebuildTimelineContent(scrollToBottom: false)
+            if !restoreChannelScrollPosition(for: activeChannelId) {
+                scrollTimelineToBottom()
             }
         } else {
             rebuildTimelineContent(scrollToBottom: true)
@@ -385,10 +566,31 @@ extension MainWindow {
         guard post.channel_id == activeChannelId else { return }
         guard !currentChannelPosts.contains(where: { $0.id == post.id }) else { return }
 
-        currentChannelPosts.append(post)
-        currentChannelPosts.sort { $0.create_at < $1.create_at }
+        // Replies belong to threads, not the channel feed.
+        let isReply = !(post.root_id ?? "").isEmpty
+        let clip = timelineScrollView.contentView
+        let wasNearBottom = clip.bounds.maxY >= (timelineDocView.frame.height - 40)
+
+        if !isReply {
+            currentChannelPosts.append(post)
+            currentChannelPosts.sort { $0.create_at < $1.create_at }
+            if !wasNearBottom {
+                if newMessagesCount == 0 {
+                    newMessagesDividerPostId = post.id
+                    newMessagesDividerArmed = true
+                }
+                newMessagesCount += 1
+            }
+        }
         fetchAvatarIfNeeded(for: post.user_id)
-        rebuildTimelineContent(scrollToBottom: true)
+        if wasNearBottom {
+            // Reading the live edge clears the divider; only users who are
+            // scrolled up get the floating "N new messages" pill.
+            newMessagesCount = 0
+            newMessagesDividerPostId = nil
+            newMessagesDividerView = nil
+        }
+        rebuildTimelineContent(scrollToBottom: !isReply && wasNearBottom)
 
         guard usersById[post.user_id] == nil,
               let ws = webService else { return }
@@ -399,7 +601,7 @@ extension MainWindow {
             self.usersById[user.id] = user
             self.usersByUsername[user.username.lowercased()] = user
             self.fetchAvatarIfNeeded(for: user.id)
-            self.rebuildTimelineContent(scrollToBottom: true)
+            self.rebuildTimelineContent(scrollToBottom: false)
         }
     }
 
@@ -409,6 +611,68 @@ extension MainWindow {
         connectionBanner.isHidden = connected
         if !connected {
             layoutRightChatPanel()
+        }
+    }
+
+    /// Mattermost-compatible mention detection: the user's @username, the
+    /// special @here/@channel/@all mentions and any configured mention keys.
+    /// Matching is word-bounded so emails and adjacent text do not count.
+    func isCurrentUserMentioned(in post: MMPost) -> Bool {
+        guard let username = currentUser?.username.lowercased(), !username.isEmpty else { return false }
+        let message = post.message.lowercased()
+        var candidates = ["@" + username, "@here", "@channel", "@all"]
+        if let keys = currentUser?.notify_props?.mention_keys {
+            candidates += keys
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+        }
+        for candidate in candidates {
+            let escaped = NSRegularExpression.escapedPattern(for: candidate)
+            let pattern = "(^|[^a-z0-9_.])" + escaped + "($|[^a-z0-9_])"
+            if message.range(of: pattern, options: .regularExpression) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    func isChannelMuted(_ channelId: String) -> Bool {
+        guard let props = membershipsByChannel[channelId]?.notify_props else { return false }
+        return props.desktop?.lowercased() == "none"
+            || props.mark_unread?.lowercased() == "mention"
+    }
+
+    func handleRemoteChannelViewed(_ channelId: String) {
+        guard !channelId.isEmpty else { return }
+        unreadByChannel[channelId] = 0
+        mentionsByChannel[channelId] = 0
+        lastViewedAtByChannel[channelId] = Int64(Date().timeIntervalSince1970 * 1000)
+        (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
+        updateSidebarBadges()
+    }
+
+    func handleRealtimePostDeleted(postId: String, channelId: String) {
+        currentChannelPosts.removeAll { $0.id == postId }
+        threadPosts.removeAll { $0.id == postId }
+        if postId == threadRootId && !threadRootId.isEmpty {
+            threadRootId = ""
+            closeRightPanel()
+            return
+        }
+        if activeChannelId == channelId {
+            rebuildTimelineContent(scrollToBottom: false)
+        }
+        guard isRightPanelVisible else { return }
+        switch rightPanelMode {
+        case .thread:
+            if !threadRootId.isEmpty { loadThread() } else { renderThreadPanel(empty: "This thread was deleted") }
+        case .threads: loadThreads()
+        case .pinned: loadPinnedPosts()
+        case .mentions: loadMentions()
+        case .saved: loadSavedPosts()
+        case .files: loadChannelFiles()
+        default: break
         }
     }
 
@@ -426,12 +690,31 @@ extension MainWindow {
             return
         }
 
+        // Muted channels do not notify and do not accrue unread/mention badges.
+        guard !isChannelMuted(post.channel_id) else {
+            updateSidebarBadges()
+            return
+        }
+
+        let isMentioned = isCurrentUserMentioned(in: post)
         unreadByChannel[post.channel_id, default: 0] += 1
-        let username = (currentUser?.username ?? "").lowercased()
-        if !username.isEmpty && post.message.lowercased().contains("@" + username) {
+        if isMentioned {
             mentionsByChannel[post.channel_id, default: 0] += 1
         }
         updateSidebarBadges()
+
+        let prefs = currentUser?.notify_props
+        let desktop = prefs?.desktop?.lowercased() ?? "all"
+        let desktopThreads = prefs?.desktop_threads?.lowercased() != "false"
+        let soundEnabled = prefs?.desktop_sound?.lowercased() != "false"
+        let isThreadReply = !(post.root_id ?? "").isEmpty
+        let status = currentUserStatus.lowercased()
+
+        let shouldNotify = status != "dnd"
+            && status != "offline"
+            && desktop != "none"
+            && (desktop != "mention" || isMentioned)
+            && (desktopThreads || !isThreadReply)
 
         let channel = channelsById[post.channel_id]
         let channelName = channel.map { channelDisplayName(for: $0) } ?? ""
@@ -440,7 +723,11 @@ extension MainWindow {
             channelId: post.channel_id,
             channelName: channelName,
             author: author,
-            body: notificationExcerpt(from: post.message)
+            body: notificationExcerpt(from: post.message),
+            notify: shouldNotify,
+            sound: shouldNotify && soundEnabled,
+            postId: post.id,
+            rootId: post.root_id
         )
     }
 
@@ -464,7 +751,6 @@ extension MainWindow {
 
     @objc func appDidBecomeActive() {
         guard !activeChannelId.isEmpty else { return }
-        (NSApp.delegate as? AppDelegate)?.markChannelRead(activeChannelId)
         markActiveChannelViewed()
     }
 
@@ -481,6 +767,7 @@ extension MainWindow {
             defer { self.isLoadingOlderPosts = false }
             guard let list = try? await ws.fetchChannelPosts(channelId: channelId, before: before) else { return }
             let older = list.order.compactMap { list.posts[$0] }
+                .filter { ($0.root_id ?? "").isEmpty }
             guard self.activeChannelId == channelId else { return }
             let page = TimelinePager.merge(
                 existing: self.currentChannelPosts,

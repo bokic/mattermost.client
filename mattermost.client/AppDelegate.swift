@@ -49,6 +49,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         
         startAuthentication()
     }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag else { return true }
+        if mainWindow != nil {
+            showMainWindow()
+        } else if let loginWindow = loginWindow {
+            loginWindow.makeKeyAndOrderFront(nil)
+        }
+        return true
+    }
     
     /// Reads credentials off the main thread: Keychain access can block while the
     /// system shows an authorization prompt, which must not stall app launch.
@@ -64,15 +74,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
                 if let host = host, !host.isEmpty, let token = token, !token.isEmpty {
-                    NSLog("Calling checkToken webservice: \(host):\(port)")
+                    DebugLog.info("Checking saved session token")
                     self.webService = WebService(host: host, port: port)
                     Task { @MainActor in
                         let isValid = await self.webService.checkToken(token: token)
                         if isValid {
-                            NSLog("Token is valid, showing main window")
+                            DebugLog.info("Saved session token is valid")
                             self.showMainWindow()
                         } else {
-                            NSLog("Token is invalid, trying login")
+                            DebugLog.info("Saved session token was rejected")
                             self.loginWithStoredPassword(host: host, port: port)
                         }
                     }
@@ -152,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let username = userSettings.string(forKey: "username")
 
         if let host = host, !host.isEmpty, let username = username, !username.isEmpty, let password = password, !password.isEmpty {
-            NSLog("Calling login webservice: \(username)@\(host):\(port)")
+            DebugLog.info("Attempting password login")
             webService = WebService(host: host, port: port)
             Task { @MainActor in
                 do {
@@ -160,17 +170,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                     if let token = webService.token() {
                         KeychainHelper.set(token, forKey: "token")
                     }
-                    NSLog("Login successful, showing main window")
+                    DebugLog.info("Password login succeeded")
                     showMainWindow()
                 } catch {
                     let message = error.localizedDescription
-                    NSLog("Login failed: \(message)")
+                    DebugLog.error("Password login failed: \(message)")
                     showLoginWindow()
                     loginWindow?.errorLabel.stringValue = message
                 }
             }
         } else {
-            NSLog("No credentials found, showing login window")
+            DebugLog.info("No saved credentials; showing login window")
             showLoginWindow()
         }
     }
@@ -189,22 +199,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
-                NSLog("Notification authorization failed: \(error.localizedDescription)")
+                DebugLog.error("Notification authorization failed: \(error.localizedDescription)")
             } else if !granted {
-                NSLog("Notification authorization was denied")
+                DebugLog.warning("Notification authorization was denied")
             }
         }
     }
     
     /// Records an unread message for a channel, updates the menu-bar/dock badges
-    /// and posts a macOS notification.
-    func noteIncomingMessage(channelId: String, channelName: String, author: String, body: String) {
+    /// and optionally posts a macOS notification.
+    func noteIncomingMessage(
+        channelId: String,
+        channelName: String,
+        author: String,
+        body: String,
+        notify: Bool = true,
+        sound: Bool = true,
+        postId: String? = nil,
+        rootId: String? = nil
+    ) {
         guard !channelId.isEmpty else { return }
         unreadCounts[channelId, default: 0] += 1
         updateUnreadIndicators()
-        postNotification(channelId: channelId, channelName: channelName, author: author, body: body)
+        if notify {
+            postNotification(
+                channelId: channelId,
+                channelName: channelName,
+                author: author,
+                body: body,
+                sound: sound,
+                postId: postId,
+                rootId: rootId
+            )
+        }
     }
     
+    /// Replaces the in-memory unread map with server-backed membership counts so
+    /// the Dock/menu-bar badge survives relaunch and stays in sync with the sidebar.
+    func syncUnreadCounts(_ counts: [String: Int]) {
+        unreadCounts = counts.filter { $0.value > 0 }
+        updateUnreadIndicators()
+    }
+
     /// Clears the unread state (and delivered notifications) for one channel.
     func markChannelRead(_ channelId: String) {
         guard unreadCounts.removeValue(forKey: channelId) != nil else { return }
@@ -237,21 +273,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
     
-    private func postNotification(channelId: String, channelName: String, author: String, body: String) {
+    private func postNotification(
+        channelId: String,
+        channelName: String,
+        author: String,
+        body: String,
+        sound: Bool,
+        postId: String? = nil,
+        rootId: String? = nil
+    ) {
         let content = UNMutableNotificationContent()
         content.title = channelName.isEmpty ? "Mattermost" : channelName
         content.subtitle = author
         content.body = body
-        content.sound = .default
+        content.sound = sound ? .default : nil
         content.threadIdentifier = channelId
-        content.userInfo = ["channelId": channelId]
+        var userInfo: [String: String] = ["channelId": channelId]
+        if let postId = postId, !postId.isEmpty { userInfo["postId"] = postId }
+        if let rootId = rootId, !rootId.isEmpty { userInfo["rootId"] = rootId }
+        content.userInfo = userInfo
         
         let identifier = UUID().uuidString
         notificationIds[channelId, default: []].append(identifier)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                NSLog("Failed to post notification: \(error.localizedDescription)")
+                DebugLog.error("Failed to post notification: \(error.localizedDescription)")
             }
         }
     }
@@ -261,7 +308,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound, .list])
+        var options: UNNotificationPresentationOptions = [.banner, .list]
+        if notification.request.content.sound != nil { options.insert(.sound) }
+        completionHandler(options)
     }
     
     func userNotificationCenter(
@@ -270,9 +319,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if let channelId = response.notification.request.content.userInfo["channelId"] as? String {
+            let postId = response.notification.request.content.userInfo["postId"] as? String
+            let rootId = response.notification.request.content.userInfo["rootId"] as? String
             DispatchQueue.main.async {
                 NSApp.activate(ignoringOtherApps: true)
-                self.mainWindow?.openChannel(withId: channelId)
+                guard let mainWindow = self.mainWindow else { return }
+                mainWindow.openChannel(withId: channelId)
+                if let rootId = rootId, !rootId.isEmpty {
+                    Task { @MainActor in
+                        guard let post = try? await self.webService.fetchPost(postId: rootId) else { return }
+                        self.mainWindow?.showThread(for: post)
+                    }
+                } else if let postId = postId, !postId.isEmpty {
+                    mainWindow.pendingJumpPostId = postId
+                }
             }
         }
         completionHandler()
@@ -280,7 +340,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     
     func showMainWindow() {
         guard mainWindow == nil else {
-            createMainWindow()
+            if let window = mainWindow {
+                if window.isMiniaturized { window.deminiaturize(nil) }
+                window.makeKeyAndOrderFront(nil)
+            }
             return
         }
         let service = webService
@@ -321,8 +384,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         webService.disconnectWebSocket()
         KeychainHelper.delete(forKey: "token")
         KeychainHelper.delete(forKey: "password")
-        UserDefaults.standard.removeObject(forKey: "username")
-        UserDefaults.standard.removeObject(forKey: "currentUserId")
+        let defaults = UserDefaults.standard
+        for key in [
+            "username", "currentUserId", "lastTeamId", "lastChannelId",
+            "customStatusEmoji", "customStatusText", "customStatusExpiresAt",
+            "recentEmojis", "rememberPassword"
+        ] {
+            defaults.removeObject(forKey: key)
+        }
+        unreadCounts.removeAll()
+        notificationIds.removeAll()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        updateUnreadIndicators()
         mainWindow?.close()
         mainWindow = nil
         showLoginWindow()

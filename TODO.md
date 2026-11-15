@@ -27,7 +27,7 @@ source revision. The long list of previously completed work is preserved in
 
 ## P0 — Release blockers
 
-- [ ] **The release DMG is not signed, hardened, or notarized** — `M`
+- [x] **The release DMG is not signed, hardened, or notarized** — `M`
   - `build_release.sh` only runs `xcodebuild -configuration Release` and `hdiutil create`.
     `xcodebuild -showBuildSettings -configuration Release` reports
     `CODE_SIGN_IDENTITY = -`, `ENABLE_HARDENED_RUNTIME = NO`, and no `DEVELOPMENT_TEAM`.
@@ -37,7 +37,7 @@ source revision. The long list of previously completed work is preserved in
   - Add the signing identity/team to the Release configuration or pass it from CI; keep
     `--deep`-free, inside-out signing for nested code.
 
-- [ ] **No Release/notarization CI job, and no clean-machine smoke test** — `M`
+- [x] **No Release/notarization CI job, and no clean-machine smoke test** — `M`
   - `.github/workflows/ci.yml` only builds/tests/lints Debug on `macos-15`. Nothing builds
     Release, verifies `lipo -archs` is `x86_64 arm64`, signs, notarizes, or uploads an
     artifact + checksum.
@@ -52,7 +52,7 @@ source revision. The long list of previously completed work is preserved in
 
 ### Interaction and input
 
-- [ ] **Clicks on icon-only buttons and image thumbnails are dead zones** — `M`
+- [x] **Clicks on icon-only buttons and image thumbnails are dead zones** — `M`
   - Every clickable surface is a `RoundedEdgePanel` with child `NSImageView`/`NSTextField`
     views. `hitTest` returns the child (`RoundedEdgePanel.swift:96-102` does not override
     `hitTest`). I verified with AppKit that `NSImageView`'s `mouseDown` does **not** forward
@@ -65,13 +65,13 @@ source revision. The long list of previously completed work is preserved in
   - Fix by overriding `hitTest` on clickable panels to return `self` (or making children
     non-hit-testable) and add a synthetic click test for icon-only buttons.
 
-- [ ] **The "N new messages" jump pill is a full-width clickable bar** — `S`
+- [x] **The "N new messages" jump pill is a full-width clickable bar** — `S`
   - `newMessagesPill.frame` is `listRight - 30` wide (`MainWindow+Layout.swift:642-647`);
     `layoutNewMessagesPill` only centers the icon/text inside it
     (`MainWindow+Timeline.swift:83-92`). It renders as a blue strip across the timeline and
     swallows clicks in that strip. Size the panel to the text group plus padding.
 
-- [ ] **Tab / Shift+Tab inside the message composer jumps focus out instead of editing** — `S`
+- [x] **Tab / Shift+Tab inside the message composer jumps focus out instead of editing** — `S`
   - `MainWindow.sendEvent` (`MainWindow.swift:554-628`) intercepts `keyCode == 48` (Tab)
     whenever `currentFocusRegion()` is `.composer`, `.sidebar`, or `.timeline` and cycles
     focus to the next region. Pressing Tab inside `entryView` (e.g., to indent a list item or
@@ -79,7 +79,7 @@ source revision. The long list of previously completed work is preserved in
 
 ### Composer and drafts
 
-- [ ] **Drafts are not per-channel and can be sent to the wrong channel** — `M`
+- [x] **Drafts are not per-channel and can be sent to the wrong channel** — `M`
   - Nothing stores or clears composer text on channel switch. The sidebar row click
     (`MainWindow+Sidebar.swift:716-727`) calls `loadChannelPosts`, which only calls
     `cancelEditing()`/`clearPendingAttachments()` (`MainWindow+LiveData.swift:242-281`);
@@ -89,7 +89,7 @@ source revision. The long list of previously completed work is preserved in
     preferably Mattermost `drafts` API), switching restores it, and pending attachments are
     scoped to the channel that uploaded them.
 
-- [ ] **Sending is not optimistic and has no retry or failure recovery** — `M`
+- [x] **Sending is not optimistic and has no retry or failure recovery** — `M`
   - `sendComposerMessage` (`MainWindow+Composer.swift:864-920`) clears the editor *before*
     awaiting `POST /posts`, shows "Sending…" in the Help label, and only appends the post
     after the server responds. On failure it restores the text only if the composer is
@@ -107,7 +107,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when uploads stream/chunk (or at least cap size), show per-file progress/errors,
     can be cancelled, and server file-size limits are surfaced before uploading.
 
-- [ ] **Attachment downloads can fail silently and write untrusted filenames** — `S`
+- [x] **Attachment downloads can fail silently and write untrusted filenames** — `S`
   - `saveFileData` (`MainWindow+Timeline.swift:1535-1543`) uses `try? data.write(to:)`, so a
     sandbox denial or disk error is invisible. The app is sandboxed with
     `com.apple.security.files.user-selected.read-only`
@@ -118,7 +118,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when saves report success/failure, filenames are sanitized, temp files are cleaned,
     and the entitlement matches the write path.
 
-- [ ] **Typing indicator has a 3-second timer race and clobbers composer status** — `S`
+- [x] **Typing indicator has a 3-second timer race and clobbers composer status** — `S`
   - `ws.onUserTyping` (`MainWindow+LiveData.swift:115-123`) sets
     `composerHelpLabel.stringValue = "\(typer) is typing..."` and schedules an uncancelled
     `DispatchQueue.main.asyncAfter(deadline: .now() + 3.0)` to reset it to `"Help"`.
@@ -146,7 +146,7 @@ source revision. The long list of previously completed work is preserved in
     stay stale until reopened. After reconnect, only statuses are refreshed
     (`MainWindow+LiveData.swift:86-89`); messages missed while disconnected are never fetched.
 
-- [ ] **Read state is local-only; there is no "mark all as read"** — `M`
+- [x] **Read state is local-only; there is no "mark all as read"** — `M`
   - `markActiveChannelViewed` (`MainWindow+LiveData.swift:25-39`) only sends
     `POST /channels/members/me/view` for the open channel. Incoming `channel_viewed` events
     from another device are ignored, and there is no
@@ -162,7 +162,7 @@ source revision. The long list of previously completed work is preserved in
     Derive these indicators from shared server-backed unread state and refresh them at
     launch/reconnect.
 
-- [ ] **DND and per-channel notification preferences do not suppress notifications** — `M`
+- [x] **DND and per-channel notification preferences do not suppress notifications** — `M`
   - The status menu says DND "Disables all notifications"
     (`MainWindow+Menus.swift:396`), but `handleIncomingPost`
     (`MainWindow+LiveData.swift:415-445`) calls `noteIncomingMessage` unconditionally;
@@ -174,7 +174,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when DND, offline, `desktop: none`, `desktop: mention`, sound off, mention-key
     overrides and channel mute are honored, including thread replies.
 
-- [ ] **DND expiry and "Don't clear" custom status are broken** — `S`
+- [x] **DND expiry and "Don't clear" custom status are broken** — `S`
   - Mattermost returns `dnd_end_time` in **seconds** (confirmed in
     `server/public/model/status.go`), but `normalizedStatus` compares it to `nowMs`
     (milliseconds) (`MainWindow+People.swift:220-224`). Every future DND expiry is therefore
@@ -187,7 +187,7 @@ source revision. The long list of previously completed work is preserved in
   - "This week" is implemented as now + 7 days rather than the end of the week
     (`:201-218`), and expired custom statuses are never auto-cleared.
 
-- [ ] **Incoming realtime posts steal the scroll position** — `S`
+- [x] **Incoming realtime posts steal the scroll position** — `S`
   - `appendRealtimePost` (`MainWindow+LiveData.swift:384-404`) always calls
     `rebuildTimelineContent(scrollToBottom: true)`. If the user is reading history, a new
     message jumps them to the bottom.
@@ -197,27 +197,27 @@ source revision. The long list of previously completed work is preserved in
     (`MainWindow+LiveData.swift:384-391`), so even the current pill never appears for live
     traffic.
 
-- [ ] **Scroll position is not remembered per channel** — `M`
+- [x] **Scroll position is not remembered per channel** — `M`
   - `loadChannelPosts` clears posts and `applyPostsToTimeline`
     (`MainWindow+LiveData.swift:332-351`) always scrolls to bottom or the unread divider.
     Returning to a channel loses where you were.
   - Done when each channel restores its last visible post/offset (Mattermost does this).
 
-- [ ] **Notification click opens the channel, not the message** — `S`
+- [x] **Notification click opens the channel, not the message** — `S`
   - `postNotification` stores only `channelId` (`AppDelegate.swift:240-257`) and
     `didReceive` calls `openChannel(withId:)` (`:267-279`). Done when the notification
     carries the post/thread id and opens/highlights the exact message.
 
 ### Search
 
-- [ ] **The Files tab in global search is a dead control** — `M`
+- [x] **The Files tab in global search is a dead control** — `M`
   - Selecting Files only changes the placeholder (`MainWindow+Header.swift:446-458`);
     `performSearchFromPopover` (`:258-283`) always calls `POST /teams/{team}/posts/search`.
   - The service already has `searchChannelFiles` (`webservice.swift:1036-1049`), so a
     team-wide files query can reuse `POST /teams/{team}/files/search` and render the RHS
     file-card style. Done when the tab actually searches files and opens images/files.
 
-- [ ] **Search results do not jump to the selected post** — `S`
+- [x] **Search results do not jump to the selected post** — `S`
   - `openSearchResult` (`MainWindow+Header.swift:348-354`) only opens the channel; unlike
     Mentions/Saved (`MainWindow+RightPanel.swift:587-592`), it never sets
     `pendingJumpPostId`, so users land at the bottom of the channel.
@@ -253,7 +253,7 @@ source revision. The long list of previously completed work is preserved in
     `MMPostList.chronologicalPosts` (`webservice.swift:313`). If the API returns newest
     first, the root/replies render backwards.
 
-- [ ] **Thread replies are rendered inline in the channel timeline** — `M`
+- [x] **Thread replies are rendered inline in the channel timeline** — `M`
   - `rebuildTimelineContent` renders every `currentChannelPosts` entry with no `root_id`
     filter (`MainWindow+Timeline.swift:2336-2371`), and `appendRealtimePost`
     (`MainWindow+LiveData.swift:384-391`) appends any `posted` event for the active channel.
@@ -298,7 +298,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when the sidebar has a scroll view (with stable hit-testing and hover state) and the
     team/filter/threads header stays pinned.
 
-- [ ] **The Favorites filter always shows zero channels** — `S`
+- [x] **The Favorites filter always shows zero channels** — `S`
   - `visibleItems` requires both `!favoriteChannelIds.contains($0.id)` *and*, when
     `sidebarFavoritesOnly` is true, `favoriteChannelIds.contains($0.id)`
     (`MainWindow+Sidebar.swift:1017-1021`). The conjunction is impossible.
@@ -306,7 +306,7 @@ source revision. The long list of previously completed work is preserved in
     Favorites leaves every header visible with no rows. Done when the filter shows exactly
     the favorite channels (and an empty state).
 
-- [ ] **Channels from other teams leak into the active sidebar** — `M`
+- [x] **Channels from other teams leak into the active sidebar** — `M`
   - `switchActiveTeam` merges `GET /users/me/channels` (all teams) into `channelsById`
     (`MainWindow+Sidebar.swift:906-921`). `populateSidebarCategories` then appends every
     "unplaced" channel to the current team's CHANNELS section (`:519-543`), so other teams'
@@ -315,7 +315,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when the directory is scoped per team (or lookups always check `team_id`) and
     switching teams fully replaces the channel/category state.
 
-- [ ] **Team switching is racy, unpersisted, and can show stale data** — `M`
+- [x] **Team switching is racy, unpersisted, and can show stale data** — `M`
   - A switch updates the header before fetching (`MainWindow+Sidebar.swift:897-900`), has no
     rollback/error UI, and no request token: an older team's slower response can overwrite a
     newer switch (`:901-938`). `loadUnreadState` (`:78-105`) has the same race, and
@@ -328,7 +328,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when switches are token-guarded/cancelled, failures revert, clicking the active team
     is a no-op, and the last team/channel is restored.
 
-- [ ] **Group Direct Messages (`type == "G"`) are unhandled across the app** — `M`
+- [x] **Group Direct Messages (`type == "G"`) are unhandled across the app** — `M`
   - Mattermost has four channel types: `"O"` (open), `"P"` (private), `"D"` (1:1 DM), and
     `"G"` (group DM, up to 7 participants).
   - In `MainWindow+Sidebar.swift:153-158,441-448,519,528`, `"G"` channels fall into the
@@ -351,13 +351,13 @@ source revision. The long list of previously completed work is preserved in
   - Done when the timeline/column resizes around the panel, and closing it or resizing the
     window re-lays out both the frame and the panel content.
 
-- [ ] **Header member count is fake and the info button is dead** — `S`
+- [x] **Header member count is fake and the info button is dead** — `S`
   - `channelMembersCountLabel` starts at `"1"` (`MainWindow.swift:312`) and is never updated
     from `fetchChannelMembers` (`MainWindow+Layout.swift:94-99,570-580`).
   - `channelInfoButton` has no `onClick` (`Layout:166-179`), even though the channel menu’s
     View Info exists. Wire both to real channel info/member data.
 
-- [ ] **Login cannot handle subpath deployments or a missing token** — `M`
+- [x] **Login cannot handle subpath deployments or a missing token** — `M`
   - A server URL with a path (`https://host/mattermost`) is accepted, but `buildURL`
     overwrites `components.path` with `/api/v4/...` (`webservice.swift:453`), silently
     dropping the subpath. Mattermost behind a reverse proxy/subpath cannot log in.
@@ -369,7 +369,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when base paths are preserved in every REST/WS URL, a missing token is a visible
     error, and credentials are stored only after a successful validation.
 
-- [ ] **Mention detection misses `@here`/`@channel` and false-positives** — `S`
+- [x] **Mention detection misses `@here`/`@channel` and false-positives** — `S`
   - `handleIncomingPost` uses a raw lowercase substring check for `"@" + username`
     (`MainWindow+LiveData.swift:429-433`). It misses `@here`/`@channel`/`@all`, matches
     emails/code/quotes, and counts mentions in muted channels.
@@ -378,14 +378,14 @@ source revision. The long list of previously completed work is preserved in
 
 ### Lifecycle, layout and rendering correctness
 
-- [ ] **Font fallback in `MMFont.font(ofSize:weight:)` has infinite recursion** — `S`
+- [x] **Font fallback in `MMFont.font(ofSize:weight:)` has infinite recursion** — `S`
   - Despite the header comment claiming graceful degradation to the system font
     (`MMFont.swift:7`), the `else` branch when `NSFont(name: postScriptName(for: weight), size: size)`
     returns `nil` calls `return MMFont.font(ofSize: size, weight: weight)` (`MMFont.swift:57`)
     instead of `NSFont.systemFont(ofSize: size, weight: weight)`, causing an immediate stack
     overflow crash if `OpenSans.ttf` is missing or fails to register.
 
-- [ ] **Offline or transient 5xx at launch invalidates the session and drops to Login** — `S`
+- [x] **Offline or transient 5xx at launch invalidates the session and drops to Login** — `S`
   - `WebService.checkToken` (`webservice.swift:629-649`) catches *all* errors (including DNS,
     offline, timeout, and 5xx) and returns `false`. `AppDelegate.startAuthentication`
     (`AppDelegate.swift:70-82`) then assumes the stored token is invalid and falls back to
@@ -393,7 +393,7 @@ source revision. The long list of previously completed work is preserved in
     `LoginWindow`. Distinguish `HTTP 401` from transient network/server errors and open the
     workspace in a reconnecting state when a token exists.
 
-- [ ] **Logout leaves user-scoped state behind** — `M`
+- [x] **Logout leaves user-scoped state behind** — `M`
   - `AppDelegate.logout` (`AppDelegate.swift:320-329`) disconnects and deletes credentials,
     but does not clear `unreadCounts`, the dock badge, delivered notifications, custom
     status, recent emojis, favorites, or the status polling timer.
@@ -403,20 +403,20 @@ source revision. The long list of previously completed work is preserved in
   - Done when logout resets all per-user state and timers, and the next login cannot inherit
     the previous account's status/emoji/unread data.
 
-- [ ] **`showMainWindow()` does nothing when a window already exists** — `S`
+- [x] **`showMainWindow()` does nothing when a window already exists** — `S`
   - `AppDelegate.swift:281-285` does `guard mainWindow == nil else { createMainWindow(); return }`;
     `createMainWindow()` immediately returns because `mainWindow != nil`. It should bring the
     existing window forward. Add `applicationShouldHandleReopen` too, so Dock activation
     reopens a hidden/closed window.
 
-- [ ] **No minimum window size; layout can produce negative widths** — `S`
+- [x] **No minimum window size; layout can produce negative widths** — `S`
   - No `minSize`/`contentMinSize` is set anywhere (`MainWindow.swift:438-546`). At narrow
     widths `composerW - 234` (`MainWindow+Layout.swift:596-607`) becomes negative, the
     search field/Help button can overlap the right cluster (`:698-703`), and the right panel
     can be wider than the chat panel. Done when the window cannot shrink below a usable
     sidebar + chat + composer width and popovers clamp to the viewport.
 
-- [ ] **The connection banner covers the first timeline row** — `S`
+- [x] **The connection banner covers the first timeline row** — `S`
   - `connectionBanner` is placed at `headerY - 26` (`MainWindow+Layout.swift:499`) while the
     timeline still starts at `headerY` (`:640`), so the top 26pt of messages are hidden while
     disconnected/reconnecting. Reserve space in the timeline frame while the banner is
@@ -430,7 +430,7 @@ source revision. The long list of previously completed work is preserved in
   - Done when switching teams applies that team's theme immediately and server theme
     changes apply without relaunch (or via a documented refresh).
 
-- [ ] **Avatar colors are non-deterministic and `abs(hashValue)` can trap** — `S`
+- [x] **Avatar colors are non-deterministic and `abs(hashValue)` can trap** — `S`
   - `abs(authorName.hashValue) % palette.count` (`MainWindow+Timeline.swift:1762`) and
     `abs(user.username.hashValue) % palette.count` (`MainWindow+Menus.swift:955`) use
     randomly seeded `hashValue`, so avatar colors change every launch. `abs(Int.min)`
@@ -438,12 +438,12 @@ source revision. The long list of previously completed work is preserved in
   - `MMPalette.avatarColors` is computed from `Theme.shared`, so colors also shift with
     theme changes; cache or define a stable palette.
 
-- [ ] **The lightbox credits the current user instead of the poster** — `S`
+- [x] **The lightbox credits the current user instead of the poster** — `S`
   - `showLightbox` (`MainWindow+Timeline.swift:877-898`) builds the subtitle from
     `currentUser`, and callers pass no author. Viewing someone else's image says
     "You Shared In ~channel". Pass the post author (or file uploader) through.
 
-- [ ] **Status changes are optimistic with no failure feedback** — `S`
+- [x] **Status changes are optimistic with no failure feedback** — `S`
   - `selectUserStatus` (`MainWindow+People.swift:75-114`) updates the dot/menu immediately
     and only logs a failed `PUT /users/{id}/status`. Done when failure reverts the UI and
     shows an error.
@@ -451,7 +451,7 @@ source revision. The long list of previously completed work is preserved in
     `userStatusById[st.user_id] = st.status` directly without calling
     `normalizedStatus(st.status, dndEndTime: st.dnd_end_time)` or saving `dnd_end_time`.
 
-- [ ] **Copied links omit the scheme for bare hosts** — `S`
+- [x] **Copied links omit the scheme for bare hosts** — `S`
   - `copyChannelLink` (`MainWindow+Menus.swift:1112-1127`) and `copyPostLink`
     (`MainWindow+Timeline.swift:1209-1230`) concatenate `UserDefaults "host"` directly. A
     host saved as `mattermost.example.com` produces `mattermost.example.com/team/channels/x`
@@ -464,7 +464,7 @@ source revision. The long list of previously completed work is preserved in
 
 ## P2 — Security, privacy & packaging
 
-- [ ] **Unescaped URL path parameters and multipart header injection in `WebService`** — `S`
+- [x] **Unescaped URL path parameters and multipart header injection in `WebService`** — `S`
   - `fetchUserByUsername` (`webservice.swift:670`) and `removeReaction` (`:1091`) interpolate
     `username` and `emojiName` directly into the URL path without
     `addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)`.
@@ -473,7 +473,7 @@ source revision. The long list of previously completed work is preserved in
     escaping `"` or `\r\n`, breaking uploads for filenames containing quotes and allowing
     multipart header injection.
 
-- [ ] **Credential-adjacent `NSLog` calls are still unconditional** — `S`
+- [x] **Credential-adjacent `NSLog` calls are still unconditional** — `S`
   - `AppDelegate.swift:67` logs `host:port`; `:155` logs `username@host:port`;
     `:163/:167/:173` log login outcomes/errors. These bypass the `DebugLog` gating added
     for the raw WebSocket/HTTP payloads and put account identifiers in the unified log on
@@ -481,7 +481,7 @@ source revision. The long list of previously completed work is preserved in
   - Replace with `DebugLog.info/error` (identifiers only) and keep credential values out of
     every log path. Re-audit the remaining 28 `NSLog` call sites.
 
-- [ ] **The account password is always persisted, with no "remember me"** — `M`
+- [x] **The account password is always persisted, with no "remember me"** — `M`
   - `LoginWindow` writes the password on `viewWillDisappear` (`:39-50`) and again on Connect
     (`:142-146`), regardless of user intent; `AppDelegate.startAuthentication` then uses it
     for token-less auto-login. Prefer token-only persistence with an explicit "Keep me
@@ -503,7 +503,7 @@ source revision. The long list of previously completed work is preserved in
     unbounded). Add a "Load images automatically" preference (off/known hosts/always),
     limit response size/type, and cap the disk cache.
 
-- [ ] **Per-user state leaks across accounts** — `S`
+- [x] **Per-user state leaks across accounts** — `S`
   - `customStatusText/Emoji` (`MainWindow.swift:208-209`, `MainWindow+People.swift:179-196`)
     and `recentEmojis` (`MainWindow+Composer.swift:45,225`) are global `UserDefaults` keys,
     never cleared on logout. A second account on the same Mac inherits the first account's
@@ -516,7 +516,7 @@ source revision. The long list of previously completed work is preserved in
     and re-run the audit when the cache/download code changes.
   - Also document that messages/attachments are user data stored only in caches/temp.
 
-- [ ] **No application-level integrity/diagnostics story** — `S`
+- [x] **No application-level integrity/diagnostics story** — `S`
   - There is no crash reporting, no "Export diagnostics" action, and no way for users to
     inspect the gated debug log from the UI. Add a diagnostics export (redacted) and a
     feedback/report path.

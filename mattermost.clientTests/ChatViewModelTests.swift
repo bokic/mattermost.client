@@ -45,7 +45,8 @@ final class ChatViewModelTests: XCTestCase {
             msg_count: 12,
             mention_count: 2,
             last_viewed_at: 1_700_000_000,
-            last_update_at: 1_700_000_100
+            last_update_at: 1_700_000_100,
+            notify_props: nil
         )
 
         XCTAssertTrue(model.isWebSocketConnected)

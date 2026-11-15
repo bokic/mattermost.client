@@ -73,6 +73,9 @@ extension MainWindow {
     }
 
     func selectUserStatus(_ index: Int, dndEndTime: Int64? = nil) {
+        let previousStatus = currentUserStatus
+        let previousUserId = currentUser?.id ?? ""
+        let previousDndEndTime = previousUserId.isEmpty ? nil : dndEndTimeByUser[previousUserId]
         selectedStatusIndex = index
         for (i, checkView) in statusCheckViews.enumerated() {
             checkView.isHidden = (i != index)
@@ -100,12 +103,24 @@ extension MainWindow {
         if let ws = webService, ws.isLogged() {
             let targetUserId = currentUser?.id ?? ws.currentUserId
             DebugLog.log("selectUserStatus: index=\(index), statStr=\(statStr), targetUserId=\(targetUserId), dndEndTime=\(String(describing: dndEndTime))")
-            Task {
+            Task { @MainActor [weak self] in
                 do {
                     let updated = try await ws.updateUserStatus(userId: targetUserId, status: statStr, dndEndTime: dndEndTime)
                     DebugLog.log("Successfully updated user status on backend for \(targetUserId) to \(updated.status)")
                 } catch {
                     DebugLog.error("Failed to update user status on server: \(error)")
+                    guard let self = self else { return }
+                    // Roll the optimistic UI back; otherwise it diverges from the server.
+                    self.applyCurrentUserStatus(previousStatus)
+                    if let previousUserId = previousUserId.isEmpty ? nil : previousUserId {
+                        if let previousDndEndTime = previousDndEndTime {
+                            self.dndEndTimeByUser[previousUserId] = previousDndEndTime
+                        } else {
+                            self.dndEndTimeByUser.removeValue(forKey: previousUserId)
+                        }
+                        self.userStatusById[previousUserId] = previousStatus
+                    }
+                    self.showInfoAlert("Could not update your status: \(error.localizedDescription)")
                 }
             }
         } else {
@@ -165,8 +180,11 @@ extension MainWindow {
             unsetCustomStatus()
             return
         }
-        let durations = ["dont_clear", "thirty_minutes", "one_hour", "four_hours", "today", "this_week"]
+        // "" is the server's "don't clear" value; the old `dont_clear` value was
+        // rejected by Mattermost and made most custom statuses fail.
+        let durations = ["", "thirty_minutes", "one_hour", "four_hours", "today", "this_week"]
         let index = max(0, min(durationIndex, durations.count - 1))
+        let targetDate = customStatusTargetDate(for: index)
         let expiresAt = customStatusExpiry(for: index)
         guard let ws = webService else { return }
 
@@ -176,8 +194,14 @@ extension MainWindow {
                 try await ws.setCustomStatus(emoji: emoji, text: text, duration: durations[index], expiresAt: expiresAt)
                 self.customStatusEmoji = emoji
                 self.customStatusText = text
+                self.customStatusExpiresAt = targetDate
                 UserDefaults.standard.set(emoji, forKey: "customStatusEmoji")
                 UserDefaults.standard.set(text, forKey: "customStatusText")
+                if let targetDate = targetDate {
+                    UserDefaults.standard.set(targetDate.timeIntervalSince1970, forKey: "customStatusExpiresAt")
+                } else {
+                    UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
+                }
                 self.updateCustomStatusUI()
             } catch {
                 self.showInfoAlert("Could not set custom status: \(error.localizedDescription)")
@@ -190,28 +214,57 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             _ = try? await ws.clearCustomStatus()
-            self.customStatusEmoji = ""
-            self.customStatusText = ""
-            UserDefaults.standard.removeObject(forKey: "customStatusEmoji")
-            UserDefaults.standard.removeObject(forKey: "customStatusText")
-            self.updateCustomStatusUI()
+            self.clearLocalCustomStatus()
+        }
+    }
+
+    func clearLocalCustomStatus() {
+        customStatusEmoji = ""
+        customStatusText = ""
+        customStatusExpiresAt = nil
+        UserDefaults.standard.removeObject(forKey: "customStatusEmoji")
+        UserDefaults.standard.removeObject(forKey: "customStatusText")
+        UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
+        updateCustomStatusUI()
+    }
+
+    /// Clears a local custom status after its server expiry has passed. The
+    /// server also expires it; this keeps the menu pill from showing stale text.
+    func clearExpiredCustomStatusIfNeeded() {
+        guard let expiry = customStatusExpiresAt, expiry <= Date() else { return }
+        let text = customStatusText
+        clearLocalCustomStatus()
+        guard !text.isEmpty, let ws = webService, ws.isLogged() else { return }
+        Task { @MainActor in
+            _ = try? await ws.clearCustomStatus()
+        }
+    }
+
+    func customStatusTargetDate(for index: Int) -> Date? {
+        let now = Date()
+        let calendar = Calendar.current
+        switch index {
+        case 1: return now.addingTimeInterval(30 * 60)
+        case 2: return now.addingTimeInterval(60 * 60)
+        case 3: return now.addingTimeInterval(4 * 60 * 60)
+        case 4:
+            let start = calendar.startOfDay(for: now)
+            return calendar.date(byAdding: .day, value: 1, to: start)?.addingTimeInterval(-1)
+        case 5:
+            // Mattermost's "this week" ends at the end of the current week
+            // (Sunday 23:59:59), not seven days from now.
+            let start = calendar.startOfDay(for: now)
+            let weekday = calendar.component(.weekday, from: start)
+            let daysUntilSunday = (8 - weekday) % 7
+            return calendar.date(byAdding: .day, value: daysUntilSunday, to: start)?
+                .addingTimeInterval(24 * 60 * 60 - 1)
+        default:
+            return nil
         }
     }
 
     func customStatusExpiry(for index: Int) -> String? {
-        let now = Date()
-        let target: Date?
-        switch index {
-        case 1: target = now.addingTimeInterval(30 * 60)
-        case 2: target = now.addingTimeInterval(60 * 60)
-        case 3: target = now.addingTimeInterval(4 * 60 * 60)
-        case 4:
-            let start = Calendar.current.startOfDay(for: now)
-            target = Calendar.current.date(byAdding: .day, value: 1, to: start)?.addingTimeInterval(-1)
-        case 5: target = now.addingTimeInterval(7 * 24 * 60 * 60)
-        default: target = nil
-        }
-        guard let date = target else { return nil }
+        guard let date = customStatusTargetDate(for: index) else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.string(from: date)
@@ -219,8 +272,9 @@ extension MainWindow {
 
     func normalizedStatus(_ status: String, dndEndTime: Int64?) -> String {
         guard status.lowercased() == "dnd", let end = dndEndTime, end > 0 else { return status }
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        return end <= nowMs ? "online" : status
+        // Mattermost returns `dnd_end_time` in seconds, not milliseconds.
+        let nowSeconds = Int64(Date().timeIntervalSince1970)
+        return end <= nowSeconds ? "online" : status
     }
 
     func normalizedStatusForKnownUser(_ status: String, userId: String) -> String {
@@ -418,8 +472,12 @@ extension MainWindow {
         let allTargetIds = Array(targetIds.filter { isLikelyMattermostId($0) })
         if !allTargetIds.isEmpty, let statuses = try? await ws.fetchUserStatuses(userIds: allTargetIds) {
             for st in statuses {
-                self.userStatusById[st.user_id] = st.status
-                self.updateChatWidgetUserStatus(userId: st.user_id, status: st.status)
+                if let end = st.dnd_end_time, end > 0 {
+                    self.dndEndTimeByUser[st.user_id] = end
+                }
+                let status = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
+                self.userStatusById[st.user_id] = status
+                self.updateChatWidgetUserStatus(userId: st.user_id, status: status)
             }
         }
         for ch in dmChannels {

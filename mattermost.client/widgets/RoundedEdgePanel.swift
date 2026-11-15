@@ -101,6 +101,43 @@ class RoundedEdgePanel: NSView {
         }
     }
 
+    /// Clickable panels are usually filled with `NSImageView`/label children. AppKit's
+    /// `NSImageView` consumes `mouseDown` without forwarding it to its superview, which
+    /// turned the icon itself into a dead zone. Keep genuinely interactive descendants
+    /// (text editors, controls, scroll views and nested clickable panels) working, but
+    /// otherwise make the panel the hit target so its `onClick` receives the click.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        guard onClick != nil, hit !== self else { return hit }
+        if hitIsInteractive(hit) { return hit }
+        return self
+    }
+
+    private func hitIsInteractive(_ hit: NSView) -> Bool {
+        var view: NSView? = hit
+        while let current = view, current !== self {
+            if let panel = current as? RoundedEdgePanel, panel.onClick != nil {
+                return true
+            }
+            if current is NSTextView || current is NSScrollView {
+                return true
+            }
+            if let control = current as? NSControl, control.isEnabled {
+                // Non-editable labels should not swallow clicks on their row, but
+                // buttons, pop-ups and editable/selectable fields should.
+                if let textField = control as? NSTextField {
+                    if textField.isEditable || textField.isSelectable || textField.isBezeled {
+                        return true
+                    }
+                } else {
+                    return true
+                }
+            }
+            view = current.superview
+        }
+        return false
+    }
+
     // Call this after changing appearance properties to refresh the view's rendering
     func setNeedsAppearanceUpdate() {
         if wantsLayer { self.layer?.setNeedsLayout() }

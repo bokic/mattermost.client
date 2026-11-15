@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-test:
@@ -29,3 +31,63 @@ jobs:
 
       - name: Lint migrated files
         run: ./lint.sh
+
+  release:
+    # A universal, checksummed Release DMG is built and smoke-launched for tags
+    # and manual runs. Signing/notarization is a protected manual step because
+    # it needs the Developer ID certificate and notary credentials.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build Release DMG
+        run: ./build_release.sh --adhoc
+
+      - name: Verify artifact
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release/mattermost.client.app"
+          ARCHS="$(lipo -archs "$APP/Contents/MacOS/mattermost.client")"
+          echo "Architectures: $ARCHS"
+          printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -qx arm64
+          printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -qx x86_64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          DMG="$(find build/Build/Products/Release -maxdepth 1 -name 'mattermost.client-*.dmg' | head -1)"
+          [ -n "$DMG" ] || { echo "::error::No DMG produced"; exit 1; }
+          shasum -a 256 "$DMG" | tee "$DMG.ci.sha256"
+          hdiutil verify "$DMG"
+
+      - name: Smoke launch
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release/mattermost.client.app/Contents/MacOS/mattermost.client"
+          "$APP" >/tmp/mattermost-smoke.log 2>&1 &
+          PID=$!
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "::error::Release app exited during launch"
+              cat /tmp/mattermost-smoke.log
+              exit 1
+            fi
+            sleep 0.5
+          done
+          kill "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          echo "Release app stayed alive for the smoke window."
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: mattermost-client-release
+          path: |
+            build/Build/Products/Release/mattermost.client-*.dmg
+            build/Build/Products/Release/mattermost.client-*.dmg.sha256
+          if-no-files-found: error

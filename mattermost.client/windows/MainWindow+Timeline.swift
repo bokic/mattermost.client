@@ -81,11 +81,21 @@ extension MainWindow {
     }
 
     func layoutNewMessagesPill() {
-        let pillW = newMessagesPill.frame.width
-        guard pillW > 20 else { return }
+        let listRight = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
+        let availableWidth = max(0, listRight - 30)
+        guard availableWidth > 20 else { return }
         let font = newMessagesPillLabel.font ?? MMFont.font(ofSize: 13, weight: .bold)
         let textW = ceil((newMessagesPillLabel.stringValue as NSString).size(withAttributes: [.font: font]).width)
         let groupW = 16 + 6 + textW
+        // Size the pill to its contents instead of spanning the whole timeline:
+        // a full-width strip swallows clicks in a large part of the message area.
+        let pillW = min(availableWidth, groupW + 24)
+        newMessagesPill.frame = NSRect(
+            x: 15 + (availableWidth - pillW) / 2,
+            y: newMessagesPill.frame.minY,
+            width: pillW,
+            height: 32
+        )
         let startX = max(8, (pillW - groupW) / 2)
         newMessagesPillIcon.frame = NSRect(x: startX, y: 8, width: 16, height: 16)
         newMessagesPillLabel.frame = NSRect(x: startX + 22, y: 8, width: textW + 2, height: 16)
@@ -122,7 +132,7 @@ extension MainWindow {
     func layoutHeroSubviews(heroW: CGFloat) {
         let isBot = isCurrentChannelBot()
         let currentCh = activeChannelId.isEmpty ? nil : channelsById[activeChannelId]
-        let isDM = (currentCh?.type == "D") || isBot
+        let isDM = (currentCh?.type == "D" || currentCh?.type == "G") || isBot
         let targetUserId = currentCh.flatMap { resolveDMTargetUserId(for: $0) }
         if let targetId = targetUserId {
             fetchAvatarIfNeeded(for: targetId)
@@ -340,7 +350,7 @@ extension MainWindow {
         return NSSize(width: max(1, floor(width)), height: max(1, floor(height)))
     }
 
-    func createInlineImageView(urlString: String, maxWidth: CGFloat) -> (NSView, CGFloat) {
+    func createInlineImageView(urlString: String, maxWidth: CGFloat, authorId: String? = nil) -> (NSView, CGFloat) {
         let maxHeight: CGFloat = 350
         var naturalSize = inlineImageSizeCache[urlString] ?? NSSize(width: 240, height: 160)
 
@@ -382,7 +392,7 @@ extension MainWindow {
 
         container.onClick = { [weak self, weak imageView] in
             let name = URL(string: urlString)?.lastPathComponent ?? "Image"
-            self?.showLightbox(image: imageView?.image, remoteURL: urlString, filename: name)
+            self?.showLightbox(image: imageView?.image, remoteURL: urlString, filename: name, authorId: authorId)
         }
 
         loadGiphyAnimatedImage(from: urlString) { [weak self, weak container, weak imageView] image in
@@ -721,16 +731,30 @@ extension MainWindow {
     }
 
     func applyUpdatedPost(_ post: MMPost) {
+        let wasInTimeline = currentChannelPosts.contains { $0.id == post.id }
         if let index = currentChannelPosts.firstIndex(where: { $0.id == post.id }) {
             currentChannelPosts[index] = post
         }
         if let index = threadPosts.firstIndex(where: { $0.id == post.id }) {
             threadPosts[index] = post
         }
-        if isRightPanelVisible && rightPanelMode == .thread {
+        if wasInTimeline {
+            rebuildTimelineContent(scrollToBottom: false)
+        }
+        guard isRightPanelVisible else { return }
+        switch rightPanelMode {
+        case .thread:
             renderThreadPanel()
-        } else {
-            rebuildTimelineContent()
+        case .pinned:
+            loadPinnedPosts()
+        case .mentions:
+            loadMentions()
+        case .saved:
+            loadSavedPosts()
+        case .threads:
+            loadThreads()
+        default:
+            break
         }
     }
 
@@ -874,14 +898,24 @@ extension MainWindow {
         button.onClick = action
     }
 
-    func showLightbox(image: NSImage?, file: MMFileInfo? = nil, remoteURL: String? = nil, filename: String) {
+    func showLightbox(
+        image: NSImage?,
+        file: MMFileInfo? = nil,
+        remoteURL: String? = nil,
+        filename: String,
+        authorId: String? = nil
+    ) {
         guard let contentView = contentView else { return }
 
         lightboxFile = file
         lightboxRemoteURL = remoteURL
         lightboxScale = 1
         lightboxTitleLabel.stringValue = filename
-        let author = currentUser?.username ?? UserDefaults.standard.string(forKey: "username") ?? ""
+        let resolvedAuthorId = authorId ?? file?.user_id
+        let author = resolvedAuthorId.flatMap { usersById[$0]?.username }
+            ?? currentUser?.username
+            ?? UserDefaults.standard.string(forKey: "username")
+            ?? ""
         let channel = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
         if !author.isEmpty && !channel.isEmpty {
             lightboxSubtitleLabel.stringValue = "\(author) Shared In ~\(channel)"
@@ -891,7 +925,7 @@ extension MainWindow {
             lightboxSubtitleLabel.stringValue = ""
         }
 
-        if let avatar = userAvatarsById[currentUser?.id ?? ""] {
+        if let avatar = resolvedAuthorId.flatMap({ userAvatarsById[$0] }) {
             lightboxAvatarView.image = avatar
         } else {
             lightboxAvatarView.image = nil
@@ -1207,18 +1241,24 @@ extension MainWindow {
     }
 
     func copyPostLink(_ post: MMPost) {
-        var host = UserDefaults.standard.string(forKey: "host") ?? ""
-        let port = UserDefaults.standard.integer(forKey: "port")
-        if port > 0 && !host.hasSuffix(":\(port)") {
-            host += ":\(port)"
-        }
         let teamName = activeTeam?.name ?? ""
-        let url = "\(host)/\(teamName)/pl/\(post.id)"
+        let path = "/\(teamName)/pl/\(post.id)"
+        let url: String
+        if let built = webService?.buildURL(path: path) {
+            url = built.absoluteString
+        } else {
+            var host = UserDefaults.standard.string(forKey: "host") ?? ""
+            let port = UserDefaults.standard.integer(forKey: "port")
+            if !host.contains("://") { host = "https://" + host }
+            if port > 0 && !host.hasSuffix(":\(port)") { host += ":\(port)" }
+            url = host + path
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url, forType: .string)
         composerHelpLabel.stringValue = "Link copied"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.composerHelpLabel.stringValue = "Help"
+            guard let self = self, self.composerHelpLabel.stringValue == "Link copied" else { return }
+            self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
         }
     }
 
@@ -1372,7 +1412,7 @@ extension MainWindow {
             container?.setNeedsAppearanceUpdate()
         }
         container.onClick = { [weak self, weak imageView] in
-            self?.showLightbox(image: imageView?.image, file: file, filename: file.name ?? "Image")
+            self?.showLightbox(image: imageView?.image, file: file, filename: file.name ?? "Image", authorId: file.user_id)
         }
 
         if let ws = webService {
@@ -1513,33 +1553,205 @@ extension MainWindow {
         return (container, height)
     }
 
+    /// Removes path separators, control characters and traversal components from a
+    /// server-supplied filename before it is written to disk.
+    func sanitizedAttachmentFilename(_ raw: String, fallback: String) -> String {
+        let lastComponent = (raw as NSString).lastPathComponent
+        let withoutControlCharacters = String(
+            lastComponent.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+                .map(Character.init)
+        )
+        let cleaned = withoutControlCharacters
+            .replacingOccurrences(of: ":", with: "_")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, cleaned != ".", cleaned != ".." else { return fallback }
+        return String(cleaned.prefix(200))
+    }
+
+    func pruneAttachmentTempFiles() {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("mattermost.client", isDirectory: true)
+        guard let entries = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        for entry in entries {
+            guard let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let modified = values.contentModificationDate,
+                  modified < cutoff else { continue }
+            try? fm.removeItem(at: entry)
+        }
+    }
+
+    func presentAttachmentError(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Could not save the file"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        if isVisible {
+            alert.beginSheetModal(for: self)
+        } else {
+            alert.runModal()
+        }
+    }
+
     func openAttachment(_ file: MMFileInfo) {
         guard let ws = webService else { return }
-        Task { @MainActor in
-            guard let data = try? await ws.fetchFileData(fileId: file.id) else { return }
-            let filename = file.name ?? file.id
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-            try? data.write(to: url)
-            NSWorkspace.shared.open(url)
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let data = try await ws.fetchFileData(fileId: file.id)
+                let name = self.sanitizedAttachmentFilename(file.name ?? file.id, fallback: file.id)
+                // A per-file directory prevents same-named downloads from clobbering
+                // each other while the original app is still viewing them.
+                let dir = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("mattermost.client", isDirectory: true)
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let url = dir.appendingPathComponent(name)
+                try data.write(to: url, options: .atomic)
+                self.pruneAttachmentTempFiles()
+                NSWorkspace.shared.open(url)
+            } catch {
+                self.presentAttachmentError(error.localizedDescription)
+            }
         }
     }
 
     func downloadAttachment(_ file: MMFileInfo) {
         guard let ws = webService else { return }
         Task { @MainActor [weak self] in
-            guard let self = self, let data = try? await ws.fetchFileData(fileId: file.id) else { return }
-            self.saveFileData(data, suggestedName: file.name ?? file.id)
+            guard let self = self else { return }
+            do {
+                let data = try await ws.fetchFileData(fileId: file.id)
+                self.saveFileData(data, suggestedName: file.name ?? file.id)
+            } catch {
+                self.presentAttachmentError(error.localizedDescription)
+            }
         }
     }
 
     func saveFileData(_ data: Data, suggestedName: String) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = suggestedName
+        panel.nameFieldStringValue = sanitizedAttachmentFilename(suggestedName, fallback: "attachment")
         panel.canCreateDirectories = true
-        panel.beginSheetModal(for: self) { response in
+        panel.beginSheetModal(for: self) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            try? data.write(to: url)
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                self?.presentAttachmentError(error.localizedDescription)
+            }
         }
+    }
+
+    func createPendingOutgoingRow(_ pending: PendingOutgoingPost, width: CGFloat) -> (NSView, CGFloat) {
+        let row = RoundedEdgePanel()
+        row.identifier = NSUserInterfaceItemIdentifier("pendingRow_\(pending.id)")
+        row.cornerRadius = 0
+        row.color = .clear
+        row.frame = NSRect(x: 0, y: 0, width: width, height: 58)
+
+        let avatarCircle = RoundedEdgePanel()
+        avatarCircle.cornerRadius = 16
+        avatarCircle.clipContentToBounds = true
+        avatarCircle.frame = NSRect(x: 37, y: 14, width: 32, height: 32)
+        if let avatar = userAvatarsById[currentUser?.id ?? ""] {
+            avatarCircle.color = .clear
+            let imageView = NSImageView(frame: NSRect(origin: .zero, size: avatarCircle.frame.size))
+            imageView.image = avatar
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            avatarCircle.addSubview(imageView)
+        } else {
+            let userId = currentUser?.id ?? "pending"
+            avatarCircle.color = MMPalette.avatarColor(for: userId)
+            let initial = (currentUser?.username.first).map { String($0).uppercased() } ?? "Y"
+            let label = NSTextField(labelWithString: initial)
+            label.font = MMFont.font(ofSize: 14, weight: .semibold)
+            label.textColor = .white
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 0, y: 7, width: 32, height: 18)
+            avatarCircle.addSubview(label)
+        }
+        row.addSubview(avatarCircle)
+
+        let name = NSTextField(labelWithString: currentUser?.username ?? "You")
+        name.font = MMFont.font(ofSize: 14, weight: .bold)
+        name.textColor = Theme.shared.centerText
+        name.isEditable = false
+        name.isSelectable = false
+        name.frame = NSRect(x: 79, y: 30, width: max(80, width - 210), height: 18)
+        row.addSubview(name)
+
+        let statusText: String
+        let statusColor: NSColor
+        switch pending.status {
+        case .sending:
+            statusText = "Sending…"
+            statusColor = Theme.shared.centerTextMuted
+        case .failed:
+            statusText = "Failed to send"
+            statusColor = .systemRed
+        }
+        let status = NSTextField(labelWithString: statusText)
+        status.font = MMFont.font(ofSize: 11, weight: .semibold)
+        status.textColor = statusColor
+        status.isEditable = false
+        status.isSelectable = false
+        status.frame = NSRect(x: 79, y: 8, width: 140, height: 16)
+        row.addSubview(status)
+
+        let body = NSTextField(labelWithString: pending.message)
+        body.font = MMFont.font(ofSize: 14)
+        body.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
+        body.lineBreakMode = .byTruncatingTail
+        body.isEditable = false
+        body.isSelectable = false
+        body.frame = NSRect(x: 79, y: 14, width: max(80, width - 100), height: 18)
+        row.addSubview(body)
+
+        if case .failed = pending.status {
+            let deleteButton = RoundedEdgePanel()
+            deleteButton.cornerRadius = MMRadius.control
+            deleteButton.color = .clear
+            deleteButton.frame = NSRect(x: width - 64, y: 8, width: 56, height: 20)
+            let deleteLabel = NSTextField(labelWithString: "Delete")
+            deleteLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+            deleteLabel.textColor = Theme.shared.centerTextMuted
+            deleteLabel.alignment = .center
+            deleteLabel.isEditable = false
+            deleteLabel.isSelectable = false
+            deleteLabel.frame = NSRect(x: 0, y: 2, width: 56, height: 16)
+            deleteButton.addSubview(deleteLabel)
+            deleteButton.onClick = { [weak self] in
+                self?.deletePendingPost(id: pending.id)
+            }
+            row.addSubview(deleteButton)
+
+            let retryButton = RoundedEdgePanel()
+            retryButton.cornerRadius = MMRadius.control
+            retryButton.color = .clear
+            retryButton.frame = NSRect(x: width - 118, y: 8, width: 48, height: 20)
+            let retryLabel = NSTextField(labelWithString: "Retry")
+            retryLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+            retryLabel.textColor = Theme.shared.buttonBg
+            retryLabel.alignment = .center
+            retryLabel.isEditable = false
+            retryLabel.isSelectable = false
+            retryLabel.frame = NSRect(x: 0, y: 2, width: 48, height: 16)
+            retryButton.addSubview(retryLabel)
+            retryButton.onClick = { [weak self] in
+                self?.retryPendingPost(id: pending.id)
+            }
+            row.addSubview(retryButton)
+        }
+
+        return (row, 58)
     }
 
     func createPostRow(post: MMPost, width: CGFloat, timeStr: String, isConsecutive: Bool = false) -> (NSView, CGFloat) {
@@ -1639,7 +1851,7 @@ extension MainWindow {
             }
 
             for gifURL in gifURLs {
-                let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW)
+                let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW, authorId: post.user_id)
                 giphyView.frame.origin = CGPoint(x: 79, y: contentY)
                 row.addSubview(giphyView)
                 contentY += gifH + 6
@@ -1701,7 +1913,7 @@ extension MainWindow {
         // Inline images and file attachments are created first so the row height is known.
         var gifViews: [(NSView, CGFloat)] = []
         for gifURL in gifURLs {
-            let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW)
+            let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW, authorId: post.user_id)
             gifViews.append((giphyView, gifH))
         }
 
@@ -1758,9 +1970,7 @@ extension MainWindow {
             sysAvatarIcon.frame = NSRect(x: 3, y: 3, width: avatarSize - 6, height: avatarSize - 6)
             avatarCircle.addSubview(sysAvatarIcon)
         } else {
-            let palette = MMPalette.avatarColors
-            let hashVal = abs(authorName.hashValue)
-            avatarCircle.color = palette[hashVal % palette.count]
+            avatarCircle.color = MMPalette.avatarColor(for: post.user_id.isEmpty ? authorName : post.user_id)
 
             let initial = authorName.first.map { String($0).uppercased() } ?? "U"
             let initialLabel = NSTextField(labelWithString: initial)
@@ -2214,14 +2424,15 @@ extension MainWindow {
     }
 
     func rebuildTimelineContent(scrollToBottom: Bool = false) {
-        let chatW = chatPanel.bounds.width
+        let fullChatW = chatPanel.bounds.width
+        let chatW = isRightPanelVisible ? rightPanel.frame.minX : fullChatW
         let chatH = chatPanel.bounds.height
         // Keep in sync with layoutRightChatPanel(): 56pt header, 50/90pt composer.
         let headerH: CGFloat = 56
         let headerY = chatH - headerH
         let composerH: CGFloat = composerTotalHeight
         let composerTop = 24 + composerH
-        let scrollH = max(0, headerY - composerTop)
+        let scrollH = max(0, headerY - (connectionBanner.isHidden ? 0 : 26) - composerTop)
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
 
         timelineDocView.subviews.forEach { $0.removeFromSuperview() }
@@ -2240,7 +2451,7 @@ extension MainWindow {
 
         // 2. Posts and Date Separators (localized)
 
-        var postsToRender = currentChannelPosts
+        var postsToRender = currentChannelPosts.filter { ($0.root_id ?? "").isEmpty }
         if postsToRender.isEmpty && !(webService?.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
             if userStatusById["sarah"] == nil {
@@ -2370,6 +2581,13 @@ extension MainWindow {
             lastPostTimestamp = post.create_at
         }
 
+        for pending in pendingOutgoingPosts where pending.channelId == activeChannelId {
+            let (pendingRow, pendingHeight) = createPendingOutgoingRow(pending, width: chatW)
+            pendingRow.frame.origin.y = currentY
+            timelineDocView.addSubview(pendingRow)
+            currentY += pendingHeight + 4
+        }
+
         currentY += 16
         let totalHeight = max(scrollH, currentY)
         timelineDocView.frame = NSRect(x: 0, y: 0, width: chatW, height: totalHeight)
@@ -2397,5 +2615,38 @@ extension MainWindow {
         let maxY = max(0, timelineDocView.frame.height - timelineScrollView.contentView.bounds.height)
         timelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
         timelineScrollView.reflectScrolledClipView(timelineScrollView.contentView)
+        updateNewMessagesDividerState()
+    }
+
+    func saveChannelScrollPosition(for channelId: String) {
+        guard !channelId.isEmpty else { return }
+        let top = timelineScrollView.contentView.bounds.minY
+        let row = timelineDocView.subviews.compactMap { view -> (id: String, y: CGFloat)? in
+            guard let identifier = view.identifier?.rawValue,
+                  identifier.hasPrefix("postRow_") else { return nil }
+            return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
+        }.last(where: { $0.y <= top + 8 }) ?? timelineDocView.subviews.compactMap { view -> (id: String, y: CGFloat)? in
+            guard let identifier = view.identifier?.rawValue,
+                  identifier.hasPrefix("postRow_") else { return nil }
+            return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
+        }.min(by: { $0.y < $1.y })
+        guard let row = row else { return }
+        channelScrollPositions[channelId] = ChannelScrollPosition(postId: row.id, offset: top - row.y)
+    }
+
+    @discardableResult
+    func restoreChannelScrollPosition(for channelId: String) -> Bool {
+        guard let saved = channelScrollPositions[channelId],
+              let row = timelineDocView.subviews.first(where: {
+                  $0.identifier?.rawValue == "postRow_\(saved.postId)"
+              }) else { return false }
+        let clip = timelineScrollView.contentView
+        let maxY = max(0, timelineDocView.frame.height - clip.bounds.height)
+        let target = min(maxY, max(0, row.frame.minY + saved.offset))
+        clip.scroll(to: NSPoint(x: 0, y: target))
+        timelineScrollView.reflectScrolledClipView(clip)
+        updateTimelineHoverState()
+        updateNewMessagesDividerState()
+        return true
     }
 }

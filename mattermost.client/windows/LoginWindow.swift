@@ -33,20 +33,24 @@ private class LoginWindowViewController: NSViewController {
             window.portLabel.intValue = Int32(userSettings.integer(forKey: "port"))
         }
         window.usernameLabel.stringValue = userSettings.string(forKey: "username") ?? ""
-        window.passwordLabel.stringValue = KeychainHelper.get(forKey: "password") ?? ""
+        let remember = userSettings.bool(forKey: "rememberPassword")
+        window.rememberPasswordButton.state = remember ? .on : .off
+
+        guard remember else { return }
+        // Keychain reads can block on the main thread while the system prompts.
+        Task.detached {
+            let password = KeychainHelper.get(forKey: "password")
+            await MainActor.run { [weak window] in
+                window?.passwordLabel.stringValue = password ?? ""
+            }
+        }
     }
     
     override func viewWillDisappear() {
         super.viewWillDisappear()
-        
-        let userSettings = UserDefaults.standard
-        guard let window = loginWindow ?? (self.view.window as? LoginWindow) else { return }
-        userSettings.set(window.hostLabel.stringValue, forKey: "host")
-        if (window.portLabel.intValue > 0) {
-            userSettings.set(window.portLabel.intValue, forKey: "port")
-        }
-        userSettings.set(window.usernameLabel.stringValue, forKey: "username")
-        KeychainHelper.set(window.passwordLabel.stringValue, forKey: "password")
+        // Credentials are stored only after a successful login (see
+        // LoginWindow.connectButtonPressed); closing the window must not
+        // overwrite the last working server/account with unvalidated input.
     }
 }
 
@@ -55,6 +59,7 @@ class LoginWindow: NSWindow {
     var portLabel: NSTextField!
     var usernameLabel: NSTextField!
     var passwordLabel: NSSecureTextField!
+    var rememberPasswordButton: NSButton!
     var connectButton: NSButton!
     var errorLabel: NSTextField!
     var zoomController: WindowZoomController?
@@ -93,6 +98,11 @@ class LoginWindow: NSWindow {
         connectButton.frame = .init(x: 20, y: 200, width: 80, height: 30)
         connectButton.target = self
         connectButton.action = #selector(connectButtonPressed)
+        connectButton.keyEquivalent = "\r"
+
+        rememberPasswordButton = NSButton(checkboxWithTitle: "Keep me signed in", target: nil, action: nil)
+        rememberPasswordButton.frame = .init(x: 112, y: 204, width: 190, height: 24)
+        rememberPasswordButton.state = .off
 
         self.contentViewController = LoginWindowViewController(loginWindow: self)
         self.setContentSize(NSSize(width: rect.width, height: rect.height))
@@ -104,6 +114,7 @@ class LoginWindow: NSWindow {
         contentView?.addSubview(passwordLabel)
         contentView?.addSubview(errorLabel)
         contentView?.addSubview(connectButton)
+        contentView?.addSubview(rememberPasswordButton)
 
         zoomController = WindowZoomController(window: self)
         zoomController?.applyCurrentZoom()
@@ -140,10 +151,6 @@ class LoginWindow: NSWindow {
         let password = passwordLabel.stringValue
 
         let userSettings = UserDefaults.standard
-        userSettings.set(host, forKey: "host")
-        userSettings.set(Int(port), forKey: "port")
-        userSettings.set(username, forKey: "username")
-        KeychainHelper.set(password, forKey: "password")
 
         guard !host.isEmpty, !username.isEmpty, !password.isEmpty else {
             setInputsEnabled(true)
@@ -160,10 +167,29 @@ class LoginWindow: NSWindow {
             guard let self = self else { return }
             do {
                 _ = try await service.login(username: username, password: password)
-                // exit window on success
-                if let token = service.token() {
-                    KeychainHelper.set(token, forKey: "token")
+                guard let token = service.token(), !token.isEmpty else {
+                    self.setInputsEnabled(true)
+                    self.errorLabel.stringValue = "The server did not return a session token. Check the server URL and try again."
+                    return
                 }
+                // Persist only validated credentials, so a typo cannot replace
+                // the last working account.
+                userSettings.set(host, forKey: "host")
+                if port > 0 {
+                    userSettings.set(Int(port), forKey: "port")
+                } else {
+                    userSettings.removeObject(forKey: "port")
+                }
+                userSettings.set(username, forKey: "username")
+                let rememberPassword = self.rememberPasswordButton.state == .on
+                userSettings.set(rememberPassword, forKey: "rememberPassword")
+                if rememberPassword {
+                    KeychainHelper.set(password, forKey: "password")
+                } else {
+                    // Token-only session: the password is not retained.
+                    KeychainHelper.delete(forKey: "password")
+                }
+                KeychainHelper.set(token, forKey: "token")
                 appDelegate?.showMainWindow()
             } catch {
                 // if fail:

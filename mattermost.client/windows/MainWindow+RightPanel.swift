@@ -106,6 +106,9 @@ extension MainWindow {
     }
 
     func showRightPanel(mode: RightPanelMode) {
+        if rightPanelMode == .thread && mode != .thread {
+            saveThreadDraft()
+        }
         rightPanelMode = mode
         isRightPanelVisible = true
         rightPanel.isHidden = false
@@ -140,10 +143,14 @@ extension MainWindow {
             loadBrowseChannels()
         case .thread:
             rightPanelTitle.stringValue = "Thread"
+            restoreThreadDraft()
             loadThread()
         case .files:
             rightPanelTitle.stringValue = "Files"
             loadChannelFiles()
+        case .channelInfo:
+            rightPanelTitle.stringValue = "Channel Info"
+            loadChannelInfo()
         }
         layoutRightChatPanel()
     }
@@ -157,8 +164,10 @@ extension MainWindow {
     }
 
     func closeRightPanel() {
+        if rightPanelMode == .thread { saveThreadDraft() }
         isRightPanelVisible = false
         rightPanel.isHidden = true
+        layoutRightChatPanel()
     }
 
     func reloadRightPanelIfNeeded() {
@@ -173,6 +182,7 @@ extension MainWindow {
         case .browse: loadBrowseChannels()
         case .thread: loadThread()
         case .files: loadChannelFiles()
+        case .channelInfo: loadChannelInfo()
         }
     }
 
@@ -189,11 +199,15 @@ extension MainWindow {
         }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let threads = try? await ws.fetchThreads(userId: userId, teamId: team.id) else {
+            guard let response = try? await ws.fetchThreadsPage(userId: userId, teamId: team.id) else {
                 self.renderRightPanel(empty: "Could not load threads", rows: [])
                 return
             }
+            let threads = response.threads
             self.threadItems = threads
+            self.totalUnreadThreads = response.total_unread_threads
+                ?? threads.filter { ($0.last_reply_at ?? 0) > ($0.last_viewed_at ?? 0) }.count
+            self.updateSidebarBadges()
             let authorIds = threads.compactMap { $0.post?.user_id }
             self.hydrateUsers(authorIds) { [weak self] in
                 guard let self = self else { return }
@@ -203,15 +217,16 @@ extension MainWindow {
                     let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
                     let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
                     let replies = thread.reply_count ?? 0
+                    let isUnread = (thread.last_reply_at ?? 0) > (thread.last_viewed_at ?? 0)
                     return RightPanelRow(
                         title: snippet.isEmpty ? "(attachment)" : snippet,
                         subtitle: [author, channelName].filter { !$0.isEmpty }.joined(separator: " · "),
-                        meta: "\(replies) repl\(replies == 1 ? "y" : "ies")",
+                        meta: "\(replies) repl\(replies == 1 ? "y" : "ies")\(isUnread ? " • unread" : "")",
                         action: { [weak self] in
                             guard let self = self else { return }
                             self.pendingJumpPostId = post.id
                             self.openChannel(withId: post.channel_id)
-                            self.closeRightPanel()
+                            self.showThread(for: post)
                         }
                     )
                 }
@@ -222,6 +237,9 @@ extension MainWindow {
 
     func showThread(for post: MMPost) {
         let root = (post.root_id?.isEmpty == false) ? post.root_id! : post.id
+        if rightPanelMode == .thread && threadRootId != root {
+            saveThreadDraft()
+        }
         threadRootId = root
         threadPosts = [post]
         rightPanelMode = .thread
@@ -229,6 +247,7 @@ extension MainWindow {
         rightPanel.isHidden = false
         rightPanelTitle.stringValue = "Thread"
         rightPanelSubtitle.stringValue = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
+        restoreThreadDraft()
         layoutRightChatPanel()
         loadThread()
     }
@@ -240,6 +259,8 @@ extension MainWindow {
             return
         }
         let rootId = threadRootId
+        let wasUnread = threadItems.first(where: { $0.id == rootId })
+            .map { ($0.last_reply_at ?? 0) > ($0.last_viewed_at ?? 0) } ?? false
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             guard let list = try? await ws.fetchPostThread(postId: rootId) else {
@@ -247,6 +268,7 @@ extension MainWindow {
                 return
             }
             let posts = list.order.compactMap { list.posts[$0] }
+                .sorted { $0.create_at < $1.create_at }
             // The thread endpoint accepts any post in the thread; normalise the
             // reply target to the actual root post.
             if let root = posts.first(where: { ($0.root_id ?? "").isEmpty }) {
@@ -255,6 +277,16 @@ extension MainWindow {
             self.threadPosts = posts
             self.hydrateUsers(posts.map { $0.user_id }) {
                 self.renderThreadPanel()
+            }
+            if let team = self.activeTeam {
+                try? await ws.markThreadRead(teamId: team.id, threadId: self.threadRootId)
+                if wasUnread {
+                    self.totalUnreadThreads = self.threadItems.filter {
+                        $0.id != self.threadRootId
+                            && ($0.last_reply_at ?? 0) > ($0.last_viewed_at ?? 0)
+                    }.count
+                    self.updateSidebarBadges()
+                }
             }
         }
     }
@@ -320,8 +352,10 @@ extension MainWindow {
 
         y += 8
         rightPanelDoc.frame = NSRect(x: 0, y: 0, width: panelWidth, height: max(y, 1))
-        rightPanelScroll.contentView.scroll(to: .zero)
-        rightPanelScroll.reflectScrolledClipView(rightPanelScroll.contentView)
+        let clip = rightPanelScroll.contentView
+        let maxY = max(0, rightPanelDoc.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: maxY))
+        rightPanelScroll.reflectScrolledClipView(clip)
     }
 
     @objc func sendThreadReply() {
@@ -337,11 +371,13 @@ extension MainWindow {
             guard let self = self else { return }
             do {
                 try await ws.createPost(channelId: channelId, message: text, rootId: rootId)
+                self.clearThreadDraft(for: rootId)
                 self.loadThread()
             } catch {
                 NSLog("Thread reply failed: \(error.localizedDescription)")
                 self.threadReplyField.stringValue = text
                 self.threadPlaceholderLabel.isHidden = true
+                self.threadDraftsByRootId[rootId] = text
             }
         }
     }
@@ -355,10 +391,13 @@ extension MainWindow {
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let members = try? await ws.fetchChannelMembers(channelId: channelId) else {
+            guard let members = try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200) else {
                 self.renderRightPanel(empty: "Could not load members", rows: [])
                 return
             }
+            guard self.activeChannelId == channelId else { return }
+            self.channelMembersCountLabel.stringValue = members.count >= 200 ? "200+" : "\(members.count)"
+            self.layoutRightChatPanel()
             self.hydrateUsers(members.map { $0.user_id }) {
                 let rows = members.map { member -> RightPanelRow in
                     let user = self.usersById[member.user_id]
@@ -540,7 +579,7 @@ extension MainWindow {
 
             card.onClick = { [weak self] in
                 if isImage {
-                    self?.showLightbox(image: thumbImage, file: file, filename: file.name ?? "Image")
+                    self?.showLightbox(image: thumbImage, file: file, filename: file.name ?? "Image", authorId: file.user_id)
                 } else {
                     self?.openAttachment(file)
                 }
@@ -674,6 +713,14 @@ extension MainWindow {
                 action: nil
             ),
             RightPanelRow(
+                title: "Export diagnostics",
+                subtitle: "Redacted log and build information for support",
+                meta: "Support",
+                action: { [weak self] in
+                    self?.exportDiagnostics()
+                }
+            ),
+            RightPanelRow(
                 title: "Log out",
                 subtitle: "Clear credentials and return to sign in",
                 meta: "",
@@ -683,6 +730,121 @@ extension MainWindow {
             )
         ]
         renderRightPanel(empty: "", rows: rows)
+    }
+
+    func exportDiagnostics() {
+        let defaults = UserDefaults.standard
+        var log = (try? String(contentsOfFile: DebugLog.logPath, encoding: .utf8)) ?? ""
+        let redactions = [
+            defaults.string(forKey: "host") ?? "",
+            defaults.string(forKey: "username") ?? "",
+            KeychainHelper.get(forKey: "token") ?? ""
+        ].filter { !$0.isEmpty }
+        for secret in redactions {
+            log = log.replacingOccurrences(of: secret, with: "<redacted>")
+        }
+        let header = [
+            "mattermost.client diagnostics",
+            "Build: \(AppVersion.windowTitle)",
+            "macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)",
+            "Generated: \(ISO8601DateFormatter().string(from: Date()))",
+            "",
+            "--- log ---",
+            log.isEmpty ? "(no log entries)" : log
+        ].joined(separator: "\n")
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "mattermost-client-diagnostics.txt"
+        panel.canCreateDirectories = true
+        panel.beginSheetModal(for: self) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try header.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                self?.showInfoAlert("Could not export diagnostics: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func loadChannelInfo() {
+        guard let ws = webService, ws.isLogged(),
+              let channel = channelsById[activeChannelId] else {
+            renderRightPanel(empty: "No channel selected", rows: [])
+            return
+        }
+        let channelId = channel.id
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let members = (try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200)) ?? []
+            guard self.activeChannelId == channelId else { return }
+            let memberCount = members.count >= 200 ? "200+" : "\(members.count)"
+            self.channelMembersCountLabel.stringValue = memberCount
+            self.layoutRightChatPanel()
+
+            var creatorName = ""
+            if let creatorId = channel.creator_id, !creatorId.isEmpty {
+                if let creator = self.usersById[creatorId] {
+                    creatorName = creator.username
+                } else if let users = try? await ws.fetchUsersByIds([creatorId]),
+                          let creator = users.first {
+                    self.usersById[creator.id] = creator
+                    self.usersByUsername[creator.username.lowercased()] = creator
+                    creatorName = creator.username
+                }
+            }
+
+            let typeLabel: String
+            switch channel.type {
+            case "P": typeLabel = "Private channel"
+            case "D": typeLabel = "Direct message"
+            case "G": typeLabel = "Group message"
+            default: typeLabel = "Public channel"
+            }
+            let created = channel.create_at.map {
+                Self.localizedDateTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0) / 1000))
+            } ?? "Unknown"
+            let header = (channel.header ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let purpose = (channel.purpose ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let rows: [RightPanelRow] = [
+                RightPanelRow(
+                    title: self.channelDisplayName(for: channel),
+                    subtitle: header.isEmpty ? "No channel header" : header,
+                    meta: typeLabel,
+                    action: nil
+                ),
+                RightPanelRow(
+                    title: "Purpose",
+                    subtitle: purpose.isEmpty ? "No purpose set" : purpose,
+                    meta: "",
+                    action: nil
+                ),
+                RightPanelRow(
+                    title: "Members",
+                    subtitle: "\(memberCount) member\(memberCount == "1" ? "" : "s")",
+                    meta: "View",
+                    action: { [weak self] in self?.showRightPanel(mode: .members) }
+                ),
+                RightPanelRow(
+                    title: "Created",
+                    subtitle: created,
+                    meta: creatorName.isEmpty ? "" : "by \(creatorName)",
+                    action: nil
+                ),
+                RightPanelRow(
+                    title: "Files",
+                    subtitle: "Files shared in this channel",
+                    meta: "View",
+                    action: { [weak self] in self?.showRightPanel(mode: .files) }
+                ),
+                RightPanelRow(
+                    title: "Pinned Posts",
+                    subtitle: "Messages pinned in this channel",
+                    meta: "View",
+                    action: { [weak self] in self?.showRightPanel(mode: .pinned) }
+                )
+            ]
+            self.renderRightPanel(empty: "", rows: rows)
+        }
     }
 
     func loadBrowseChannels() {

@@ -52,16 +52,27 @@ enum MMPalette {
     /// deterministic palette is applied.
     static let avatarYellow = NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0)
 
-    /// Deterministic avatar colors for users without a profile image.
-    static var avatarColors: [NSColor] {
-        [
-            avatarYellow,
-            Theme.shared.buttonBg,
-            NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
-            NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
-            NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
-            NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0),
-        ]
+    /// Deterministic avatar colors for users without a profile image. Fixed
+    /// values (not `Theme.shared`) so changing themes does not reshuffle avatars.
+    static let avatarColors: [NSColor] = [
+        avatarYellow,
+        NSColor(red: 26 / 255, green: 109 / 255, blue: 217 / 255, alpha: 1.0),
+        NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
+        NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
+        NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
+        NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0),
+    ]
+
+    /// Stable color index derived from FNV-1a over the user id. Swift's
+    /// `hashValue` is randomly seeded per process and `abs` can trap on
+    /// `Int.min`, so it must not be used for persisted/visual identity.
+    static func avatarColor(for identifier: String) -> NSColor {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in identifier.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        return avatarColors[Int(hash % UInt64(avatarColors.count))]
     }
 
     /// "New Messages" divider text and its 50%-opacity rule.

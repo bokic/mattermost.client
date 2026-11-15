@@ -11,6 +11,17 @@ import UniformTypeIdentifiers
 
 extension MainWindow {
 
+    func channelBelongsToTeam(_ channel: MMChannel, teamId: String) -> Bool {
+        // Direct and group messages have no team; every other channel must match
+        // the active team or it belongs in another team's sidebar.
+        guard let channelTeamId = channel.team_id, !channelTeamId.isEmpty else { return true }
+        return channelTeamId == teamId
+    }
+
+    func isDirectMessageType(_ channel: MMChannel) -> Bool {
+        channel.type == "D" || channel.type == "G"
+    }
+
     func loadFavoriteChannels() {
         guard let ws = webService, ws.isLogged() else { return }
         let userId = currentUser?.id ?? ws.currentUserId
@@ -83,6 +94,7 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             guard let memberships = try? await ws.fetchChannelMemberships(userId: userId, teamId: team.id) else { return }
+            guard self.activeTeam?.id == team.id else { return }
             self.membershipsByChannel = Dictionary(uniqueKeysWithValues: memberships.map { ($0.channel_id, $0) })
             var unread: [String: Int] = [:]
             var mentions: [String: Int] = [:]
@@ -98,6 +110,7 @@ extension MainWindow {
             self.unreadByChannel = unread
             self.mentionsByChannel = mentions
             self.lastViewedAtByChannel = viewed
+            (NSApp.delegate as? AppDelegate)?.syncUnreadCounts(unread)
             self.updateSidebarBadges()
             self.updateNewMessagesBaseline()
             self.markActiveChannelViewed()
@@ -109,8 +122,8 @@ extension MainWindow {
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         for item in allItems {
-            let unread = unreadByChannel[item.id] ?? 0
-            let mentions = mentionsByChannel[item.id] ?? 0
+            let unread = item.id == "threads" ? totalUnreadThreads : (unreadByChannel[item.id] ?? 0)
+            let mentions = item.id == "threads" ? 0 : (mentionsByChannel[item.id] ?? 0)
             item.badgePanel.frame = NSRect(x: MMMetric.sidebarWidth - 16 - 34, y: 6, width: 34, height: 20)
             item.badgeLabel.frame = NSRect(x: 2, y: 3, width: 30, height: 14)
             if mentions > 0 {
@@ -154,6 +167,7 @@ extension MainWindow {
             switch ch.type {
             case "P": symbol = "lock.fill"
             case "D": symbol = "person.crop.circle"
+            case "G": symbol = "person.2.circle"
             default: symbol = "globe"
             }
             return createSidebarItem(
@@ -443,12 +457,14 @@ extension MainWindow {
                     symbolName = "lock.fill"
                 } else if ch.type == "D" {
                     symbolName = isBot ? "cpu" : "person.fill"
+                } else if ch.type == "G" {
+                    symbolName = "person.2.fill"
                 } else {
                     symbolName = "globe"
                 }
 
                 let displayTitle = channelDisplayName(for: ch)
-                let showsClose = (ch.type == "D")
+                let showsClose = isDirectMessageType(ch)
 
                 let item = createSidebarItem(
                     id: ch.id,
@@ -515,8 +531,11 @@ extension MainWindow {
             }
         }
 
-        // Include any public/channels not explicitly in categories
-        let unplacedChannels = channels.filter { !placedChannelIds.contains($0.id) && $0.type != "D" }
+        // Include any channels not explicitly in categories. Direct messages and
+        // group messages belong under DIRECT MESSAGES, never CHANNELS.
+        let unplacedChannels = channels.filter {
+            !placedChannelIds.contains($0.id) && !isDirectMessageType($0)
+        }
         if !unplacedChannels.isEmpty {
             if let channelsIdx = sidebarCategories.firstIndex(where: { $0.id.contains("channels") }) {
                 var existingItems = sidebarCategories[channelsIdx].items
@@ -540,6 +559,33 @@ extension MainWindow {
                     existingItems.append(addBtn)
                 }
                 sidebarCategories[channelsIdx].items = existingItems
+            }
+        }
+        let unplacedDMs = channels.filter {
+            !placedChannelIds.contains($0.id) && isDirectMessageType($0)
+        }
+        if !unplacedDMs.isEmpty {
+            if let dmIdx = sidebarCategories.firstIndex(where: { $0.id.contains("direct_messages") }) {
+                var existingItems = sidebarCategories[dmIdx].items
+                let inviteItem = existingItems.last(where: { $0.id == "invite-members" })
+                if inviteItem != nil {
+                    existingItems.removeLast()
+                }
+                for ch in unplacedDMs {
+                    let item = createSidebarItem(
+                        id: ch.id,
+                        symbolName: ch.type == "G" ? "person.2.fill" : "person.fill",
+                        title: channelDisplayName(for: ch),
+                        isSelectable: true,
+                        isBotBadge: false,
+                        showsCloseOnHover: true
+                    )
+                    existingItems.append(item)
+                }
+                if let inviteItem = inviteItem {
+                    existingItems.append(inviteItem)
+                }
+                sidebarCategories[dmIdx].items = existingItems
             }
         }
 
@@ -896,19 +942,31 @@ extension MainWindow {
 
     func switchActiveTeam(to team: MMTeam) {
         guard let ws = webService else { return }
+        if activeTeam?.id == team.id {
+            setTeamMenuOpen(false)
+            return
+        }
+        let previousTeam = activeTeam
+        teamSwitchToken += 1
+        let token = teamSwitchToken
         self.updateTeamHeader(with: team)
         self.setTeamMenuOpen(false)
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
                 let channels = try await ws.fetchChannels(teamId: team.id)
+                guard token == self.teamSwitchToken else { return }
                 var allChannels = channels
                 if let myChannels = try? await ws.fetchAllChannels() {
+                    guard token == self.teamSwitchToken else { return }
                     var chMap: [String: MMChannel] = [:]
                     for c in channels { chMap[c.id] = c }
-                    for c in myChannels { chMap[c.id] = c }
+                    for c in myChannels where self.channelBelongsToTeam(c, teamId: team.id) {
+                        chMap[c.id] = c
+                    }
                     allChannels = Array(chMap.values)
                 }
+                guard token == self.teamSwitchToken else { return }
                 self.channelsById.removeAll()
                 self.channelsByName.removeAll()
                 for ch in allChannels {
@@ -917,13 +975,20 @@ extension MainWindow {
                     self.channelsByName[ch.display_name.lowercased()] = ch
                 }
                 await self.preloadDMUsers(for: allChannels)
+                guard token == self.teamSwitchToken else { return }
                 if let categoriesResponse = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    guard token == self.teamSwitchToken else { return }
                     self.populateSidebarCategories(from: categoriesResponse, channels: allChannels)
                 }
+                guard token == self.teamSwitchToken else { return }
+                UserDefaults.standard.set(team.id, forKey: "lastTeamId")
+                let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
+                let savedChannel = savedChannelId.flatMap { self.channelsById[$0] }
                 let botCh = self.channelsByName["system-bot"]
                     ?? self.channelsByName["system bot"]
                     ?? allChannels.first(where: { self.isChannelBot(for: $0) })
                 let defaultCh = (CommandLine.arguments.contains("--system-bot") ? botCh : nil)
+                    ?? savedChannel
                     ?? self.channelsByName["town-square"]
                     ?? self.channelsByName["town square"]
                     ?? channels.first
@@ -933,7 +998,11 @@ extension MainWindow {
                     self.loadChannelPosts(forSidebarItemId: initialCh.id)
                 }
             } catch {
-                NSLog("Failed to switch team: \(error.localizedDescription)")
+                guard token == self.teamSwitchToken else { return }
+                if let previousTeam = previousTeam {
+                    self.updateTeamHeader(with: previousTeam)
+                }
+                self.showInfoAlert("Could not switch team: \(error.localizedDescription)")
             }
         }
     }
@@ -980,6 +1049,15 @@ extension MainWindow {
         }
 
         // Favorites branch (channels marked with the star)
+        if sidebarEmptyStateLabel.superview == nil {
+            sidebarEmptyStateLabel.font = MMFont.font(ofSize: 12)
+            sidebarEmptyStateLabel.textColor = Theme.shared.sidebarTextMuted
+            sidebarEmptyStateLabel.alignment = .left
+            sidebarEmptyStateLabel.isEditable = false
+            sidebarEmptyStateLabel.isSelectable = false
+            mainPanel.addSubview(sidebarEmptyStateLabel)
+        }
+        sidebarEmptyStateLabel.isHidden = true
         if let favorites = favoritesCategory {
             let visibleFavorites = favorites.items.filter { matches($0.label.stringValue) }
             if !visibleFavorites.isEmpty || query.isEmpty {
@@ -1009,6 +1087,17 @@ extension MainWindow {
                 favorites.headerRow.isHidden = true
                 favorites.items.forEach { $0.row.isHidden = true }
             }
+            if sidebarFavoritesOnly && visibleFavorites.isEmpty {
+                sidebarEmptyStateLabel.stringValue = query.isEmpty ? "No favorite channels" : "No matching favorites"
+                sidebarEmptyStateLabel.isHidden = false
+                sidebarEmptyStateLabel.frame = NSRect(
+                    x: sidebarX + 17,
+                    y: currentY - 4,
+                    width: sidebarWidth - 34,
+                    height: 18
+                )
+                currentY -= 28
+            }
         }
 
         // Categories & items (the server's own favorites group is replaced by
@@ -1017,9 +1106,9 @@ extension MainWindow {
             let visibleItems = category.items.filter {
                 matches($0.label.stringValue)
                     && !favoriteChannelIds.contains($0.id)
-                    && (!sidebarFavoritesOnly || favoriteChannelIds.contains($0.id))
             }
-            if !query.isEmpty && visibleItems.isEmpty {
+            // A favorites-only filter has nothing to show in the regular categories.
+            if sidebarFavoritesOnly || (!query.isEmpty && visibleItems.isEmpty) {
                 category.headerRow.isHidden = true
                 category.items.forEach { $0.row.isHidden = true }
                 continue

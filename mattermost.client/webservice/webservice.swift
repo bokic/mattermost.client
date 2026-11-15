@@ -290,12 +290,26 @@ struct MMThread: Decodable {
     let post: MMPost?
 }
 
+struct MMThreadsResponse: Decodable {
+    let threads: [MMThread]
+    let total: Int?
+    let total_unread_threads: Int?
+    let total_unread_mentions: Int?
+}
+
 struct MMChannelMembership: Decodable {
+    struct NotifyProps: Decodable {
+        let desktop: String?
+        let mark_unread: String?
+        let ignore_channel_mentions: String?
+    }
+
     let channel_id: String
     let msg_count: Int?
     let mention_count: Int?
     let last_viewed_at: Int64?
     let last_update_at: Int64?
+    let notify_props: NotifyProps?
 }
 
 struct MMChannelMember: Decodable {
@@ -327,6 +341,12 @@ struct MMUserStatus: Codable {
 enum MMWebSocketEvent {
     case hello
     case posted(post: MMPost, senderName: String?, channelDisplayName: String?, channelName: String?, teamId: String?)
+    case postEdited(post: MMPost)
+    case postDeleted(postId: String, channelId: String)
+    case channelViewed(channelId: String)
+    case channelUpdated(channel: MMChannel)
+    case preferencesChanged(userId: String)
+    case threadUpdated(rootId: String)
     case statusChange(userId: String, status: String)
     case userStatuses(statuses: [String: String])
     case typing(userId: String, channelId: String, parentId: String?)
@@ -450,7 +470,12 @@ final class WebService: NSObject {
         if components.port == nil, mPort > 0 {
             components.port = Int(mPort)
         }
-        components.path = path
+        // Preserve a reverse-proxy/subpath deployment (https://host/mattermost)
+        // instead of replacing it with the API path.
+        var basePath = components.path
+        if basePath.hasSuffix("/") { basePath.removeLast() }
+        let normalizedPath = path.hasPrefix("/") ? path : "/" + path
+        components.path = basePath + normalizedPath
         if let queryItems = queryItems, !queryItems.isEmpty {
             components.queryItems = queryItems
         }
@@ -644,7 +669,15 @@ final class WebService: NSObject {
             return true
         } catch {
             logger.error("checkToken failed: \(error.localizedDescription)")
-            return false
+            if let wsError = error as? WebServiceError,
+               case .httpStatus(let code, _) = wsError,
+               code == 401 || code == 403 {
+                return false
+            }
+            // Offline/DNS/timeout/5xx must not destroy the session. Keep the
+            // token and let the workspace open in its reconnecting state.
+            updateToken(token: token)
+            return true
         }
     }
 
@@ -666,8 +699,14 @@ final class WebService: NSObject {
         )
     }
     
+    private func encodedPathComponent(_ value: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/?#")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
     func fetchUserByUsername(_ username: String) async throws -> LoginWebService {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/username/\(username)")
+        return try await performAuthenticatedRequest(path: "/api/v4/users/username/\(encodedPathComponent(username))")
     }
 
     /// Team members used by the Direct Message picker.
@@ -878,6 +917,26 @@ final class WebService: NSObject {
             accept: nil
         )
     }
+
+    /// Marks every channel in a team as read for the current user.
+    func markAllChannelsRead(userId: String, teamId: String) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/read",
+            method: "PUT",
+            jsonBody: [String: String](),
+            accept: nil
+        )
+    }
+
+    /// Marks a channel unread from a specific post for the current user.
+    func markChannelUnread(userId: String, channelId: String, postId: String) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/channels/\(channelId)/posts/\(postId)/unread",
+            method: "POST",
+            jsonBody: [String: String](),
+            accept: nil
+        )
+    }
     
     func fetchChannelMemberships(userId: String, teamId: String, page: Int = 0, perPage: Int = 200) async throws -> [MMChannelMembership] {
         return try await performAuthenticatedRequest(
@@ -934,11 +993,18 @@ final class WebService: NSObject {
     
     func uploadFile(channelId: String, data: Data, filename: String, mimeType: String) async throws -> String {
         let boundary = "Boundary-\(UUID().uuidString)"
+        // Multipart headers cannot contain quotes/CR/LF; sanitize server-visible
+        // filenames so they cannot break out of the header.
+        let safeFilename = (filename as NSString).lastPathComponent
+            .components(separatedBy: CharacterSet(charactersIn: "\r\n\"\\"))
+            .joined(separator: "_")
+        let safeMimeType = mimeType.components(separatedBy: CharacterSet(charactersIn: "\r\n"))
+            .joined(separator: " ")
         var body = Data()
         func append(_ text: String) { body.append(Data(text.utf8)) }
         append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(filename)\"\r\n")
-        append("Content-Type: \(mimeType)\r\n\r\n")
+        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(safeFilename)\"\r\n")
+        append("Content-Type: \(safeMimeType)\r\n\r\n")
         body.append(data)
         append("\r\n--\(boundary)--\r\n")
         
@@ -973,12 +1039,26 @@ final class WebService: NSObject {
     }
     
     func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
-        struct ThreadsResponse: Decodable { let threads: [MMThread] }
-        let response: ThreadsResponse = try await performAuthenticatedRequest(
+        try await fetchThreadsPage(userId: userId, teamId: teamId, perPage: perPage).threads
+    }
+
+    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws -> MMThreadsResponse {
+        try await performAuthenticatedRequest(
             path: "/api/v4/users/\(userId)/teams/\(teamId)/threads",
-            queryItems: [URLQueryItem(name: "per_page", value: String(perPage))]
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
         )
-        return response.threads
+    }
+
+    func markThreadRead(teamId: String, threadId: String) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/me/teams/\(teamId)/threads/\(threadId)/read",
+            method: "PUT",
+            jsonBody: [String: String](),
+            accept: nil
+        )
     }
     
     func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60, before: String? = nil) async throws -> MMPostList {
@@ -1048,6 +1128,22 @@ final class WebService: NSObject {
         return result.order.compactMap { result.file_infos[$0] }
     }
 
+    /// Searches files across the whole team (the global Search → Files tab).
+    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = 60) async throws -> [MMFileInfo] {
+        let result: MMFileSearchResult = try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/files/search",
+            method: "POST",
+            body: [
+                "terms": terms,
+                "is_or_search": false,
+                "page": page,
+                "per_page": perPage,
+                "time_zone_offset": 0
+            ]
+        )
+        return result.order.compactMap { result.file_infos[$0] }
+    }
+
     /// Custom emoji uploaded to the server.
     func fetchCustomEmojis(page: Int = 0, perPage: Int = 200) async throws -> [MMEmoji] {
         return try await performAuthenticatedRequest(
@@ -1088,7 +1184,7 @@ final class WebService: NSObject {
     func removeReaction(userId: String, postId: String, emojiName: String) async throws {
         struct StatusResponse: Decodable { let status: String? }
         let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/posts/\(postId)/reactions/\(emojiName)",
+            path: "/api/v4/users/\(userId)/posts/\(postId)/reactions/\(encodedPathComponent(emojiName))",
             method: "DELETE"
         )
     }
@@ -1330,6 +1426,18 @@ final class WebService: NSObject {
         scheduleReconnect()
     }
     
+    private func decodeWebSocketPost(_ value: Any?) -> MMPost? {
+        if let postJSONString = value as? String,
+           let postData = postJSONString.data(using: .utf8) {
+            return try? JSONDecoder().decode(MMPost.self, from: postData)
+        }
+        if let postDict = value as? [String: Any],
+           let postData = try? JSONSerialization.data(withJSONObject: postDict) {
+            return try? JSONDecoder().decode(MMPost.self, from: postData)
+        }
+        return nil
+    }
+
     func parseWebSocketMessage(_ text: String) -> (didConnect: Bool, event: MMWebSocketEvent?) {
         var didConnect = false
         var parsedEvent: MMWebSocketEvent?
@@ -1377,9 +1485,7 @@ final class WebService: NSObject {
                 case "hello":
                     parsedEvent = .hello
                 case "posted":
-                    if let postJSONString = eventData["post"] as? String,
-                       let postData = postJSONString.data(using: .utf8),
-                       let post = try? JSONDecoder().decode(MMPost.self, from: postData) {
+                    if let post = decodeWebSocketPost(eventData["post"]) {
                         let senderName = eventData["sender_name"] as? String
                         let channelDisplayName = eventData["channel_display_name"] as? String
                         let channelName = eventData["channel_name"] as? String
@@ -1391,6 +1497,63 @@ final class WebService: NSObject {
                             channelName: channelName,
                             teamId: teamId
                         )
+                    }
+                case "post_edited":
+                    if let post = decodeWebSocketPost(eventData["post"]) {
+                        parsedEvent = .postEdited(post: post)
+                    }
+                case "post_deleted", "post_deleted_by_admin":
+                    let deletedPost = decodeWebSocketPost(eventData["post"])
+                    let postId = deletedPost?.id
+                        ?? (eventData["post_id"] as? String)
+                        ?? (broadcast["post_id"] as? String)
+                        ?? ""
+                    let channelId = deletedPost?.channel_id
+                        ?? (broadcast["channel_id"] as? String)
+                        ?? (eventData["channel_id"] as? String)
+                        ?? ""
+                    if !postId.isEmpty {
+                        parsedEvent = .postDeleted(postId: postId, channelId: channelId)
+                    }
+                case "channel_viewed":
+                    let channelId = (eventData["channel_id"] as? String)
+                        ?? (broadcast["channel_id"] as? String)
+                        ?? ""
+                    if !channelId.isEmpty {
+                        parsedEvent = .channelViewed(channelId: channelId)
+                    }
+                case "multiple_channels_viewed":
+                    let channelIds = (eventData["channel_ids"] as? [String]) ?? []
+                    if let first = channelIds.first {
+                        parsedEvent = .channelViewed(channelId: first)
+                        for channelId in channelIds.dropFirst() {
+                            onWebSocketEvent?(.channelViewed(channelId: channelId))
+                        }
+                    }
+                case "channel_updated":
+                    if let channelJSONString = eventData["channel"] as? String,
+                       let channelData = channelJSONString.data(using: .utf8),
+                       let channel = try? JSONDecoder().decode(MMChannel.self, from: channelData) {
+                        parsedEvent = .channelUpdated(channel: channel)
+                    } else if let channelDict = eventData["channel"] as? [String: Any],
+                              let channelData = try? JSONSerialization.data(withJSONObject: channelDict),
+                              let channel = try? JSONDecoder().decode(MMChannel.self, from: channelData) {
+                        parsedEvent = .channelUpdated(channel: channel)
+                    }
+                case "preferences_changed":
+                    let userId = (eventData["user_id"] as? String)
+                        ?? (broadcast["user_id"] as? String)
+                        ?? ""
+                    if !userId.isEmpty {
+                        parsedEvent = .preferencesChanged(userId: userId)
+                    }
+                case "thread_updated":
+                    let rootId = (eventData["thread_id"] as? String)
+                        ?? (eventData["root_id"] as? String)
+                        ?? (broadcast["thread_id"] as? String)
+                        ?? ""
+                    if !rootId.isEmpty {
+                        parsedEvent = .threadUpdated(rootId: rootId)
                     }
                 case "status_change":
                     let userId = (eventData["user_id"] as? String) ?? (broadcast["user_id"] as? String) ?? ""
@@ -1491,6 +1654,8 @@ final class WebService: NSObject {
                 onSidebarCategoriesUpdated?()
             case .reactionChanged(let postId):
                 onReactionChanged?(postId)
+            case .postEdited, .postDeleted, .channelViewed, .channelUpdated, .preferencesChanged, .threadUpdated:
+                break
             case .other:
                 break
             }

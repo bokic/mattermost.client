@@ -76,7 +76,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let connectionLabel = NSTextField(labelWithString: "")
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
-    enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread, files }
+    enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread, files, channelInfo }
     var rightPanelMode: RightPanelMode = .threads
     var isRightPanelVisible = false
     var threadItems: [MMThread] {
@@ -154,6 +154,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Sidebar filter menu
     let filterMenu = RoundedEdgePanel()
+    let sidebarEmptyStateLabel = NSTextField(labelWithString: "")
     var isFilterMenuOpen = false
     var sidebarFavoritesOnly = false
     var filterAllCheck: NSImageView?
@@ -207,6 +208,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     weak var customStatusMenuRow: RoundedEdgePanel?
     var customStatusText: String = UserDefaults.standard.string(forKey: "customStatusText") ?? ""
     var customStatusEmoji: String = UserDefaults.standard.string(forKey: "customStatusEmoji") ?? ""
+    var customStatusExpiresAt: Date? = {
+        let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
+        return timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
+    }()
     var statusCheckViews: [NSImageView] = []
 
     // Left Channel Sidebar views
@@ -252,6 +257,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     var threadsSidebarItem: SidebarItemView?
+    var totalUnreadThreads = 0
     var sidebarCategories: [SidebarCategoryView] = []
     var selectedSidebarItemId: String = "town-square"
 
@@ -370,6 +376,39 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let size: Int64?
     }
 
+    /// Composer state is kept per channel so switching conversations cannot send
+    /// text or attachments to the wrong channel.
+    struct ComposerDraft {
+        var text: String
+        var attachments: [PendingAttachment]
+        var editingPostId: String?
+    }
+
+    struct ChannelScrollPosition {
+        var postId: String
+        var offset: CGFloat
+    }
+
+    struct PendingOutgoingPost {
+        enum Status {
+            case sending
+            case failed(String)
+        }
+
+        let id: String
+        let channelId: String
+        let message: String
+        let fileIds: [String]
+        var status: Status
+    }
+
+    var pendingOutgoingPosts: [PendingOutgoingPost] = []
+    var composerDraftsByChannelId: [String: ComposerDraft] = [:]
+    var threadDraftsByRootId: [String: String] = [:]
+    var teamSwitchToken = 0
+    var channelScrollPositions: [String: ChannelScrollPosition] = [:]
+    var typingIndicatorWorkItem: DispatchWorkItem?
+    var threadTypingIndicatorWorkItem: DispatchWorkItem?
     var pendingAttachments: [PendingAttachment] = []
     let completionPanel = RoundedEdgePanel()
     var completionItems: [CompletionItem] = []
@@ -441,6 +480,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
         self.isReleasedWhenClosed = false
         self.backgroundColor = Theme.shared.sidebarTeamBarBg
+        self.contentMinSize = NSSize(width: 860, height: 520)
 
         self.title = AppVersion.windowTitle
         self.contentViewController = MainWindowViewController()
@@ -692,6 +732,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 panel.setHovered(false)
             }
         }
+    }
+
+    override func close() {
+        statusPollingTimer?.invalidate()
+        statusPollingTimer = nil
+        super.close()
     }
 
     deinit {

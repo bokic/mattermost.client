@@ -267,6 +267,15 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self, let ws = self.webService else { return }
             do {
+                if self.isSearchFilesTabSelected {
+                    let files = try await ws.searchTeamFiles(teamId: team.id, terms: terms)
+                    let userIds = Array(Set(files.compactMap(\.user_id)).subtracting(self.usersById.keys))
+                    if !userIds.isEmpty, let users = try? await ws.fetchUsersByIds(userIds) {
+                        for user in users { self.usersById[user.id] = user }
+                    }
+                    self.presentSearchFileResults(files, terms: terms)
+                    return
+                }
                 let list = try await ws.searchPosts(teamId: team.id, terms: terms)
                 let posts = list.order.compactMap { list.posts[$0] }
                 let missingUserIds = Array(Set(posts.map { $0.user_id }).subtracting(self.usersById.keys))
@@ -277,9 +286,84 @@ extension MainWindow {
                 }
                 self.presentSearchResults(posts, terms: terms)
             } catch {
-                self.presentSearchResults([], terms: terms)
+                if self.isSearchFilesTabSelected {
+                    self.presentSearchFileResults([], terms: terms)
+                } else {
+                    self.presentSearchResults([], terms: terms)
+                }
             }
         }
+    }
+
+    func presentSearchFileResults(_ files: [MMFileInfo], terms: String) {
+        searchResultsDoc.subviews.forEach { $0.removeFromSuperview() }
+        searchResultsTitle.stringValue = files.isEmpty
+            ? "No files for “\(terms)”"
+            : "\(files.count) file\(files.count == 1 ? "" : "s") for “\(terms)”"
+
+        let width = searchResultsPanel.bounds.width
+        let rowHeight: CGFloat = 54
+        let inset: CGFloat = 8
+        var y: CGFloat = 0
+        for file in files {
+            let row = makeSearchFileResultRow(file, width: width - inset * 2)
+            row.frame = NSRect(x: inset, y: y + 2, width: width - inset * 2, height: rowHeight - 4)
+            searchResultsDoc.addSubview(row)
+            y += rowHeight
+        }
+        searchResultsDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+        searchResultsScroll.frame = NSRect(x: 0, y: 0, width: width, height: max(0, searchResultsPanel.bounds.height - 44))
+    }
+
+    func makeSearchFileResultRow(_ file: MMFileInfo, width: CGFloat) -> RoundedEdgePanel {
+        let row = RoundedEdgePanel()
+        row.color = .clear
+        row.cornerRadius = MMRadius.menu
+
+        let uploader = file.user_id.flatMap { usersById[$0]?.username } ?? "Unknown"
+        let channelName = file.channel_id.flatMap { channelsById[$0] }.map { channelDisplayName(for: $0) } ?? ""
+        let date = file.create_at.map {
+            Self.localizedDateTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0) / 1000))
+        } ?? ""
+        let meta = [uploader, channelName, date].filter { !$0.isEmpty }.joined(separator: " · ")
+
+        let icon = NSImageView()
+        let isImage = (file.mime_type ?? "").hasPrefix("image/")
+        let symbol = isImage ? "photo" : "doc.fill"
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: file.name) {
+            icon.image = image.withSymbolConfiguration(.init(pointSize: 16, weight: .regular))
+            icon.contentTintColor = Theme.shared.centerTextMuted
+        }
+        icon.frame = NSRect(x: 12, y: 18, width: 20, height: 20)
+        row.addSubview(icon)
+
+        let nameLabel = NSTextField(labelWithString: file.name ?? file.id)
+        nameLabel.font = MMFont.font(ofSize: 13, weight: .semibold)
+        nameLabel.textColor = Theme.shared.centerText
+        nameLabel.isEditable = false
+        nameLabel.isSelectable = false
+        nameLabel.lineBreakMode = .byTruncatingMiddle
+        nameLabel.frame = NSRect(x: 42, y: 24, width: max(60, width - 54), height: 18)
+        row.addSubview(nameLabel)
+
+        let metaLabel = NSTextField(labelWithString: meta)
+        metaLabel.font = MMFont.font(ofSize: 12)
+        metaLabel.textColor = Theme.shared.centerTextMuted
+        metaLabel.isEditable = false
+        metaLabel.isSelectable = false
+        metaLabel.lineBreakMode = .byTruncatingTail
+        metaLabel.frame = NSRect(x: 42, y: 6, width: max(60, width - 54), height: 16)
+        row.addSubview(metaLabel)
+
+        row.onHoverChanged = { [weak row] isHovered in
+            row?.color = isHovered ? Theme.shared.centerHover : .clear
+            row?.setNeedsAppearanceUpdate()
+        }
+        row.onClick = { [weak self] in
+            self?.closeSearchResults()
+            self?.openAttachment(file)
+        }
+        return row
     }
 
     func presentSearchResults(_ posts: [MMPost], terms: String) {
@@ -348,6 +432,7 @@ extension MainWindow {
     func openSearchResult(_ post: MMPost) {
         closeSearchResults()
         guard let channel = channelsById[post.channel_id] else { return }
+        pendingJumpPostId = post.id
         selectedSidebarItemId = channel.id
         updateSidebarSelectionAppearance()
         loadChannelPosts(forSidebarItemId: channel.id)
@@ -417,6 +502,9 @@ extension MainWindow {
             return false
         }
         guard let region = currentFocusRegion() else { return false }
+        // Tab is an editing key in the composer (indent/list/code blocks); do not
+        // steal it for region traversal. Other regions keep the Tab shortcut.
+        if region == .composer { return false }
         let next: FocusRegion
         switch (region, reverse) {
         case (.composer, false): next = .sidebar

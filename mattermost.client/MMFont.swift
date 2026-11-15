@@ -54,7 +54,7 @@ enum MMFont {
         if let font = NSFont(name: postScriptName(for: weight), size: size) {
             return font
         }
-        return MMFont.font(ofSize: size, weight: weight)
+        return NSFont.systemFont(ofSize: size, weight: weight)
     }
 
     static func regular(_ size: CGFloat) -> NSFont { font(ofSize: size, weight: .regular) }

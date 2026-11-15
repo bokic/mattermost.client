@@ -933,8 +933,6 @@ extension MainWindow {
             return
         }
 
-        let palette = MMPalette.avatarColors
-
         for user in filtered {
             let row = RoundedEdgePanel()
             row.cornerRadius = MMRadius.control
@@ -952,7 +950,7 @@ extension MainWindow {
                 imageView.imageScaling = .scaleProportionallyUpOrDown
                 avatarPanel.addSubview(imageView)
             } else {
-                avatarPanel.color = palette[abs(user.username.hashValue) % palette.count]
+                avatarPanel.color = MMPalette.avatarColor(for: user.id)
                 let initial = user.username.first.map { String($0).uppercased() } ?? "U"
                 let initialLabel = NSTextField(labelWithString: initial)
                 initialLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
@@ -1026,10 +1024,12 @@ extension MainWindow {
     func showChannelMenu() {
         guard !activeChannelId.isEmpty, channelsById[activeChannelId] != nil else { return }
         let favoriteTitle = isChannelFavorited ? "Remove from Favorites" : "Add to Favorites"
+        let hasUnread = (unreadByChannel[activeChannelId] ?? 0) > 0
+            || (mentionsByChannel[activeChannelId] ?? 0) > 0
         let rows: [(symbol: String, title: String, action: () -> Void)] = [
             ("info.circle", "View Info", { [weak self] in
                 self?.closeChannelMenu()
-                self?.showRightPanel(mode: .members)
+                self?.showRightPanel(mode: .channelInfo)
             }),
             ("pin", "Pinned Posts", { [weak self] in
                 self?.closeChannelMenu()
@@ -1038,6 +1038,19 @@ extension MainWindow {
             ("doc.text", "Files", { [weak self] in
                 self?.closeChannelMenu()
                 self?.showRightPanel(mode: .files)
+            }),
+            hasUnread
+                ? ("checkmark.circle", "Mark as Read", { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.markActiveChannelRead()
+                })
+                : ("envelope.badge", "Mark as Unread", { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.markActiveChannelUnread()
+                }),
+            ("checkmark.circle.fill", "Mark All as Read", { [weak self] in
+                self?.closeChannelMenu()
+                self?.markAllChannelsRead()
             }),
             (isChannelFavorited ? "star.slash" : "star", favoriteTitle, { [weak self] in
                 guard let self = self else { return }
@@ -1111,18 +1124,24 @@ extension MainWindow {
 
     func copyChannelLink() {
         guard let channel = channelsById[activeChannelId] else { return }
-        var host = UserDefaults.standard.string(forKey: "host") ?? ""
-        let port = UserDefaults.standard.integer(forKey: "port")
-        if port > 0 && !host.hasSuffix(":\(port)") {
-            host += ":\(port)"
-        }
         let teamName = activeTeam?.name ?? ""
-        let url = "\(host)/\(teamName)/channels/\(channel.name)"
+        let path = "/\(teamName)/channels/\(channel.name)"
+        let url: String
+        if let built = webService?.buildURL(path: path) {
+            url = built.absoluteString
+        } else {
+            var host = UserDefaults.standard.string(forKey: "host") ?? ""
+            let port = UserDefaults.standard.integer(forKey: "port")
+            if !host.contains("://") { host = "https://" + host }
+            if port > 0 && !host.hasSuffix(":\(port)") { host += ":\(port)" }
+            url = host + path
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url, forType: .string)
         composerHelpLabel.stringValue = "Link copied"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.composerHelpLabel.stringValue = "Help"
+            guard let self = self, self.composerHelpLabel.stringValue == "Link copied" else { return }
+            self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
         }
     }
 

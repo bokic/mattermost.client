@@ -176,6 +176,9 @@ extension MainWindow {
             self.channelInfoButton.setNeedsAppearanceUpdate()
             self.channelInfoIconView.contentTintColor = isHovered ? darkText : mutedText
         }
+        channelInfoButton.onClick = { [weak self] in
+            self?.toggleRightPanel(mode: .channelInfo)
+        }
         chatPanel.addSubview(channelInfoButton)
 
         // 2. Welcome Hero Section (Illustration + Title + Subtitle + Invite button)
@@ -603,7 +606,7 @@ extension MainWindow {
             entryView.frame = NSRect(x: 14, y: 40, width: composerW - 28, height: 36)
         } else {
             entryView.textContainerInset = NSSize(width: 0, height: 13)
-            entryView.frame = NSRect(x: 14, y: 0, width: composerW - 234, height: baseComposerH)
+            entryView.frame = NSRect(x: 14, y: 0, width: max(120, composerW - 234), height: baseComposerH)
         }
         composerAttachmentTray.frame = NSRect(x: 8, y: baseComposerH + 2, width: composerW - 16, height: 28)
         composerHelpLabel.frame = NSRect(x: chatW - 24 - 180, y: 3, width: 180, height: 18)
@@ -636,8 +639,10 @@ extension MainWindow {
 
         // 3. Scrollable Timeline
         let composerTop = composerBottom + composerH
-        let scrollH = max(0, headerY - composerTop)
-        timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
+        let bannerHeight: CGFloat = connectionBanner.isHidden ? 0 : 26
+        let scrollH = max(0, headerY - bannerHeight - composerTop)
+        let timelineWidth = isRightPanelVisible ? rightPanel.frame.minX : chatW
+        timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: timelineWidth, height: scrollH)
         let listRight = isRightPanelVisible ? rightPanel.frame.minX : chatW
         newMessagesPill.frame = NSRect(
             x: 15,
@@ -647,8 +652,8 @@ extension MainWindow {
         )
         layoutNewMessagesPill()
         let wasNearBottom = (timelineScrollView.contentView.bounds.maxY >= (timelineDocView.frame.height - 40))
-        if abs(chatW - lastTimelineWidth) > 1 {
-            lastTimelineWidth = chatW
+        if abs(timelineWidth - lastTimelineWidth) > 1 {
+            lastTimelineWidth = timelineWidth
             rebuildTimelineContent(scrollToBottom: wasNearBottom)
         }
     }
