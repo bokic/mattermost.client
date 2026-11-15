@@ -263,6 +263,9 @@ extension MainWindow {
                 self.buildEmojiCategoryBar()
                 self.renderEmojiGrid()
             }
+            if self.isReactionPickerOpen {
+                self.renderReactionPickerGrid()
+            }
             if !self.customEmojiEntries.isEmpty {
                 if self.isRightPanelVisible && self.rightPanelMode == .thread {
                     self.renderThreadPanel()
@@ -1442,6 +1445,10 @@ extension MainWindow {
             } else {
                 hideRecentSearches()
             }
+            return
+        }
+        if (notification.object as? NSSearchField) === reactionPickerSearchField {
+            renderReactionPickerGrid()
             return
         }
         if (notification.object as? NSTextField) === memberSearchField {

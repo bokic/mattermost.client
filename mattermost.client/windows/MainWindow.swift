@@ -126,6 +126,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Post hover toolbar extras: reaction picker and the "more" menu
     let reactionPickerPanel = RoundedEdgePanel()
+    let reactionPickerSearchField = NSSearchField()
+    let reactionPickerScroll = NSScrollView()
+    let reactionPickerDoc = TimelineFlippedView()
+    var reactionPickerEntries: [EmojiEntry] = []
+    var recentReactionNames = UserDefaults.standard.stringArray(forKey: "recentReactions") ?? []
     var isReactionPickerOpen = false
     var reactionPickerAnchorInChat: NSRect = .zero
     var reactionPickerPostId: String = ""

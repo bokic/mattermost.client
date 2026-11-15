@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **110/110 pass** |
+| `./test.sh` | **116/116 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -29,22 +29,6 @@ completed baseline remains at the end.
 ## P3 — Web-parity backlog
 
 ### Message rendering
-
-- [ ] **Reaction UX is limited and partly broken** — `M`
-  - The reaction picker is 16 hardcoded emoji (`MainWindow.swift:681-686`,
-    `MainWindow+Timeline.swift:1049-1091`): no search, no recent reactions, no custom
-    emoji, no "who reacted" tooltip/list.
-  - Custom emoji reactions render as literal `:name:` text because `emojiGlyph` only consults
-    the bundled catalog and never `customEmojiEntries`/`customEmojiImages`
-    (`MainWindow+Timeline.swift:1272-1278`).
-  - Chips do not wrap (they run past the row edge and clip), are sorted alphabetically
-    instead of by count, and have no reaction-details popover (`:507-567,1280-1288`).
-  - Deleted posts still render their reaction chips and allow toggling reactions
-    (`:1657,1718-1725,1897-1900`); reaction add/remove is not optimistic and failures only
-    log (`:698-721`). The picker also anchors to the last toolbar subview (the ellipsis)
-    rather than the emoji button (`:674-679`).
-  - Add a searchable picker (reuse the composer picker), custom-emoji glyphs, wrap + detail
-    tooltips, optimistic toggles and deleted-post guards.
 
 - [ ] **Attachment and inline-image rendering has several correctness gaps** — `M`
   - Image attachments never set `imageView.animates` and only fetch the static preview, so
@@ -293,10 +277,9 @@ completed baseline remains at the end.
 ## Suggested next 10 (highest value first)
 
 1. **Sign, notarize and verify the release artifact** — requires the Developer ID certificate and notary credentials.
-2. **Reaction UX gaps** — web-parity reaction controls.
-3. **Accessibility/localization pass** — labels, focus traversal and localized strings.
-4. **Timeline incremental updates + bounded caches** — scalability for large channels.
-5. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
+2. **Accessibility/localization pass** — labels, focus traversal and localized strings.
+3. **Timeline incremental updates + bounded caches** — scalability for large channels.
+4. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
 
 ---
 
@@ -331,7 +314,8 @@ history is in git; the original long-form checklist lives in prior commits of th
   props-backed system messages, role/is_bot-based bot detection, offline-by-default
   presence and calendar-day date separators including future dates,
   attachments/image cards/lightbox, opt-in Open Graph link-preview cards with cached
-  images, reactions chips with add/remove, hover toolbar,
+  images, searchable recent/custom-emoji reaction picker, wrapping count-sorted reaction
+  chips with participant tooltips and optimistic toggles, hover toolbar,
   block-level Markdown (headings, ordered/nested lists, blockquotes, tables, rules),
   fenced code with language labels, syntax highlighting and copy links, inline
   markdown/mentions/channels/emoji/images, full Mattermost emoji catalog, Giphy rendering.
@@ -361,7 +345,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 110 tests today; keep the count rising
+./test.sh       # 116 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

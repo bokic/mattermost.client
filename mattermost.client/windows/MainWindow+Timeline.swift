@@ -535,24 +535,64 @@ extension MainWindow {
         attributedString.append(NSAttributedString(string: " Edited", attributes: tooltipAttrs))
     }
 
-    func addReactionChips(for post: MMPost, to row: NSView, x: CGFloat, y: CGFloat) -> CGFloat {
+    func reactionChipWidth(emoji: String, count: Int) -> CGFloat {
+        let emojiW: CGFloat = 16
+        let countFont = MMFont.font(ofSize: 11, weight: .semibold)
+        let countW = ceil((String(count) as NSString).size(withAttributes: [.font: countFont]).width)
+        return max(28, ceil(5 + emojiW + 2 + countW + 5))
+    }
+
+    func reactionChipsHeight(for post: MMPost, maxWidth: CGFloat) -> CGFloat {
+        guard (post.delete_at ?? 0) == 0 else { return 0 }
+        let groups = groupedReactions(post)
+        guard !groups.isEmpty else { return 0 }
+        let available = max(60, maxWidth)
+        var chipX: CGFloat = 0
+        var rows = 1
+        for (emoji, count) in groups {
+            let width = reactionChipWidth(emoji: emoji, count: count)
+            if chipX > 0, chipX + width > available {
+                chipX = 0
+                rows += 1
+            }
+            chipX += width + 4
+        }
+        if chipX > 0, chipX + 28 > available {
+            rows += 1
+        }
+        return CGFloat(rows) * 28
+    }
+
+    func addReactionChips(
+        for post: MMPost,
+        to row: NSView,
+        x: CGFloat,
+        y: CGFloat,
+        maxWidth: CGFloat
+    ) -> CGFloat {
+        guard (post.delete_at ?? 0) == 0 else { return 0 }
         let groups = groupedReactions(post)
         guard !groups.isEmpty else { return 0 }
 
         let blue = Theme.shared.buttonBg
         let centerColor = Theme.shared.centerText
-        let chipY = y + 4
+        let available = max(60, maxWidth)
         var chipX = x
+        var chipY = y + 4
         let emojiW: CGFloat = 16
         let countFont = MMFont.font(ofSize: 11, weight: .semibold)
+        let reactions = post.metadata?.reactions ?? []
 
         for (emoji, count) in groups {
             let reacted = currentUserReacted(post, emoji: emoji)
-            let glyph = emojiGlyph(for: emoji)
             let countText = String(count)
             let countW = ceil((countText as NSString).size(withAttributes: [.font: countFont]).width)
             let spacing: CGFloat = 2
-            let chipW = max(28, ceil(5 + emojiW + spacing + countW + 5))
+            let chipW = reactionChipWidth(emoji: emoji, count: count)
+            if chipX > x, chipX + chipW > x + available {
+                chipX = x
+                chipY += 28
+            }
 
             let chip = RoundedEdgePanel()
             chip.cornerRadius = MMRadius.control
@@ -563,32 +603,47 @@ extension MainWindow {
             chip.borderColor = reacted ? blue : .clear
             chip.frame = NSRect(x: chipX, y: chipY, width: chipW, height: 24)
 
-            let emojiLabel = NSTextField(labelWithString: glyph)
-            emojiLabel.font = MMFont.font(ofSize: 15)
-            emojiLabel.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
-            emojiLabel.alignment = .center
-            emojiLabel.isEditable = false
-            emojiLabel.isSelectable = false
-            emojiLabel.frame = NSRect(x: 5, y: 3, width: emojiW, height: 18)
-            chip.addSubview(emojiLabel)
-
-            var chipCountLabel: NSTextField?
-            if !countText.isEmpty {
-                let countLabel = NSTextField(labelWithString: countText)
-                countLabel.font = countFont
-                countLabel.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
-                countLabel.isEditable = false
-                countLabel.isSelectable = false
-                countLabel.frame = NSRect(x: 5 + emojiW + spacing, y: 5, width: countW + 1, height: 16)
-                chip.addSubview(countLabel)
-                chipCountLabel = countLabel
+            let customEntry = customEmojiEntries.first {
+                $0.name.caseInsensitiveCompare(emoji) == .orderedSame
+            }
+            if let entry = customEntry,
+               let emojiId = entry.emojiId,
+               let image = customEmojiImages[emojiId] {
+                let imageView = NSImageView(frame: NSRect(x: 5, y: 4, width: emojiW, height: 16))
+                imageView.image = image
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                chip.addSubview(imageView)
+            } else {
+                let emojiLabel = NSTextField(labelWithString: emojiGlyph(for: emoji))
+                emojiLabel.font = MMFont.font(ofSize: 15)
+                emojiLabel.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
+                emojiLabel.alignment = .center
+                emojiLabel.isEditable = false
+                emojiLabel.isSelectable = false
+                emojiLabel.frame = NSRect(x: 5, y: 3, width: emojiW, height: 18)
+                chip.addSubview(emojiLabel)
             }
 
-            let postId = post.id
-            let emojiName = emoji
-            chip.onHoverChanged = { [weak chip, weak emojiLabel, weak chipCountLabel] isHovered in
-                // `.Reaction:hover` uses the post background for both states; reacted
-                // chips keep their blue border and text.
+            let countLabel = NSTextField(labelWithString: countText)
+            countLabel.font = countFont
+            countLabel.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
+            countLabel.isEditable = false
+            countLabel.isSelectable = false
+            countLabel.frame = NSRect(x: 5 + emojiW + spacing, y: 5, width: countW + 1, height: 16)
+            chip.addSubview(countLabel)
+
+            let names = reactions
+                .filter { $0.emoji_name == emoji }
+                .map { reaction in
+                    reaction.user_id.flatMap { usersById[$0]?.username } ?? "Unknown user"
+                }
+            chip.toolTip = names.isEmpty
+                ? ":\(emoji):"
+                : ":\(emoji): " + names.joined(separator: ", ")
+            chip.accessibilityTitle = "\(emoji), \(count) reaction\(count == 1 ? "" : "s")"
+            chip.accessibilityHelp = names.isEmpty ? nil : names.joined(separator: ", ")
+
+            chip.onHoverChanged = { [weak chip] isHovered in
                 guard let chip = chip else { return }
                 let idleFill = reacted
                     ? Theme.shared.buttonBg.withAlphaComponent(0.08)
@@ -597,12 +652,10 @@ extension MainWindow {
                 chip.borderColor = reacted
                     ? blue
                     : (isHovered ? Theme.shared.centerText.withAlphaComponent(0.16) : .clear)
-                emojiLabel?.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
-                chipCountLabel?.textColor = reacted ? blue : centerColor.withAlphaComponent(0.75)
                 chip.setNeedsAppearanceUpdate()
             }
             chip.onClick = { [weak self] in
-                self?.toggleReaction(postId: postId, emojiName: emojiName)
+                self?.toggleReaction(postId: post.id, emojiName: emoji)
             }
             row.addSubview(chip)
             chipX += chipW + 4
@@ -610,6 +663,10 @@ extension MainWindow {
 
         // The add-reaction chip only exists when a post already has reactions, and
         // is revealed while the row is hovered (`.post:hover .Reaction__add`).
+        if chipX > x, chipX + 28 > x + available {
+            chipX = x
+            chipY += 28
+        }
         let addChip = RoundedEdgePanel()
         addChip.cornerRadius = MMRadius.control
         addChip.color = Theme.shared.centerText.withAlphaComponent(0.08)
@@ -635,10 +692,12 @@ extension MainWindow {
             self.showReactionPicker(for: post, anchor: addChip)
         }
         addChip.isHidden = true
+        addChip.identifier = NSUserInterfaceItemIdentifier("reactionAddChip")
+        addChip.accessibilityTitle = "Add reaction"
         row.addSubview(addChip)
         (row as? TimelineRowView)?.reactionAddChip = addChip
 
-        return 32
+        return chipY - y + 24
     }
 
     func addHoverToolbar(for post: MMPost, to row: NSView, width: CGFloat, compact: Bool = false) -> RoundedEdgePanel {
@@ -666,10 +725,7 @@ extension MainWindow {
 
         let postRef = post
         let entries: [(symbol: String, label: String, action: () -> Void)] = [
-            ("face.smiling", "Add Reaction", { [weak self, weak toolbar] in
-                guard let self = self, let toolbar = toolbar else { return }
-                self.showReactionPicker(for: postRef, anchorRect: self.postToolbarAnchor(toolbar))
-            }),
+            ("face.smiling", "Add Reaction", {}),
             ("arrowshape.turn.up.left", "Reply", { [weak self] in
                 self?.showThread(for: postRef)
             }),
@@ -705,7 +761,14 @@ extension MainWindow {
                 icon?.contentTintColor = Theme.shared.centerText.withAlphaComponent(isHovered ? 0.8 : 0.64)
                 button?.setNeedsAppearanceUpdate()
             }
-            button.onClick = entry.action
+            if entry.label == "Add Reaction" {
+                button.onClick = { [weak self, weak button] in
+                    guard let self = self, let button = button else { return }
+                    self.showReactionPicker(for: postRef, anchor: button)
+                }
+            } else {
+                button.onClick = entry.action
+            }
             toolbar.addSubview(button)
         }
 
@@ -742,8 +805,15 @@ extension MainWindow {
               let userId = currentUserId() else { return }
         let post = currentChannelPosts.first(where: { $0.id == postId })
             ?? threadPosts.first(where: { $0.id == postId })
-        guard let post = post else { return }
-        let reacted = currentUserReacted(post, emoji: emojiName)
+        guard let original = post, (original.delete_at ?? 0) == 0 else { return }
+        let reacted = currentUserReacted(original, emoji: emojiName)
+        guard let optimistic = reactionPost(
+            original,
+            adding: !reacted,
+            userId: userId,
+            emojiName: emojiName
+        ) else { return }
+        applyUpdatedPost(optimistic)
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -757,9 +827,32 @@ extension MainWindow {
                     self.applyUpdatedPost(updated)
                 }
             } catch {
-                NSLog("Reaction update failed: \(error.localizedDescription)")
+                self.applyUpdatedPost(original)
+                self.showInfoAlert("Could not update the reaction: \(error.localizedDescription)")
             }
         }
+    }
+
+    func reactionPost(
+        _ post: MMPost,
+        adding: Bool,
+        userId: String,
+        emojiName: String
+    ) -> MMPost? {
+        var reactions = post.metadata?.reactions ?? []
+        if adding {
+            reactions.append(MMReaction(
+                user_id: userId,
+                post_id: post.id,
+                emoji_name: emojiName,
+                create_at: Int64(Date().timeIntervalSince1970 * 1000)
+            ))
+        } else {
+            reactions.removeAll { $0.user_id == userId && $0.emoji_name == emojiName }
+        }
+        var updated = post
+        updated.metadata = MMPostMetadata(files: post.metadata?.files, reactions: reactions)
+        return updated
     }
 
     func applyUpdatedPost(_ post: MMPost) {
@@ -800,6 +893,18 @@ extension MainWindow {
         reactionPickerPanel.shadowRadius = 8
         reactionPickerPanel.shadowOffset = CGSize(width: 0, height: -2)
         reactionPickerPanel.isHidden = true
+        reactionPickerSearchField.placeholderString = "Search reactions"
+        reactionPickerSearchField.font = MMFont.font(ofSize: 12)
+        reactionPickerSearchField.isBezeled = true
+        reactionPickerSearchField.focusRingType = .none
+        reactionPickerSearchField.delegate = self
+        reactionPickerPanel.addSubview(reactionPickerSearchField)
+        reactionPickerScroll.drawsBackground = false
+        reactionPickerScroll.hasVerticalScroller = true
+        reactionPickerScroll.autohidesScrollers = true
+        reactionPickerScroll.borderType = .noBorder
+        reactionPickerScroll.documentView = reactionPickerDoc
+        reactionPickerPanel.addSubview(reactionPickerScroll)
         chatPanel.addSubview(reactionPickerPanel)
 
         postActionMenu.color = Theme.shared.centerBg
@@ -1107,54 +1212,16 @@ extension MainWindow {
     }
 
     func showReactionPicker(for post: MMPost, anchorRect: NSRect) {
-        guard !activeChannelId.isEmpty else { return }
+        guard !activeChannelId.isEmpty, (post.delete_at ?? 0) == 0 else { return }
         closePostActionMenu()
         reactionPickerPostId = post.id
         reactionPickerAnchorInChat = anchorRect
 
-        let columns = 8
-        let cell: CGFloat = 28
-        let gap: CGFloat = 4
-        let margin: CGFloat = 8
-        let rows = (Self.quickReactions.count + columns - 1) / columns
-        let width = margin * 2 + CGFloat(columns) * cell + CGFloat(columns - 1) * gap
-        let height = margin * 2 + CGFloat(rows) * cell + CGFloat(rows - 1) * gap
-
-        reactionPickerPanel.subviews.forEach { $0.removeFromSuperview() }
-
-        for (index, emoji) in Self.quickReactions.enumerated() {
-            let column = index % columns
-            let row = index / columns
-            let button = RoundedEdgePanel()
-            button.cornerRadius = MMRadius.control
-            button.color = .clear
-            button.frame = NSRect(
-                x: margin + CGFloat(column) * (cell + gap),
-                y: margin + CGFloat(rows - 1 - row) * (cell + gap),
-                width: cell,
-                height: cell
-            )
-            let label = NSTextField(labelWithString: emoji.glyph)
-            label.font = MMFont.font(ofSize: 18)
-            label.alignment = .center
-            label.isEditable = false
-            label.isSelectable = false
-            label.frame = NSRect(x: 0, y: 4, width: cell, height: 22)
-            button.addSubview(label)
-            button.onHoverChanged = { [weak button] isHovered in
-                button?.color = isHovered
-                    ? Theme.shared.centerText.withAlphaComponent(0.08)
-                    : .clear
-                button?.setNeedsAppearanceUpdate()
-            }
-            let emojiName = emoji.name
-            button.onClick = { [weak self] in
-                guard let self = self else { return }
-                self.closeReactionPicker()
-                self.toggleReaction(postId: self.reactionPickerPostId, emojiName: emojiName)
-            }
-            reactionPickerPanel.addSubview(button)
-        }
+        let width: CGFloat = 340
+        let height: CGFloat = 330
+        reactionPickerSearchField.stringValue = ""
+        reactionPickerSearchField.frame = NSRect(x: 8, y: height - 38, width: width - 16, height: 26)
+        reactionPickerScroll.frame = NSRect(x: 0, y: 0, width: width, height: height - 48)
 
         let chatW = chatPanel.bounds.width
         let chatH = chatPanel.bounds.height
@@ -1169,11 +1236,116 @@ extension MainWindow {
         reactionPickerPanel.isHidden = false
         reactionPickerPanel.superview?.addSubview(reactionPickerPanel)
         isReactionPickerOpen = true
+        renderReactionPickerGrid()
+        loadCustomEmojis()
+        makeFirstResponder(reactionPickerSearchField)
+    }
+
+    func renderReactionPickerGrid() {
+        let query = reactionPickerSearchField.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let allEntries = EmojiCatalog.entries + customEmojiEntries
+        var entries: [EmojiEntry]
+        if query.isEmpty {
+            var seen = Set<String>()
+            var ordered: [EmojiEntry] = []
+            for name in recentReactionNames {
+                if let entry = allEntries.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+                    ordered.append(entry)
+                    seen.insert(entry.name.lowercased())
+                }
+            }
+            for entry in allEntries where seen.insert(entry.name.lowercased()).inserted {
+                ordered.append(entry)
+            }
+            entries = Array(ordered.prefix(160))
+        } else {
+            entries = allEntries
+                .filter { $0.name.lowercased().contains(query) }
+                .prefix(160)
+                .map { $0 }
+        }
+        reactionPickerEntries = entries
+
+        reactionPickerDoc.subviews.forEach { $0.removeFromSuperview() }
+        let width = max(200, reactionPickerScroll.bounds.width)
+        let columns = 8
+        let cell: CGFloat = 32
+        let gap: CGFloat = 4
+        let margin: CGFloat = 8
+        let rowCount = max(1, (entries.count + columns - 1) / columns)
+
+        for (index, entry) in entries.enumerated() {
+            let column = index % columns
+            let row = index / columns
+            let button = RoundedEdgePanel()
+            button.cornerRadius = MMRadius.control
+            button.color = .clear
+            button.frame = NSRect(
+                x: margin + CGFloat(column) * (cell + gap),
+                y: margin + CGFloat(row) * (cell + gap),
+                width: cell,
+                height: cell
+            )
+            if entry.isCustom,
+               let emojiId = entry.emojiId,
+               let image = customEmojiImages[emojiId] {
+                let imageView = NSImageView(frame: NSRect(x: 6, y: 6, width: 20, height: 20))
+                imageView.image = image
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                button.addSubview(imageView)
+            } else {
+                let label = NSTextField(labelWithString: entry.glyph)
+                label.font = MMFont.font(ofSize: 18)
+                label.alignment = .center
+                label.isEditable = false
+                label.isSelectable = false
+                label.frame = NSRect(x: 0, y: 5, width: cell, height: 22)
+                button.addSubview(label)
+            }
+            button.onHoverChanged = { [weak button] isHovered in
+                button?.color = isHovered
+                    ? Theme.shared.centerText.withAlphaComponent(0.08)
+                    : .clear
+                button?.setNeedsAppearanceUpdate()
+            }
+            let name = entry.name
+            button.onClick = { [weak self] in
+                guard let self = self else { return }
+                self.recordRecentReaction(name)
+                self.closeReactionPicker()
+                self.toggleReaction(postId: self.reactionPickerPostId, emojiName: name)
+            }
+            button.toolTip = entry.name
+            button.accessibilityTitle = entry.name
+            reactionPickerDoc.addSubview(button)
+        }
+
+        reactionPickerDoc.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: width,
+            height: margin * 2 + CGFloat(rowCount) * (cell + gap)
+        )
+        reactionPickerScroll.contentView.scroll(to: .zero)
+        reactionPickerScroll.reflectScrolledClipView(reactionPickerScroll.contentView)
+    }
+
+    func recordRecentReaction(_ name: String) {
+        recentReactionNames.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+        recentReactionNames.insert(name, at: 0)
+        if recentReactionNames.count > 24 {
+            recentReactionNames.removeLast(recentReactionNames.count - 24)
+        }
+        UserDefaults.standard.set(recentReactionNames, forKey: "recentReactions")
     }
 
     func closeReactionPicker() {
         reactionPickerPanel.isHidden = true
         isReactionPickerOpen = false
+        reactionPickerSearchField.stringValue = ""
+        reactionPickerDoc.subviews.forEach { $0.removeFromSuperview() }
     }
 
     func showPostActionMenu(for post: MMPost, anchor: NSView) {
@@ -1396,7 +1568,10 @@ extension MainWindow {
             guard let name = reaction.emoji_name, !name.isEmpty else { continue }
             counts[name, default: 0] += 1
         }
-        return counts.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+        return counts.sorted {
+            if $0.value != $1.value { return $0.value > $1.value }
+            return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
+        }.map { ($0.key, $0.value) }
     }
 
     func fileExtensionLabel(for file: MMFileInfo) -> String {
@@ -2087,7 +2262,13 @@ extension MainWindow {
                     contentY += fileH + 2
                 }
             }
-            contentY += addReactionChips(for: post, to: row, x: 79, y: contentY)
+            contentY += addReactionChips(
+                for: post,
+                to: row,
+                x: 79,
+                y: contentY,
+                maxWidth: bodyMaxW
+            )
 
             if showsReplyFooter {
                 let footer = makeThreadReplyFooter(for: post, width: bodyMaxW)
@@ -2153,8 +2334,8 @@ extension MainWindow {
                 attachmentsHeight = created.1
             }
         }
-        let reactionGroups = groupedReactions(post)
-        let reactionsHeight: CGFloat = reactionGroups.isEmpty ? 0 : 34
+        let reactionGroups = isDeleted ? [] : groupedReactions(post)
+        let reactionsHeight = reactionChipsHeight(for: post, maxWidth: bodyMaxW)
 
         var stackHeight: CGFloat = 0
         if hasDisplayableText { stackHeight += bodyH + 3 }
@@ -2360,7 +2541,13 @@ extension MainWindow {
         }
 
         if !reactionGroups.isEmpty {
-            _ = addReactionChips(for: post, to: row, x: contentX, y: stackTop)
+            _ = addReactionChips(
+                for: post,
+                to: row,
+                x: contentX,
+                y: stackTop,
+                maxWidth: bodyMaxW
+            )
             stackTop += reactionsHeight
         }
 
