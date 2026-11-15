@@ -282,7 +282,21 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     does not collapse it.
   - Verified with a temporary demo harness: divider styling, pill text/positioning and the
     collapse state transition; temporary hooks were removed. 21 tests pass.
-- [ ] **Right-hand sidebar** (threads, members, pinned posts, files) with resize/persist — `L`
+- [x] **Right-hand sidebar** (threads, members, pinned posts, files) with resize/persist — `L`
+  - Done: the right-hand panel now covers Threads, Members, Pinned Posts, Files, Recent Mentions,
+    Saved Posts, Settings and Browse Channels, all rendered in the same 400pt default panel.
+  - Added the Files view using the web client's channel-file search
+    (`POST /teams/{team}/files/search` with `terms=channel:{id}`). Rows mirror
+    `.FileSearchResultItem`: 64pt bordered cards, 40pt image/file thumbnail, 12pt semibold name and
+    `size • Today at 1:33` metadata; clicking an image opens the lightbox, other files open/download.
+  - Header now matches the web: 56pt tall, 16pt semibold title, 12pt 75% channel subtitle to the
+    right, and a 32pt close button.
+  - Added a draggable 6pt resize handle on the left edge (resize-left-right cursor, hover highlight)
+    with a 280–(chat − 360) clamp. The width persists in `UserDefaults` under `rhsWidth` and is
+    restored at launch; releasing the drag reflows the active panel.
+  - Added a Files button to the channel header and a Files item to the channel menu.
+  - Verified against computed styles from the live web client and screenshots of the Files view at
+    400pt and after resizing to 480pt; `rhsWidth` was persisted and restored. 21 tests pass.
 - [ ] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
 - [ ] **Emoji picker** (server emoji list + recent) — `M`
 - [ ] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`

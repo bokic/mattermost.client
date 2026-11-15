@@ -136,6 +136,19 @@ struct MMFileInfo: Codable {
     let size: Int64?
     let width: Int?
     let height: Int?
+    // Present on file-search results but absent from post metadata.
+    let user_id: String?
+    let post_id: String?
+    let channel_id: String?
+    let create_at: Int64?
+    let has_preview_image: Bool?
+}
+
+struct MMFileSearchResult: Decodable {
+    let order: [String]
+    let file_infos: [String: MMFileInfo]
+    let next_file_info_id: String?
+    let prev_file_info_id: String?
 }
 
 struct MMReaction: Codable {
@@ -926,6 +939,22 @@ final class WebService: NSObject {
     /// Returns the root post plus every reply of a thread.
     func fetchPostThread(postId: String) async throws -> MMPostList {
         return try await performAuthenticatedRequest(path: "/api/v4/posts/\(postId)/thread")
+    }
+
+    /// Recent files in a channel, using the same search the web RHS uses.
+    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMFileInfo] {
+        let result: MMFileSearchResult = try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/files/search",
+            method: "POST",
+            body: [
+                "terms": "channel:\(channelId)",
+                "is_or_search": false,
+                "page": page,
+                "per_page": perPage,
+                "time_zone_offset": 0
+            ]
+        )
+        return result.order.compactMap { result.file_infos[$0] }
     }
 
     // MARK: - Reactions

@@ -35,6 +35,63 @@ private class TimelineRowView: RoundedEdgePanel {
     var reactionAddChip: NSView?
 }
 
+/// Draggable divider on the left edge of the right-hand panel.
+private class RightPanelResizeHandle: NSView {
+    var onDrag: ((CGFloat) -> Void)?
+    var onEnd: (() -> Void)?
+    private var isHovering = false {
+        didSet { needsDisplay = true }
+    }
+    private var trackingArea: NSTrackingArea?
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        NSCursor.resizeLeftRight.set()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        onDrag?(event.deltaX)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        onEnd?()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovering {
+            NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 0.25).setFill()
+            NSRect(x: 2, y: 0, width: 1.5, height: bounds.height).fill()
+        }
+    }
+}
+
 /// Rounded panel with a top-down coordinate system, used for file cards.
 private class FlippedEdgePanel: RoundedEdgePanel {
     override var isFlipped: Bool { true }
@@ -137,10 +194,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let settingsPanel = RoundedEdgePanel()
     let settingsIconView = NSImageView()
     
-    // Right-hand side panel (threads / members / pinned posts)
+    // Right-hand side panel (threads / members / pinned posts / files)
     let rightPanel = RoundedEdgePanel()
     let rightPanelTitle = NSTextField(labelWithString: "Threads")
+    let rightPanelSubtitle = NSTextField(labelWithString: "")
     let rightPanelCloseButton = RoundedEdgePanel()
+    private let rightPanelResizeHandle = RightPanelResizeHandle()
+    private var rightPanelWidth: CGFloat = {
+        let stored = UserDefaults.standard.double(forKey: "rhsWidth")
+        return stored > 0 ? CGFloat(stored) : 400
+    }()
     private static let localizedTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .current
@@ -187,7 +250,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let connectionLabel = NSTextField(labelWithString: "")
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
-    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread }
+    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread, files }
     private var rightPanelMode: RightPanelMode = .threads
     private var isRightPanelVisible = false
     private var threadItems: [MMThread] = []
@@ -371,6 +434,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let channelMembersCountLabel = NSTextField(labelWithString: "1")
     let channelPinsButton = RoundedEdgePanel()
     let channelPinsIconView = NSImageView()
+    let channelFilesButton = RoundedEdgePanel()
+    let channelFilesIconView = NSImageView()
     let channelSidebarButton = RoundedEdgePanel()
     let channelSidebarIconView = NSImageView()
     let channelInfoButton = RoundedEdgePanel()
@@ -3732,6 +3797,24 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self?.toggleRightPanel(mode: .pinned)
         }
         chatPanel.addSubview(channelPinsButton)
+
+        channelFilesButton.cornerRadius = 4
+        channelFilesButton.color = .clear
+        if let filesImg = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Channel files") {
+            channelFilesIconView.image = filesImg.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+            channelFilesIconView.contentTintColor = mutedText
+        }
+        channelFilesButton.addSubview(channelFilesIconView)
+        channelFilesButton.onHoverChanged = { [weak self] isHovered in
+            guard let self = self else { return }
+            self.channelFilesButton.color = isHovered ? hoverBg : .clear
+            self.channelFilesButton.setNeedsAppearanceUpdate()
+            self.channelFilesIconView.contentTintColor = isHovered ? darkText : mutedText
+        }
+        channelFilesButton.onClick = { [weak self] in
+            self?.toggleRightPanel(mode: .files)
+        }
+        chatPanel.addSubview(channelFilesButton)
         
         channelSidebarButton.cornerRadius = 4
         channelSidebarButton.color = .clear
@@ -4119,6 +4202,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self?.closeChannelMenu()
                 self?.showRightPanel(mode: .pinned)
             }),
+            ("doc.text", "Files", { [weak self] in
+                self?.closeChannelMenu()
+                self?.showRightPanel(mode: .files)
+            }),
             (isChannelFavorited ? "star.slash" : "star", favoriteTitle, { [weak self] in
                 guard let self = self else { return }
                 self.closeChannelMenu()
@@ -4399,11 +4486,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         rightPanel.borderColor = dividerColor
         rightPanel.isHidden = true
         
-        rightPanelTitle.font = MMFont.font(ofSize: 14, weight: .semibold)
+        rightPanelTitle.font = MMFont.font(ofSize: 16, weight: .semibold)
         rightPanelTitle.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
         rightPanelTitle.isEditable = false
         rightPanelTitle.isSelectable = false
         rightPanel.addSubview(rightPanelTitle)
+
+        rightPanelSubtitle.font = MMFont.font(ofSize: 12)
+        rightPanelSubtitle.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
+        rightPanelSubtitle.isEditable = false
+        rightPanelSubtitle.isSelectable = false
+        rightPanel.addSubview(rightPanelSubtitle)
         
         rightPanelCloseButton.cornerRadius = 4
         rightPanelCloseButton.color = .clear
@@ -4412,7 +4505,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             closeIcon.image = image.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
             closeIcon.contentTintColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
         }
-        closeIcon.frame = NSRect(x: 5, y: 5, width: 12, height: 12)
+        closeIcon.frame = NSRect(x: 9, y: 9, width: 14, height: 14)
         rightPanelCloseButton.addSubview(closeIcon)
         rightPanelCloseButton.onClick = { [weak self] in
             self?.closeRightPanel()
@@ -4463,6 +4556,19 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         threadReplyPanel.addSubview(threadSendButton)
         rightPanel.addSubview(threadReplyPanel)
 
+        rightPanelResizeHandle.onDrag = { [weak self] deltaX in
+            guard let self = self else { return }
+            let maxWidth = max(280, self.chatPanel.bounds.width - 360)
+            self.rightPanelWidth = min(max(280, self.rightPanelWidth - deltaX), maxWidth)
+            self.layoutRightChatPanel()
+        }
+        rightPanelResizeHandle.onEnd = { [weak self] in
+            guard let self = self else { return }
+            UserDefaults.standard.set(Double(self.rightPanelWidth), forKey: "rhsWidth")
+            self.reloadRightPanelIfNeeded()
+        }
+        rightPanel.addSubview(rightPanelResizeHandle)
+
         chatPanel.addSubview(rightPanel)
     }
     
@@ -4470,6 +4576,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         rightPanelMode = mode
         isRightPanelVisible = true
         rightPanel.isHidden = false
+        if mode == .settings || mode == .browse {
+            rightPanelSubtitle.stringValue = ""
+        } else {
+            rightPanelSubtitle.stringValue = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
+        }
         layoutRightChatPanel()
         
         switch mode {
@@ -4497,7 +4608,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .thread:
             rightPanelTitle.stringValue = "Thread"
             loadThread()
+        case .files:
+            rightPanelTitle.stringValue = "Files"
+            loadChannelFiles()
         }
+        layoutRightChatPanel()
     }
     
     private func toggleRightPanel(mode: RightPanelMode) {
@@ -4524,6 +4639,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .settings: loadSettingsPanel()
         case .browse: loadBrowseChannels()
         case .thread: loadThread()
+        case .files: loadChannelFiles()
         }
     }
     
@@ -4578,6 +4694,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         isRightPanelVisible = true
         rightPanel.isHidden = false
         rightPanelTitle.stringValue = "Thread"
+        rightPanelSubtitle.stringValue = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
         layoutRightChatPanel()
         loadThread()
     }
@@ -4760,6 +4877,148 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         }
     }
     
+    private func loadChannelFiles() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam, !activeChannelId.isEmpty else {
+            renderFilesPanel([], empty: "Sign in to see files")
+            return
+        }
+        let channelId = activeChannelId
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let files = try? await ws.searchChannelFiles(teamId: team.id, channelId: channelId) else {
+                self.renderFilesPanel([], empty: "Could not load files")
+                return
+            }
+            self.hydrateUsers(files.compactMap { $0.user_id }) {
+                self.renderFilesPanel(files, empty: "No files yet")
+            }
+        }
+    }
+
+    private func fileTimestamp(_ file: MMFileInfo) -> String {
+        guard let millis = file.create_at else { return "" }
+        let date = Date(timeIntervalSince1970: TimeInterval(millis) / 1000.0)
+        let calendar = Calendar.current
+        let time = Self.localizedTimeFormatter.string(from: date)
+        if calendar.isDateInToday(date) {
+            return "Today at \(time)"
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday at \(time)"
+        }
+        return "\(Self.localizedDateFormatter.string(from: date)) at \(time)"
+    }
+
+    /// Files tab of the right-hand panel, mirroring `.FileSearchResultItem`.
+    private func renderFilesPanel(_ files: [MMFileInfo], empty: String) {
+        let width = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
+        rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
+
+        var y: CGFloat = 12
+        let heading = NSTextField(labelWithString: "Recent files")
+        heading.font = MMFont.font(ofSize: 14, weight: .semibold)
+        heading.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        heading.isEditable = false
+        heading.isSelectable = false
+        heading.frame = NSRect(x: 15, y: y, width: max(0, width - 30), height: 20)
+        rightPanelDoc.addSubview(heading)
+        y += 30
+
+        if files.isEmpty {
+            let label = NSTextField(labelWithString: empty)
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+            label.alignment = .center
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 12, y: y + 8, width: max(0, width - 24), height: 20)
+            rightPanelDoc.addSubview(label)
+            rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: y + 48)
+            return
+        }
+
+        let rowWidth = max(200, width - 28)
+        let rowHeight: CGFloat = 64
+        for file in files {
+            let card = FlippedEdgePanel()
+            card.cornerRadius = 4
+            card.color = .white
+            card.borderWidth = 1
+            card.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+            card.frame = NSRect(x: 14, y: y, width: rowWidth, height: rowHeight)
+            card.onHoverChanged = { [weak card] isHovered in
+                card?.color = isHovered
+                    ? NSColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1.0)
+                    : .white
+                card?.setNeedsAppearanceUpdate()
+            }
+
+            let isImage = (file.mime_type ?? "").hasPrefix("image/")
+            let thumbFrame = NSRect(x: 12, y: 12, width: 40, height: 40)
+            var thumbImage: NSImage?
+            if isImage {
+                let thumb = RoundedEdgePanel()
+                thumb.cornerRadius = 4
+                thumb.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                thumb.clipContentToBounds = true
+                thumb.frame = thumbFrame
+                let imageView = NSImageView(frame: NSRect(origin: .zero, size: thumbFrame.size))
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                thumb.addSubview(imageView)
+                card.addSubview(thumb)
+                if let ws = (NSApp.delegate as? AppDelegate)?.webService {
+                    Task { @MainActor [weak imageView, weak thumb] in
+                        if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
+                           let image = NSImage(data: data) {
+                            imageView?.image = image
+                            thumbImage = image
+                        }
+                    }
+                }
+            } else {
+                let icon = FileTypeIconView(frame: thumbFrame)
+                icon.fileExtension = fileExtensionLabel(for: file)
+                card.addSubview(icon)
+            }
+
+            let name = NSTextField(labelWithString: file.name ?? file.id)
+            name.font = MMFont.font(ofSize: 12, weight: .semibold)
+            name.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+            name.lineBreakMode = .byTruncatingMiddle
+            name.isEditable = false
+            name.isSelectable = false
+            name.frame = NSRect(x: 64, y: 12, width: max(60, rowWidth - 76), height: 17)
+            card.addSubview(name)
+
+            let details = [formatFileSize(file.size), fileTimestamp(file)]
+                .filter { !$0.isEmpty }
+                .joined(separator: "  •  ")
+            let metadata = NSTextField(labelWithString: details)
+            metadata.font = MMFont.font(ofSize: 12)
+            metadata.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+            metadata.isEditable = false
+            metadata.isSelectable = false
+            metadata.frame = NSRect(x: 64, y: 32, width: max(60, rowWidth - 76), height: 17)
+            card.addSubview(metadata)
+
+            card.onClick = { [weak self] in
+                if isImage {
+                    self?.showLightbox(image: thumbImage, file: file, filename: file.name ?? "Image")
+                } else {
+                    self?.openAttachment(file)
+                }
+            }
+
+            rightPanelDoc.addSubview(card)
+            y += rowHeight + 8
+        }
+
+        rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+        rightPanelScroll.contentView.scroll(to: .zero)
+        rightPanelScroll.reflectScrolledClipView(rightPanelScroll.contentView)
+    }
+
     private func loadMentions() {
         guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
               let team = activeTeam else {
@@ -7499,11 +7758,25 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         if isRightPanelVisible {
             let composerArea: CGFloat = 24 + (isComposerToolbarVisible ? 90 : 50) + 8
-            let panelWidth = min(320, max(240, chatW * 0.36))
+            let maxPanelWidth = max(280, chatW - 360)
+            let panelWidth = min(max(280, rightPanelWidth), maxPanelWidth)
             let panelHeight = max(0, chatH - headerH - composerArea)
             rightPanel.frame = NSRect(x: chatW - panelWidth, y: composerArea, width: panelWidth, height: panelHeight)
-            rightPanelTitle.frame = NSRect(x: 16, y: panelHeight - 40, width: panelWidth - 64, height: 20)
-            rightPanelCloseButton.frame = NSRect(x: panelWidth - 38, y: panelHeight - 44, width: 24, height: 24)
+
+            let titleFont = rightPanelTitle.font ?? MMFont.font(ofSize: 16, weight: .semibold)
+            let titleWidth = min(
+                ceil((rightPanelTitle.stringValue as NSString).size(withAttributes: [.font: titleFont]).width) + 2,
+                panelWidth - 100
+            )
+            rightPanelTitle.frame = NSRect(x: 16, y: panelHeight - 40, width: titleWidth, height: 24)
+            rightPanelSubtitle.frame = NSRect(
+                x: 16 + titleWidth + 8,
+                y: panelHeight - 38,
+                width: max(0, panelWidth - titleWidth - 100),
+                height: 20
+            )
+            rightPanelCloseButton.frame = NSRect(x: panelWidth - 48, y: panelHeight - 44, width: 32, height: 32)
+            rightPanelResizeHandle.frame = NSRect(x: 0, y: 0, width: 6, height: panelHeight)
 
             let isThreadMode = (rightPanelMode == .thread)
             let replyBarHeight: CGFloat = isThreadMode ? 52 : 0
@@ -7511,7 +7784,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 x: 0,
                 y: replyBarHeight,
                 width: panelWidth,
-                height: max(0, panelHeight - 48 - replyBarHeight)
+                height: max(0, panelHeight - 56 - replyBarHeight)
             )
             threadReplyPanel.isHidden = !isThreadMode
             if isThreadMode {
@@ -7565,6 +7838,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         channelPinsButton.frame = NSRect(x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: 24, height: 24)
         channelPinsIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+
+        channelFilesButton.frame = NSRect(x: channelPinsButton.frame.maxX + 4, y: headerY + 16, width: 24, height: 24)
+        channelFilesIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
         
         // Web: 32pt icon buttons at the trailing edge, 4pt apart, 12pt from the right.
         channelInfoButton.frame = NSRect(x: chatW - 44, y: headerY + 12, width: 32, height: 32)
@@ -7954,6 +8230,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         reloadRightPanelIfNeeded()
         let resolvedTitle = channelDisplayName(for: ch)
         channelTitleLabel.stringValue = resolvedTitle
+        if isRightPanelVisible {
+            rightPanelSubtitle.stringValue = resolvedTitle
+        }
         heroTitleLabel.stringValue = resolvedTitle
         composerPlaceholderLabel.stringValue = "Write to \(resolvedTitle)"
         entryView.placeholderString = composerPlaceholderLabel.stringValue
