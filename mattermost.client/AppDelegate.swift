@@ -50,6 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     
     /// Reads credentials off the main thread: Keychain access can block while the
     /// system shows an authorization prompt, which must not stall app launch.
+    /// The password item is only read when the cached token is missing or invalid,
+    /// so a valid session never triggers an unnecessary Keychain prompt.
     private func startAuthentication() {
         let userSettings = UserDefaults.standard
         let host = userSettings.string(forKey: "host")
@@ -57,7 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         
         Task.detached { [weak self] in
             let token = KeychainHelper.get(forKey: "token")
-            let password = KeychainHelper.get(forKey: "password")
             await MainActor.run {
                 guard let self = self else { return }
                 if let host = host, !host.isEmpty, let token = token, !token.isEmpty {
@@ -70,12 +71,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                             self.showMainWindow()
                         } else {
                             NSLog("Token is invalid, trying login")
-                            self.loginWithStoredCredentials(host: host, port: port, password: password)
+                            self.loginWithStoredPassword(host: host, port: port)
                         }
                     }
                 } else {
-                    self.loginWithStoredCredentials(host: host, port: port, password: password)
+                    self.loginWithStoredPassword(host: host, port: port)
                 }
+            }
+        }
+    }
+
+    /// Loads the stored password off the main thread and then attempts a login.
+    private func loginWithStoredPassword(host: String?, port: UInt16) {
+        Task.detached { [weak self] in
+            let password = KeychainHelper.get(forKey: "password")
+            await MainActor.run {
+                self?.loginWithStoredCredentials(host: host, port: port, password: password)
             }
         }
     }
@@ -128,16 +139,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     
     func tryLoginWithStoredCredentials() {
-        Task.detached { [weak self] in
-            let password = KeychainHelper.get(forKey: "password")
-            await MainActor.run {
-                self?.loginWithStoredCredentials(
-                    host: UserDefaults.standard.string(forKey: "host"),
-                    port: UInt16(UserDefaults.standard.integer(forKey: "port")),
-                    password: password
-                )
-            }
-        }
+        loginWithStoredPassword(
+            host: UserDefaults.standard.string(forKey: "host"),
+            port: UInt16(UserDefaults.standard.integer(forKey: "port"))
+        )
     }
     
     private func loginWithStoredCredentials(host: String?, port: UInt16, password: String?) {
