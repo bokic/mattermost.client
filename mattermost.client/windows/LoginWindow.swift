@@ -66,11 +66,11 @@ class LoginWindow: NSWindow {
 
         hostLabel = NSTextField()
         hostLabel.frame = .init(x: 20, y: 20, width: 300, height: 30)
-        hostLabel.placeholderString = "http{s}://hostname/"
+        hostLabel.placeholderString = "https://mattermost.example.com (http:// only for local servers)"
 
         portLabel = NSTextField()
         portLabel.frame = .init(x: 20, y: 50, width: 300, height: 30)
-        portLabel.placeholderString = "8065"
+        portLabel.placeholderString = "443"
         portLabel.formatter = NumberFormatter()
 
         usernameLabel = NSTextField()
@@ -156,7 +156,8 @@ class LoginWindow: NSWindow {
 
         // Save input to settings.
         let host = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let port: UInt16 = portLabel.intValue > 0 ? UInt16(clamping: portLabel.intValue) : 8065
+        // 0 lets WebService pick the scheme default (443 for https, 80 for http).
+        let port: UInt16 = portLabel.intValue > 0 ? UInt16(clamping: portLabel.intValue) : 0
         let username = usernameLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let password = passwordLabel.stringValue
 

@@ -15,7 +15,18 @@ final class WebServiceTests: XCTestCase {
     func testBuildURLWithPlainHostAddsHTTPSchemeAndPort() {
         let ws = WebService(host: "chat.example.com", port: 8065)
         let url = ws.buildURL(path: "/api/v4/users/me")
-        XCTAssertEqual(url?.absoluteString, "http://chat.example.com:8065/api/v4/users/me")
+        XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/users/me")
+    }
+    
+    func testBuildURLDefaultsToHTTPSAndNoExplicitPort() {
+        let ws = WebService(host: "chat.example.com", port: 0)
+        let url = ws.buildURL(path: "/api/v4/users/me")
+        XCTAssertEqual(url?.absoluteString, "https://chat.example.com/api/v4/users/me")
+    }
+    
+    func testBuildURLRejectsUnsupportedScheme() {
+        let ws = WebService(host: "ftp://chat.example.com", port: 0)
+        XCTAssertNil(ws.buildURL(path: "/api/v4/users/me"))
     }
 
     func testBuildURLStripsTrailingSlashesAndWhitespace() {
@@ -31,7 +42,7 @@ final class WebServiceTests: XCTestCase {
             URLQueryItem(name: "per_page", value: "60")
         ]
         let url = ws.buildURL(path: "/api/v4/channels/channel123/posts", queryItems: queryItems)
-        XCTAssertEqual(url?.absoluteString, "http://chat.example.com:8065/api/v4/channels/channel123/posts?page=0&per_page=60")
+        XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/channels/channel123/posts?page=0&per_page=60")
     }
 
     func testBuildWebSocketURLUsesWSAndWSSSchemes() {
@@ -59,7 +70,7 @@ final class WebServiceTests: XCTestCase {
     func testBuildUserImageURL() {
         let ws = WebService(host: "chat.example.com", port: 8065)
         let url = ws.buildURL(path: "/api/v4/users/eb9f11xqsjdsf83d1t5cn7e3hy/image")
-        XCTAssertEqual(url?.absoluteString, "http://chat.example.com:8065/api/v4/users/eb9f11xqsjdsf83d1t5cn7e3hy/image")
+        XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/users/eb9f11xqsjdsf83d1t5cn7e3hy/image")
     }
 
     // MARK: - JSON Decoding Tests
@@ -355,9 +366,9 @@ final class WebServiceTests: XCTestCase {
     func testUserStatusUpdateURL() {
         let ws = WebService(host: "chat.example.com", port: 8065)
         let url = ws.buildURL(path: "/api/v4/users/u12345/status")
-        XCTAssertEqual(url?.absoluteString, "http://chat.example.com:8065/api/v4/users/u12345/status")
+        XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/users/u12345/status")
 
         let meUrl = ws.buildURL(path: "/api/v4/users/me/status")
-        XCTAssertEqual(meUrl?.absoluteString, "http://chat.example.com:8065/api/v4/users/me/status")
+        XCTAssertEqual(meUrl?.absoluteString, "https://chat.example.com:8065/api/v4/users/me/status")
     }
 }

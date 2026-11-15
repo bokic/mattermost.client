@@ -43,6 +43,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Window Frame**: Opens at the web client's viewport (1440×783, clamped to the screen) and remembers the last frame via `NSWindow` autosave.
 - **Unread Badges & Notifications**: Incoming messages for channels you are not looking at bump a blue dot on the menu-bar icon, set the Dock badge, and post a native macOS notification; opening the channel (or returning to the app) clears them.
 - **App Sandbox & Keychain**: The bearer token and account password are stored in the macOS Keychain as generic-password items scoped to this app; plaintext values written by older builds are migrated and deleted at launch.
+- **Transport Security**: HTTPS with port 443 is the default; explicit `http://` endpoints are allowed only for local networks through a scoped App Transport Security exception (`NSAllowsLocalNetworking`).
 
 ---
 
@@ -72,7 +73,7 @@ Launch the built debug application bundle:
 ./run.sh
 ```
 
-On first launch, enter your Mattermost server URL (e.g., `https://mattermost.example.com` or `http://127.0.0.1`), port (`8065` or `443`), and your user credentials. Credentials are automatically saved to your sandboxed container preferences for subsequent launches.
+On first launch, enter your Mattermost server URL and your user credentials. HTTPS is the default: a bare hostname such as `mattermost.example.com` resolves over `https://` on port 443. Cleartext `http://` must be typed explicitly and is restricted to local-network servers by App Transport Security — for example `http://192.168.1.10` with port `8065`. Credentials are stored in the macOS Keychain for subsequent launches.
 
 ### Run Unit Tests
 

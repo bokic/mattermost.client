@@ -174,11 +174,13 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Verified: after launch the plaintext keys are gone, the item exists in the login keychain, and a
     relaunch auto-signs in from the Keychain.
 
-- [ ] **Cleartext HTTP by default and no ATS configuration** — `S`
-  - Where: `webservice.buildURL` prepends `http://` when no scheme is given (≈254) and always applies
-    port 8065; the built `Info.plist` has no `NSAppTransportSecurity` keys.
-  - Done when: `https`/443 is the default, `http` requires explicit opt-in (ideally localhost only),
-    and ATS exceptions are scoped.
+- [x] **Cleartext HTTP by default and no ATS configuration** — `S`
+  - Done: plain hostnames now resolve over `https` with the scheme default port (443); `http://`
+    must be typed explicitly and is limited to local networks.
+  - The app ships a scoped ATS exception (`NSAllowsLocalNetworking`) via `Config/Info.plist`, merged
+    with the generated Info.plist — public cleartext hosts stay blocked.
+  - The login port field is optional (443/80 defaults), unsupported schemes are rejected, and a
+    port embedded in the host wins over the port field. URL tests updated (16 total).
 
 - [ ] **Deployment target contradicts README** — `S`
   - Where: no `MACOSX_DEPLOYMENT_TARGET` in `project.pbxproj`; the built app advertises

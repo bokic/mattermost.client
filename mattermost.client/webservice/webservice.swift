@@ -265,7 +265,7 @@ typealias webservice = WebService
 
 final class WebService: NSObject {
     var mHost: String = ""
-    var mPort: UInt16 = 8065
+    var mPort: UInt16 = 0
     var mToken: String = ""
     var mConnected: Bool = false
     var currentUserId: String = UserDefaults.standard.string(forKey: "currentUserId") ?? ""
@@ -302,19 +302,25 @@ final class WebService: NSObject {
         }
         guard !cleanHost.isEmpty else { return nil }
         
+        // HTTPS is the default. Cleartext HTTP must be opted into explicitly by
+        // typing an http:// host (and is limited to local networks by ATS).
         if !cleanHost.contains("://") {
-            cleanHost = "http://" + cleanHost
+            cleanHost = "https://" + cleanHost
         }
         
         guard var components = URLComponents(string: cleanHost),
-              let host = components.host, !host.isEmpty else {
+              let host = components.host, !host.isEmpty,
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
             return nil
         }
         
         if isWebSocket {
-            components.scheme = (components.scheme == "https" || components.scheme == "wss") ? "wss" : "ws"
+            components.scheme = scheme == "https" ? "wss" : "ws"
         }
-        if mPort > 0 {
+        // Prefer a port embedded in the host; otherwise use the configured port.
+        // With no configured port the scheme default applies (443/80).
+        if components.port == nil, mPort > 0 {
             components.port = Int(mPort)
         }
         components.path = path
