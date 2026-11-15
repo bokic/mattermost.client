@@ -1,568 +1,991 @@
 # TODO — `mattermost.client`
 
-_Reviewed: 2026-11-15 · Scope: all Swift sources (≈7,000 lines), tests, build scripts, README._
+_Reviewed: 2026-11-15 · Revision: `acc4262` (tag `0.8.0` + 1; TODO-only commit after `c0c32c6`) · Scope: 26 application Swift files (14,005 lines),
+8 unit-test files (1,048 lines), `tools/hud_measure.swift` (99 lines), Xcode project, build/release scripts, CI, README/AUDIT._
 
-Baseline: `./build.sh` succeeds, `./test.sh` passes 14/14. Items below come from a full source
-read plus the earlier `AUDIT.md` (some of its findings, e.g. WebSocket reconnect and the status
-API, have since been implemented — those are marked accordingly).
+**Verified baseline at this revision**
 
-Priority legend: **P0** blocking · **P1** correctness/reliability · **P2** security/packaging ·
-**P3** web-parity UX · **P4** architecture · **P5** quality/tooling.
+| Check | Result |
+|---|---|
+| `./build.sh` | **Succeeds**, 0 compiler warnings |
+| `./test.sh` | **51/51 pass** |
+| `./lint.sh` | **Passes** (`swift-format --strict` on the 15-file migrated allowlist) |
+| Deployment target | macOS 14.0 |
+| Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
+| Release signing | **Ad-hoc** (`CODE_SIGN_IDENTITY = -`), `ENABLE_HARDENED_RUNTIME = NO`, not notarized |
+
+Priority legend: **P0** release blocker · **P1** correctness/data loss/reliability ·
+**P2** security/privacy · **P3** web parity/UX · **P4** architecture/performance ·
+**P5** quality/tooling/docs.
 Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
----
-
-## P0 — The app is not yet usable as a chat client
-
-- [x] **Composer accepts no input and cannot send** — `L`  
-  _Done `4ff36b3`: editable `ComposerTextView` with placeholder, Return/Shift-Return, send state, optimistic insert, typing events._
-  - Where: `MainWindow.swift` — `entryView` is created hidden/non-editable (≈263), `composerSendButton`
-    has hover styling but no `onClick` (≈2909), and `sendActiveChannelPost(message:)` (≈4380) has no
-    callers.
-  - Why: the composer is a picture of a composer. Nothing can be typed or posted.
-  - Done when: a real editor accepts text, `↩` sends / `⇧↩` newlines, the send button is enabled only
-    with content, posts are inserted optimistically, failures surface a retry, and typing events are
-    sent (`sendUserTyping`).
-
-- [x] **Search is a static mock** — `M`  
-  _Done `50b631a` for messages: real editable field, `/posts/search`, floating results with click-to-open. The Files tab still needs a files search endpoint._
-  - Where: `MainWindow.swift` — `searchPopoverInputLabel` is a non-editable label (≈849); Messages/Files
-    tabs only swap the placeholder; there is no search API in `webservice.swift`.
-  - Done when: `GET /api/v4/teams/{team}/posts/search` is wired, results render, tabs actually filter
-    (`from:` / `in:` / `on:` hints work), and `Esc` closes.
-
-- [x] **Threads and the right-hand panel are inert** — `M`
-  - Done: a 320 pt right-hand panel with Threads (`GET /users/{id}/teams/{team}/threads`), Members
-    (channel members + user hydration) and Pinned Posts (`/channels/{id}/pinned`). The sidebar
-    Threads row opens it, the member chip opens Members, the pins icon opens Pinned, and the header
-    panel button toggles Threads; rows open the channel and the panel refreshes on channel switch.
-  - Remaining: a Files tab in the RHS and true thread-reply rendering (root + replies) inside the
-    panel instead of a flat list.
-
-- [x] **Top-right `@`, bookmark and gear do nothing** — `M`
-  - Done: all three open the right-hand panel. `@` lists recent mentions (server-side search for
-    `@username` because this server version 404s `/users/{id}/teams/{team}/posts/mention`), the
-    bookmark lists flagged posts (`/users/{id}/posts/flagged`), and the gear shows an app panel with
-    zoom reset, forced reconnect, account/server info and logout.
-  - Remaining: a full preferences sheet (notifications, theme, advanced settings).
-
-- [x] **Log out does not log out** — `S`  
-  _Done `4ff36b3`: clears token/password, disconnects, shows login._
-  - Where: `MainWindow.swift` logout row (≈1327) is built with `createMenuRow`, whose default
-    `onClick` only closes menus; token/password remain in `UserDefaults`.
-  - Done when: token + stored password are cleared, WebSocket disconnects, in-memory state resets,
-    and `LoginWindow` is shown.
-
-- [x] **Sidebar actions are decorative** — `M`
-  - Done: `Add Channels` opens a Browse Channels panel with joined/joinable state and join support
-    (`POST /channels/{id}/members`); `Invite Members` and the hero invite button open an email
-    invite sheet (`POST /teams/{id}/invite/email`); the team `+` opens a create-team sheet
-    (`POST /teams`) that refreshes and switches to the new team; the filter button opens an
-    All channels / Favorites menu; the Find channel field filters live.
-  - Remaining: private-channel join requests, shareable invite links, richer filters
-    (unread/mentions), team leaving.
-
-- [x] **Composer action buttons are mock** — `S`
-  - Done: the emoji button opens a 40-emoji picker that inserts at the caret; the paperclip opens
-    `NSOpenPanel` and uploads through multipart `POST /files`, then posts with `file_ids`, with
-    uploading/failure feedback in the composer footer.
-  - GIF: the mock local-post button was removed — this server has no Giphy plugin (`/plugins` is
-    empty), so the control is hidden instead of faking content. Plugin-backed GIF search remains a
-    follow-up.
-  - Remaining: render uploaded attachments in the timeline (blocked on the `MMPost` files model).
-
-- [x] **Channel-header controls are partial** — `M`
-  - Done: favorites persist via user preferences; the member chip opens the Members panel; the pins
-    icon opens Pinned Posts; the title opens a channel menu with View Info, Pinned Posts,
-    Add/Remove Favorite, Copy Link (verified in the clipboard) and Leave Channel (DELETE member,
-    sidebar refresh and fallback channel).
-  - Remaining: mute/notification preferences and channel-settings editing.
+Application source is unchanged from `c0c32c6`; line references therefore refer to that
+source revision. The long list of previously completed work is preserved in
+[Completed baseline](#completed-baseline) at the end.
 
 ---
 
-## P1 — Correctness & reliability
+## P0 — Release blockers
 
-- [x] **Channel-switch race** — `S`  
-  _Done: `fetchAndRenderPosts` re-checks `activeChannelId` before applying results._
-  - Where: `fetchAndRenderPosts(channelId:)` awaits REST + user + status calls, then
-    `applyPostsToTimeline` (≈4362) writes `currentChannelPosts` without re-checking
-    `activeChannelId == channelId`. A slow response for a previous channel can overwrite the open one.
-  - Done when: results are discarded unless the channel is still active.
+- [ ] **The release DMG is not signed, hardened, or notarized** — `M`
+  - `build_release.sh` only runs `xcodebuild -configuration Release` and `hdiutil create`.
+    `xcodebuild -showBuildSettings -configuration Release` reports
+    `CODE_SIGN_IDENTITY = -`, `ENABLE_HARDENED_RUNTIME = NO`, and no `DEVELOPMENT_TEAM`.
+  - Gatekeeper will reject the app on other Macs. Done when the `.app` is Developer ID
+    signed with the hardened runtime, submitted with `notarytool`, the ticket is stapled,
+    and `spctl --assess` passes on a clean machine.
+  - Add the signing identity/team to the Release configuration or pass it from CI; keep
+    `--deep`-free, inside-out signing for nested code.
 
-- [x] **Every incoming message triggers a full channel refetch** — `S`  
-  _Done: WebSocket posts are inserted directly with id-dedupe and lazy author hydration._
-  - Where: `ws.onPostReceived` (≈4150) calls `fetchAndRenderPosts`; `appendRealtimePost` (≈4373) is
-    dead code.
-  - Done when: the `posted` event is inserted directly (with dedupe against REST results) or batched.
+- [ ] **No Release/notarization CI job, and no clean-machine smoke test** — `M`
+  - `.github/workflows/ci.yml` only builds/tests/lints Debug on `macos-15`. Nothing builds
+    Release, verifies `lipo -archs` is `x86_64 arm64`, signs, notarizes, or uploads an
+    artifact + checksum.
+  - Done when CI produces a verifiable Release artifact (even if signing is a protected
+    manual job) and a smoke launch succeeds on a clean runner.
+  - Also outstanding: the app has still not been run on an actual macOS 14 host (only the
+    27.x development host), so the documented 14.0 floor is unproven.
 
-- [x] **No pagination / load-older** — `M`
-  - Done: `fetchChannelPosts(..., before:)` loads the page preceding the oldest message; scrolling
-    near the top (or the "Load older messages" row) prepends it, dedupes by id, hydrates authors and
-    re-anchors the viewport by the added height. Exhaustion is detected when a page returns fewer
-    than 60 posts, and the state resets per channel.
+---
 
-- [x] **No read state, per-channel unread counts or mentions** — `L`
-  - Done: memberships are loaded from `/users/{id}/teams/{team}/channels/members`, giving per-channel
-    unread (`total_msg_count − msg_count`) and mention counts rendered as sidebar badges (blue pill
-    for mentions, right-aligned white count for unread). Opening a channel marks it read via
-    `POST /channels/members/me/view`, zeroes its badges and records `last_viewed_at`; the timeline
-    shows a "New Messages" divider above the first post newer than the last view. Incoming WS posts
-    increment counts for channels you are not looking at, and the tray/dock/notification path shares
-    the same state.
-  - Remaining: "mark all as read" (`PUT /users/{id}/teams/{team}/read`) and mute-based suppression.
+## P1 — Correctness, data loss & reliability
 
-- [x] **Post model cannot represent attachments, reactions, pinned posts, edits or deletes** — `M`
-  - Done: `MMPost` decodes `metadata.files`/`metadata.reactions` and `file_ids`. The timeline renders
-    image previews (`/files/{id}/preview`) and file chips (name + size, click opens the download),
-    grouped reaction chips with shortcode→glyph mapping, a gold pin on pinned posts, the ✎ Edited
-    indicator, and a "This message was deleted." tombstone for `delete_at > 0`.
-  - Also fixed consecutive grouping to break after five minutes, and attachments/reactions on
-    grouped (consecutive) rows.
-  - Remaining: interactive reactions (add/remove), file thumbnails beyond the preview endpoint, and
-    `props`-driven custom attributes.
+### Interaction and input
 
-- [x] **Custom status is inert; DND expiry is not refreshed** — `S`
-  - Done: the status menu opens a custom-status sheet (emoji, text, duration: don't clear / 30m / 1h /
-    4h / today / this week) that calls `PUT /users/me/status/custom` with the server's duration enum
-    and an RFC3339 `expires_at`; Clear calls DELETE. The current status is shown in the menu row and
-    persisted locally.
-  - DND expiry: `dnd_end_time` is cached per user from REST responses, and both REST and WebSocket
-    status updates normalize expired DND to online — updating the header dot, menu checkmarks and
-    timeline presence dots. The 15 s status poll acts as a backstop.
-  - Remaining: custom status isn't re-fetched on launch (the server exposes no GET endpoint), so it
-    is restored from local storage.
+- [ ] **Clicks on icon-only buttons and image thumbnails are dead zones** — `M`
+  - Every clickable surface is a `RoundedEdgePanel` with child `NSImageView`/`NSTextField`
+    views. `hitTest` returns the child (`RoundedEdgePanel.swift:96-102` does not override
+    `hitTest`). I verified with AppKit that `NSImageView`'s `mouseDown` does **not** forward
+    to the parent, while `NSTextField` labels do.
+  - Result: icon-only controls (top-right `@`/bookmark/gear, Help, search, channel star/
+    members/pins/files/sidebar/info, composer emoji/attach/send, download/lightbox buttons)
+    only work in the few pixels of padding around the icon; clicking the icon itself does
+    nothing. Attachment thumbnails and image previews have the same dead center. Menu rows
+    work on their text but not their icons.
+  - Fix by overriding `hitTest` on clickable panels to return `self` (or making children
+    non-hit-testable) and add a synthetic click test for icon-only buttons.
 
-- [x] **Sample posts are injected when logged out** — `S`  
-  _Done: demo content only renders with an explicit `--demo` flag._
-  - Where: `rebuildTimelineContent` (≈3827) fabricates "sarah.connor" posts when not logged in.
-  - Done when: demo content is behind an explicit `--demo` flag or removed.
+- [ ] **The "N new messages" jump pill is a full-width clickable bar** — `S`
+  - `newMessagesPill.frame` is `listRight - 30` wide (`MainWindow+Layout.swift:642-647`);
+    `layoutNewMessagesPill` only centers the icon/text inside it
+    (`MainWindow+Timeline.swift:83-92`). It renders as a blue strip across the timeline and
+    swallows clicks in that strip. Size the panel to the text group plus padding.
 
-- [x] **Message rendering gaps** — `M`
-  - Done: fenced code blocks and inline code render monospaced on a tinted background; `@mentions`
-    get the blue highlight; `~channel`/`#channel` links are styled and open the channel in-app;
-    `:emoji:` shortcodes expand to glyphs; Markdown images (png/jpg/jpeg/gif/webp/bmp and Giphy) are
-    extracted and rendered as inline images. External links still open in the default browser.
-  - Remaining: Markdown tables and syntax highlighting inside code blocks.
+- [ ] **Tab / Shift+Tab inside the message composer jumps focus out instead of editing** — `S`
+  - `MainWindow.sendEvent` (`MainWindow.swift:554-628`) intercepts `keyCode == 48` (Tab)
+    whenever `currentFocusRegion()` is `.composer`, `.sidebar`, or `.timeline` and cycles
+    focus to the next region. Pressing Tab inside `entryView` (e.g., to indent a list item or
+    code block) immediately moves focus out of the composer.
 
-- [x] **WebSocket reconnect is a fixed 3 s retry** — `S`
-  - Done: exponential backoff with jitter (1 s → 30 s cap), reset on a successful `hello`, and
-    immediate reconnect on `NSWorkspace.didWakeNotification`.
-  - Visible state: a slim amber banner ("Connecting…", "Reconnecting to Mattermost…", "Disconnected
-    from Mattermost") appears below the channel header while the socket is down and hides on connect;
-    the Settings panel's Reconnect row shows Connected/Reconnecting.
+### Composer and drafts
 
-- [x] **Typing is receive-only; date/time handling is static** — `S`
-  - Typing: `sendTypingIfNeeded()` already fires from the composer's text-change delegate (throttled to
-    1.5 s) via `user_typing`; receive-side indicators were already wired.
-  - Dates: every formatter now uses `Locale.current` — timestamps are `timeStyle = .short` (respects
-    24-hour settings), date separators use relative Today/Yesterday (`doesRelativeDateFormatting`),
-    localized weekday names and the localized medium date; search results, mentions, saved/pinned
-    rows, the edited tooltip and the DND "Tomorrow" label all use the same helpers. The hardcoded
-    `en_US_POSIX` formatters are gone.
+- [ ] **Drafts are not per-channel and can be sent to the wrong channel** — `M`
+  - Nothing stores or clears composer text on channel switch. The sidebar row click
+    (`MainWindow+Sidebar.swift:716-727`) calls `loadChannelPosts`, which only calls
+    `cancelEditing()`/`clearPendingAttachments()` (`MainWindow+LiveData.swift:242-281`);
+    `entryView.string` is never cleared outside send/edit (`MainWindow+Composer.swift:857,877`).
+  - Typing in #a then opening #b leaves #a's text in the composer, where Return sends it to
+    #b. Done when each channel/thread has an independent draft (in memory at minimum,
+    preferably Mattermost `drafts` API), switching restores it, and pending attachments are
+    scoped to the channel that uploaded them.
+
+- [ ] **Sending is not optimistic and has no retry or failure recovery** — `M`
+  - `sendComposerMessage` (`MainWindow+Composer.swift:864-920`) clears the editor *before*
+    awaiting `POST /posts`, shows "Sending…" in the Help label, and only appends the post
+    after the server responds. On failure it restores the text only if the composer is
+    still empty, then hides the error after 4 s.
+  - There is no pending/sending timeline row, no Retry/Delete action, and no offline queue.
+    Done when a post appears immediately with a sending state, failure leaves a retryable
+    row, and the draft survives channel switches/relaunch (see drafts above).
+  - `sendActiveChannelPost` (`:922-938`) is an unused older send path; remove it.
+
+- [ ] **Attachment uploads are all-or-nothing, sequential, and unbounded** — `M`
+  - `uploadFiles` (`MainWindow+Composer.swift:652-692`) reads each file fully into memory
+    (`Data(contentsOf:)`) and uploads sequentially with no size check, progress, cancel, or
+    per-file error. Partial successes are silently kept, failures are ignored.
+  - No clipboard-image paste, no attachment preview before send, and no upload retry.
+  - Done when uploads stream/chunk (or at least cap size), show per-file progress/errors,
+    can be cancelled, and server file-size limits are surfaced before uploading.
+
+- [ ] **Attachment downloads can fail silently and write untrusted filenames** — `S`
+  - `saveFileData` (`MainWindow+Timeline.swift:1535-1543`) uses `try? data.write(to:)`, so a
+    sandbox denial or disk error is invisible. The app is sandboxed with
+    `com.apple.security.files.user-selected.read-only`
+    (`mattermost.client/mattermost_client.entitlements`); confirm a `NSSavePanel` grant can
+    actually be written, or add the read-write user-selected entitlement.
+  - `openAttachment` (`:1516-1525`) writes to `temporaryDirectory` using the server-supplied
+    `file.name` without sanitizing `/`, `..`, or collisions; it also never cleans up.
+  - Done when saves report success/failure, filenames are sanitized, temp files are cleaned,
+    and the entitlement matches the write path.
+
+- [ ] **Typing indicator has a 3-second timer race and clobbers composer status** — `S`
+  - `ws.onUserTyping` (`MainWindow+LiveData.swift:115-123`) sets
+    `composerHelpLabel.stringValue = "\(typer) is typing..."` and schedules an uncancelled
+    `DispatchQueue.main.asyncAfter(deadline: .now() + 3.0)` to reset it to `"Help"`.
+  - Overlapping typing events clear early when the first timer fires, and the timer
+    unconditionally overwrites `"Editing • Esc to cancel"`, `"Uploading…"`, `"Sending…"`, and
+    `"Attached N files"` states in `composerHelpLabel`.
+  - It also ignores `parentId`: thread typing events appear in the main channel composer, and
+    the thread RHS composer has no typing indicator.
+
+### Realtime and read state
+
+- [ ] **Realtime edit/delete/channel/read events are not handled** — `L`
+  - The WebSocket parser only understands `hello`, `posted`, `status_change`, `typing`,
+    `update_team`, `added_to_team`, `leave_team`, sidebar category updates and reactions
+    (`webservice.swift:327-339,1376-1450`; dispatch `:1470-1497`).
+  - Missing events include at least `post_edited`, `post_deleted`, `channel_updated`,
+    `channel_viewed` / `multiple_channels_viewed`, `preferences_changed`, `thread_updated`,
+    `post_unread`, channel `user_added`/`user_removed`, and `emoji_added`.
+  - Consequence: edits/deletes/pins/theme changes/read-state changes made by other clients
+    are invisible until a manual channel reload. Done when they update the model, timeline,
+    RHS and badges in place.
+  - Even for handled events, neither `onPostReceived` nor `handleIncomingPost` refreshes the
+    open right panel, and `applyUpdatedPost` updates either the timeline or the thread panel
+    but not both (`MainWindow+Timeline.swift:723-735`). Threads/Pinned/Mentions/Saved lists
+    stay stale until reopened. After reconnect, only statuses are refreshed
+    (`MainWindow+LiveData.swift:86-89`); messages missed while disconnected are never fetched.
+
+- [ ] **Read state is local-only; there is no "mark all as read"** — `M`
+  - `markActiveChannelViewed` (`MainWindow+LiveData.swift:25-39`) only sends
+    `POST /channels/members/me/view` for the open channel. Incoming `channel_viewed` events
+    from another device are ignored, and there is no
+    `PUT /api/v4/users/{id}/teams/{team}/read` action.
+  - Done when other clients' reads clear badges here, a "Mark all as read" action exists
+    (sidebar/channel menu), and per-channel "Mark read/unread" is available.
+  - `markActiveChannelViewed` also clears local unread/mentions even when the view API call
+    fails (`MainWindow+LiveData.swift:30-38`), so a transient failure silently hides real
+    unread state.
+  - The Dock/menu-bar unread count is a separate in-memory `AppDelegate.unreadCounts` map
+    (`AppDelegate.swift:24,201-257`). It resets on relaunch and is not initialized or
+    reconciled from server membership unread totals, so it can disagree with the sidebar.
+    Derive these indicators from shared server-backed unread state and refresh them at
+    launch/reconnect.
+
+- [ ] **DND and per-channel notification preferences do not suppress notifications** — `M`
+  - The status menu says DND "Disables all notifications"
+    (`MainWindow+Menus.swift:396`), but `handleIncomingPost`
+    (`MainWindow+LiveData.swift:415-445`) calls `noteIncomingMessage` unconditionally;
+    `AppDelegate.noteIncomingMessage` (`AppDelegate.swift:201-257`) always posts a banner +
+    sound.
+  - `notify_props` (`desktop`, `desktop_sound`, `mention_keys`, `desktop_threads`) and
+    channel mute are decoded/available but never applied. Muted channels still increment
+    badges and notify.
+  - Done when DND, offline, `desktop: none`, `desktop: mention`, sound off, mention-key
+    overrides and channel mute are honored, including thread replies.
+
+- [ ] **DND expiry and "Don't clear" custom status are broken** — `S`
+  - Mattermost returns `dnd_end_time` in **seconds** (confirmed in
+    `server/public/model/status.go`), but `normalizedStatus` compares it to `nowMs`
+    (milliseconds) (`MainWindow+People.swift:220-224`). Every future DND expiry is therefore
+    treated as expired and the next 15 s poll flips the user to online.
+  - The custom-status duration list sends `"dont_clear"` for index 0
+    (`MainWindow+People.swift:168-170`), but the server's valid set is `""`,
+    `thirty_minutes`, `one_hour`, `four_hours`, `today`, `this_week`, `date_and_time`
+    (`server/public/model/custom_status.go`). "Don't clear" is rejected, so most custom
+    statuses fail with an alert; send an empty duration and no `expires_at`.
+  - "This week" is implemented as now + 7 days rather than the end of the week
+    (`:201-218`), and expired custom statuses are never auto-cleared.
+
+- [ ] **Incoming realtime posts steal the scroll position** — `S`
+  - `appendRealtimePost` (`MainWindow+LiveData.swift:384-404`) always calls
+    `rebuildTimelineContent(scrollToBottom: true)`. If the user is reading history, a new
+    message jumps them to the bottom.
+  - Done when new posts only auto-scroll if the view was already at/near the bottom; expose
+    the floating "N new messages" jump pill otherwise.
+  - Note: `appendRealtimePost` does not update `newMessagesCount`/`newMessagesDividerPostId`
+    (`MainWindow+LiveData.swift:384-391`), so even the current pill never appears for live
+    traffic.
+
+- [ ] **Scroll position is not remembered per channel** — `M`
+  - `loadChannelPosts` clears posts and `applyPostsToTimeline`
+    (`MainWindow+LiveData.swift:332-351`) always scrolls to bottom or the unread divider.
+    Returning to a channel loses where you were.
+  - Done when each channel restores its last visible post/offset (Mattermost does this).
+
+- [ ] **Notification click opens the channel, not the message** — `S`
+  - `postNotification` stores only `channelId` (`AppDelegate.swift:240-257`) and
+    `didReceive` calls `openChannel(withId:)` (`:267-279`). Done when the notification
+    carries the post/thread id and opens/highlights the exact message.
+
+### Search
+
+- [ ] **The Files tab in global search is a dead control** — `M`
+  - Selecting Files only changes the placeholder (`MainWindow+Header.swift:446-458`);
+    `performSearchFromPopover` (`:258-283`) always calls `POST /teams/{team}/posts/search`.
+  - The service already has `searchChannelFiles` (`webservice.swift:1036-1049`), so a
+    team-wide files query can reuse `POST /teams/{team}/files/search` and render the RHS
+    file-card style. Done when the tab actually searches files and opens images/files.
+
+- [ ] **Search results do not jump to the selected post** — `S`
+  - `openSearchResult` (`MainWindow+Header.swift:348-354`) only opens the channel; unlike
+    Mentions/Saved (`MainWindow+RightPanel.swift:587-592`), it never sets
+    `pendingJumpPostId`, so users land at the bottom of the channel.
+  - Done when clicking a result fetches the post if needed, scrolls to it, and highlights it.
+
+- [ ] **Search is first-page-only and mouse-only** — `M`
+  - `presentSearchResults` hard-caps at `posts.prefix(50)` (`MainWindow+Header.swift:295`)
+    with no "load more", no result highlight, no keyboard navigation, and no recent
+    searches. Filter pills (`From:`, `In:`, `On:`…) are decorative.
+  - Done when search paginates, supports Up/Down/Enter, highlights terms, and the filter
+    pills insert valid scopes.
+
+### Threads and the right-hand panel
+
+- [ ] **Threads lack read state, a rich composer, and pagination** — `L`
+  - Opening a thread (`loadThread`, `MainWindow+RightPanel.swift:236-260`) never calls
+    `PUT /users/me/teams/{team}/threads/{id}/read`, so unread thread replies never clear.
+    The `ThreadsResponse` totals (`total_unread_threads`, etc.) are discarded
+    (`webservice.swift:975-981`), and the Threads sidebar row never shows unread.
+  - The reply field is a single-line `NSTextField` (`:60-90`): no multiline, emoji,
+    `@`/`#`/`:emoji:` autocomplete, attachments, typing events, or send state.
+  - The thread list fetches 60 threads (`webservice.swift:975-982`) with no load-more and
+    no unread indicator; thread replies are not paginated.
+  - `loadThread` has no root/request token (`:243-259`): a late response for thread A can
+    overwrite thread B, and replies can be posted to the wrong root. On fetch failure,
+    `showThread` leaves the preloaded `[post]` in place so no error is shown (`:223-233`).
+  - `renderThreadPanel` scrolls to zero after every load/reply (`:323`), so long threads open
+    at the oldest post and the new reply is off-screen.
+  - Clicking a row in the Threads list jumps to the root in the channel and closes the panel
+    instead of opening the thread (`:210-215`).
+  - Verify reply ordering: `renderThreadPanel` uses `list.order` as-is
+    (`MainWindow+RightPanel.swift:249`), while channel posts reverse it via
+    `MMPostList.chronologicalPosts` (`webservice.swift:313`). If the API returns newest
+    first, the root/replies render backwards.
+
+- [ ] **Thread replies are rendered inline in the channel timeline** — `M`
+  - `rebuildTimelineContent` renders every `currentChannelPosts` entry with no `root_id`
+    filter (`MainWindow+Timeline.swift:2336-2371`), and `appendRealtimePost`
+    (`MainWindow+LiveData.swift:384-391`) appends any `posted` event for the active channel.
+    A reply sent from the RHS thread therefore also appears as a full message in the center
+    feed and counts toward history/pagination. Confirm whether `/channels/{id}/posts` already
+    excludes replies; filter `root_id` on both paths regardless, and refresh the root's reply
+    count instead.
+
+- [ ] **Every RHS list is first-page-only** — `M`
+  - Members: 60 (`webservice.swift:822-832`), Threads: 60 (`:975`), Files: 60 (`:1036`),
+    Saved: 60 (`:846`), Mentions: 30 (`MainWindow+RightPanel.swift:571`), Pinned: no
+    pagination. None load more on scroll.
+  - Members also have no search, role/presence grouping, pagination, or click-through to a
+    profile/DM (`loadChannelMembers`, `MainWindow+RightPanel.swift:349-378`).
+  - `loadUnreadState` fetches one page of 200 memberships (`MainWindow+Sidebar.swift:85`,
+    `webservice.swift:882-890`), so users in more than 200 channels lose badges for the rest.
+
+- [ ] **RHS panels have stale/list-detail bugs** — `M`
+  - Loaders do not cancel or check the current mode/channel: closing or switching panels
+    leaves old rows visible, and a late response can overwrite the new panel
+    (`MainWindow+RightPanel.swift:159-162,764-788`).
+  - Threads/Mentions/Saved set the channel-name subtitle even though they are not
+    channel-scoped (`:108-116`), which is misleading.
+  - Pinned rows use the raw message as title (attachment-only pins render blank), have no
+    unpin action, and do not refresh after `togglePin` (`:380-415`,
+    `MainWindow+Timeline.swift:1225-1242`).
+  - Files do not show the uploader despite hydrating users, are not date-sorted, re-fetch
+    every preview with no cache, and have no download/search/filter controls
+    (`:417-434,450-556`).
+  - `hydrateUsers` silently swallows failures (`:748-762`), so rows show raw 26-character
+    user IDs or "Unknown"; member role logic only distinguishes `channel_admin` from
+    `channel_user` and ignores team/system admin, guest and bot roles (`:363-373`).
+  - Reconnect reloads the panel immediately after `reconnectIfNeeded`, so it often still says
+    "Reconnecting…" (`:659-669`); Logout has no confirmation (`:676-683`).
+
+### Sidebar, navigation and layout
+
+- [ ] **The channel sidebar is not scrollable** — `M`
+  - The sidebar is laid out entirely with fixed frames and has no `NSScrollView`
+    (`MainWindow+Sidebar.swift:941-1053`). Once categories/channels exceed the panel height,
+    rows get negative Y positions and become clipped/unreachable.
+  - Done when the sidebar has a scroll view (with stable hit-testing and hover state) and the
+    team/filter/threads header stays pinned.
+
+- [ ] **The Favorites filter always shows zero channels** — `S`
+  - `visibleItems` requires both `!favoriteChannelIds.contains($0.id)` *and*, when
+    `sidebarFavoritesOnly` is true, `favoriteChannelIds.contains($0.id)`
+    (`MainWindow+Sidebar.swift:1017-1021`). The conjunction is impossible.
+  - Category headers are only hidden when a text query exists (`:1022-1025`), so selecting
+    Favorites leaves every header visible with no rows. Done when the filter shows exactly
+    the favorite channels (and an empty state).
+
+- [ ] **Channels from other teams leak into the active sidebar** — `M`
+  - `switchActiveTeam` merges `GET /users/me/channels` (all teams) into `channelsById`
+    (`MainWindow+Sidebar.swift:906-921`). `populateSidebarCategories` then appends every
+    "unplaced" channel to the current team's CHANNELS section (`:519-543`), so other teams'
+    channels and favorites appear here; `channelsByName` is polluted too (`:143-145`), so
+    name lookups can resolve another team's channel.
+  - Done when the directory is scoped per team (or lookups always check `team_id`) and
+    switching teams fully replaces the channel/category state.
+
+- [ ] **Team switching is racy, unpersisted, and can show stale data** — `M`
+  - A switch updates the header before fetching (`MainWindow+Sidebar.swift:897-900`), has no
+    rollback/error UI, and no request token: an older team's slower response can overwrite a
+    newer switch (`:901-938`). `loadUnreadState` (`:78-105`) has the same race, and
+    `loadChannelPosts` (`MainWindow+LiveData.swift:278-280`) spawns unstructured `Task`s for
+    `fetchAndRenderPosts(channelId:)` without cancelling in-flight tasks on rapid channel
+    switches.
+  - Clicking the already-active team reloads everything and resets selection to Town Square.
+    Neither the last active team nor the last channel is persisted
+    (`MainWindow+LiveData.swift:196-231`); startup always picks `teams.first`.
+  - Done when switches are token-guarded/cancelled, failures revert, clicking the active team
+    is a no-op, and the last team/channel is restored.
+
+- [ ] **Group Direct Messages (`type == "G"`) are unhandled across the app** — `M`
+  - Mattermost has four channel types: `"O"` (open), `"P"` (private), `"D"` (1:1 DM), and
+    `"G"` (group DM, up to 7 participants).
+  - In `MainWindow+Sidebar.swift:153-158,441-448,519,528`, `"G"` channels fall into the
+    `default` branch, receive a public `"globe"` icon, and get placed into `CHANNELS` instead
+    of `DIRECT MESSAGES` when uncategorized.
+  - In `MainWindow+LiveData.swift:267-271`, `"G"` channels display the public-channel hero
+    copy (*"Everyone automatically becomes a member of this channel when they join the team"*).
+  - In `MainWindow+Composer.swift:361`, `#`/`~` channel autocomplete excludes `"G"` channels.
+  - Done when `"G"` channels render in Direct Messages with group icons/member counts, proper
+    hero copy, and autocomplete support.
+
+- [ ] **The RHS overlays the timeline instead of reflowing it** — `M`
+  - The timeline is always sized to the full `chatW` (`MainWindow+Layout.swift:640-653`)
+    while the panel is a sibling overlay, so opening Threads/Members/etc. covers the right
+    side of messages (the web client shrinks the center column).
+  - `closeRightPanel` only hides the panel and never calls `layoutRightChatPanel`
+    (`MainWindow+RightPanel.swift:159-162`), leaving the new-messages pill/frames stale.
+    Panel documents are rendered once at their old width and are not reflowed on
+    open/resize/zoom (`Layout:493-540`, `RightPanel:764-788`).
+  - Done when the timeline/column resizes around the panel, and closing it or resizing the
+    window re-lays out both the frame and the panel content.
+
+- [ ] **Header member count is fake and the info button is dead** — `S`
+  - `channelMembersCountLabel` starts at `"1"` (`MainWindow.swift:312`) and is never updated
+    from `fetchChannelMembers` (`MainWindow+Layout.swift:94-99,570-580`).
+  - `channelInfoButton` has no `onClick` (`Layout:166-179`), even though the channel menu’s
+    View Info exists. Wire both to real channel info/member data.
+
+- [ ] **Login cannot handle subpath deployments or a missing token** — `M`
+  - A server URL with a path (`https://host/mattermost`) is accepted, but `buildURL`
+    overwrites `components.path` with `/api/v4/...` (`webservice.swift:453`), silently
+    dropping the subpath. Mattermost behind a reverse proxy/subpath cannot log in.
+  - A successful login response without a `Token` header still calls `showMainWindow()`
+    (`LoginWindow.swift:164-167`), opening an unauthenticated window with no data.
+  - Also: host/port/username/password are saved before validation (`:142-152`), so a typo
+    overwrites previously working saved credentials; clearing the port leaves the old value
+    stored (`:45-47`).
+  - Done when base paths are preserved in every REST/WS URL, a missing token is a visible
+    error, and credentials are stored only after a successful validation.
+
+- [ ] **Mention detection misses `@here`/`@channel` and false-positives** — `S`
+  - `handleIncomingPost` uses a raw lowercase substring check for `"@" + username`
+    (`MainWindow+LiveData.swift:429-433`). It misses `@here`/`@channel`/`@all`, matches
+    emails/code/quotes, and counts mentions in muted channels.
+  - Done when mention counting uses Mattermost’s mention rules (including special mentions
+    and `mention_keys`) and survives edits/deletes.
+
+### Lifecycle, layout and rendering correctness
+
+- [ ] **Font fallback in `MMFont.font(ofSize:weight:)` has infinite recursion** — `S`
+  - Despite the header comment claiming graceful degradation to the system font
+    (`MMFont.swift:7`), the `else` branch when `NSFont(name: postScriptName(for: weight), size: size)`
+    returns `nil` calls `return MMFont.font(ofSize: size, weight: weight)` (`MMFont.swift:57`)
+    instead of `NSFont.systemFont(ofSize: size, weight: weight)`, causing an immediate stack
+    overflow crash if `OpenSans.ttf` is missing or fails to register.
+
+- [ ] **Offline or transient 5xx at launch invalidates the session and drops to Login** — `S`
+  - `WebService.checkToken` (`webservice.swift:629-649`) catches *all* errors (including DNS,
+    offline, timeout, and 5xx) and returns `false`. `AppDelegate.startAuthentication`
+    (`AppDelegate.swift:70-82`) then assumes the stored token is invalid and falls back to
+    `loginWithStoredPassword`, which also fails offline and forces the user back to
+    `LoginWindow`. Distinguish `HTTP 401` from transient network/server errors and open the
+    workspace in a reconnecting state when a token exists.
+
+- [ ] **Logout leaves user-scoped state behind** — `M`
+  - `AppDelegate.logout` (`AppDelegate.swift:320-329`) disconnects and deletes credentials,
+    but does not clear `unreadCounts`, the dock badge, delivered notifications, custom
+    status, recent emojis, favorites, or the status polling timer.
+  - `MainWindow.deinit` (`MainWindow.swift:697-699`) removes NotificationCenter observers
+    but never invalidates `statusPollingTimer` (created at `MainWindow+LiveData.swift:167-172`),
+    so the timer keeps firing for the app lifetime.
+  - Done when logout resets all per-user state and timers, and the next login cannot inherit
+    the previous account's status/emoji/unread data.
+
+- [ ] **`showMainWindow()` does nothing when a window already exists** — `S`
+  - `AppDelegate.swift:281-285` does `guard mainWindow == nil else { createMainWindow(); return }`;
+    `createMainWindow()` immediately returns because `mainWindow != nil`. It should bring the
+    existing window forward. Add `applicationShouldHandleReopen` too, so Dock activation
+    reopens a hidden/closed window.
+
+- [ ] **No minimum window size; layout can produce negative widths** — `S`
+  - No `minSize`/`contentMinSize` is set anywhere (`MainWindow.swift:438-546`). At narrow
+    widths `composerW - 234` (`MainWindow+Layout.swift:596-607`) becomes negative, the
+    search field/Help button can overlap the right cluster (`:698-703`), and the right panel
+    can be wider than the chat panel. Done when the window cannot shrink below a usable
+    sidebar + chat + composer width and popovers clamp to the viewport.
+
+- [ ] **The connection banner covers the first timeline row** — `S`
+  - `connectionBanner` is placed at `headerY - 26` (`MainWindow+Layout.swift:499`) while the
+    timeline still starts at `headerY` (`:640`), so the top 26pt of messages are hidden while
+    disconnected/reconnecting. Reserve space in the timeline frame while the banner is
+    visible.
+
+- [ ] **Theme is applied once at launch and not on team switch** — `M`
+  - `ThemeManager.apply` is only called in `AppDelegate.showMainWindow`
+    (`AppDelegate.swift:290-295`) using the first team. `switchActiveTeam`
+    (`MainWindow+Sidebar.swift:897-939`) never re-fetches preferences or re-applies the
+    theme, so per-team themes need a relaunch. `preferences_changed` is not handled.
+  - Done when switching teams applies that team's theme immediately and server theme
+    changes apply without relaunch (or via a documented refresh).
+
+- [ ] **Avatar colors are non-deterministic and `abs(hashValue)` can trap** — `S`
+  - `abs(authorName.hashValue) % palette.count` (`MainWindow+Timeline.swift:1762`) and
+    `abs(user.username.hashValue) % palette.count` (`MainWindow+Menus.swift:955`) use
+    randomly seeded `hashValue`, so avatar colors change every launch. `abs(Int.min)`
+    traps. Derive a stable index from the user id (e.g. FNV-1a) and avoid `abs`.
+  - `MMPalette.avatarColors` is computed from `Theme.shared`, so colors also shift with
+    theme changes; cache or define a stable palette.
+
+- [ ] **The lightbox credits the current user instead of the poster** — `S`
+  - `showLightbox` (`MainWindow+Timeline.swift:877-898`) builds the subtitle from
+    `currentUser`, and callers pass no author. Viewing someone else's image says
+    "You Shared In ~channel". Pass the post author (or file uploader) through.
+
+- [ ] **Status changes are optimistic with no failure feedback** — `S`
+  - `selectUserStatus` (`MainWindow+People.swift:75-114`) updates the dot/menu immediately
+    and only logs a failed `PUT /users/{id}/status`. Done when failure reverts the UI and
+    shows an error.
+  - Also in `MainWindow+People.swift:420-424`, `preloadDMUsers` writes
+    `userStatusById[st.user_id] = st.status` directly without calling
+    `normalizedStatus(st.status, dndEndTime: st.dnd_end_time)` or saving `dnd_end_time`.
+
+- [ ] **Copied links omit the scheme for bare hosts** — `S`
+  - `copyChannelLink` (`MainWindow+Menus.swift:1112-1127`) and `copyPostLink`
+    (`MainWindow+Timeline.swift:1209-1230`) concatenate `UserDefaults "host"` directly. A
+    host saved as `mattermost.example.com` produces `mattermost.example.com/team/channels/x`
+    instead of `https://…`. Build the URL through `WebService.buildURL` (which normalizes
+    scheme/port).
+  - Both helpers also drop subpaths and mishandle hosts that already contain a port
+    (`https://host/mattermost`), producing broken links on reverse-proxy deployments.
 
 ---
 
 ## P2 — Security, privacy & packaging
 
-- [x] **Credentials are stored in plaintext `UserDefaults`** — `M`
-  - Done: release builds use `SecItemAdd`/`SecItemUpdate`/`SecItemCopyMatching`/
-    `SecItemDelete` with `kSecClassGenericPassword`, a service scoped to the app and
-    `kSecAttrAccessibleAfterFirstUnlock`.
-  - Debug builds (`#if DEBUG`, enabled via `SWIFT_ACTIVE_COMPILATION_CONDITIONS`) intentionally use
-    a plaintext UserDefaults store (`debugCredential.*`) instead of the Keychain. Rebuilding an
-    ad-hoc/development-signed app changes its code signature, which makes macOS prompt for the
-    login-keychain password on every launch; the debug store keeps the edit/build/run loop prompt-free
-    and is compiled out of release builds.
-  - Legacy `auth_token`/`auth_password` (and un-prefixed) UserDefaults values are migrated on first
-    read and deleted at launch via `migrateLegacyCredentials()`. Release builds also purge any
-    `debugCredential.*` values left by a debug build.
-  - Verified: launch logs which store is active; debug builds sign in without any Keychain prompt,
-    while release builds use the Keychain.
+- [ ] **Unescaped URL path parameters and multipart header injection in `WebService`** — `S`
+  - `fetchUserByUsername` (`webservice.swift:670`) and `removeReaction` (`:1091`) interpolate
+    `username` and `emojiName` directly into the URL path without
+    `addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)`.
+  - `uploadFile` (`webservice.swift:940`) interpolates `filename` directly into
+    `Content-Disposition: form-data; name="files"; filename="\(filename)"\r\n` without
+    escaping `"` or `\r\n`, breaking uploads for filenames containing quotes and allowing
+    multipart header injection.
 
-- [x] **Cleartext HTTP by default and no ATS configuration** — `S`
-  - Done: plain hostnames now resolve over `https` with the scheme default port (443); `http://`
-    must be typed explicitly and is limited to local networks.
-  - The app ships a scoped ATS exception (`NSAllowsLocalNetworking`) via `Config/Info.plist`, merged
-    with the generated Info.plist — public cleartext hosts stay blocked.
-  - The login port field is optional (443/80 defaults), unsupported schemes are rejected, and a
-    port embedded in the host wins over the port field. URL tests updated (16 total).
+- [ ] **Credential-adjacent `NSLog` calls are still unconditional** — `S`
+  - `AppDelegate.swift:67` logs `host:port`; `:155` logs `username@host:port`;
+    `:163/:167/:173` log login outcomes/errors. These bypass the `DebugLog` gating added
+    for the raw WebSocket/HTTP payloads and put account identifiers in the unified log on
+    every release launch.
+  - Replace with `DebugLog.info/error` (identifiers only) and keep credential values out of
+    every log path. Re-audit the remaining 28 `NSLog` call sites.
 
-- [x] **Deployment target contradicts README** — `S`
-  - Done: `MACOSX_DEPLOYMENT_TARGET = 14.0` is set at the project level, so both the app and the test
-    target inherit it. The built bundle now reports `LSMinimumSystemVersion = 14.0` and the binary's
-    `LC_BUILD_VERSION.minos` is 14.0.
-  - The full build compiles against the 14.0 target with no availability or deprecation warnings.
-  - Caveat: not yet smoke-tested on an actual macOS 14 machine (only the 27.x host is available).
+- [ ] **The account password is always persisted, with no "remember me"** — `M`
+  - `LoginWindow` writes the password on `viewWillDisappear` (`:39-50`) and again on Connect
+    (`:142-146`), regardless of user intent; `AppDelegate.startAuthentication` then uses it
+    for token-less auto-login. Prefer token-only persistence with an explicit "Keep me
+    signed in" option; clear the password after a successful token exchange by default.
+  - `LoginWindow.viewWillAppear` reads the Keychain synchronously on the main thread
+    (`:36`), reintroducing the launch stall that `AppDelegate.startAuthentication`
+    deliberately avoids. Move it off-main.
 
-- [x] **App icons are the wrong size** — `S`
-  - Done: rebuilt the icon set from the largest artwork (trimmed to its 512×512 opaque bounds and
-    upscaled to a 1024 master), then generated every slot from that master.
-  - All ten PNGs are now square and match their declared point/scale (16, 32, 32, 64, 128, 256, 256,
-    512, 512, 1024). `assetutil` shows matching renditions in `Assets.car` and the system icon
-    resolves up to 1024×1024.
-  - Follow-up: Finder still showed a generic icon because IconServices rejects icons containing
-    transparent pixels on current macOS. The artwork is now flattened onto its background blue as a
-    full-bleed opaque square, and the system applies the squircle mask — Finder and the Dock render
-    the compass correctly.
+- [ ] **No SSO / SAML / OAuth / MFA login** — `L`
+  - `LoginWindow` only supports username+password (`LoginWindow.swift:128-176`); the login
+    payload has no `mfa_token`, token-less flows, or browser-based SSO callback. Many
+    Mattermost deployments require one of these. Add MFA first (simple field), then an
+    external-browser SSO flow with a registered URL scheme.
 
-- [x] **No privacy manifest** — `S`
-  - Done: added `mattermost.client/PrivacyInfo.xcprivacy` (picked up by the synchronized target
-    group and copied to `Contents/Resources/`). It declares `NSPrivacyTracking = false`, no
-    collected data, no tracking domains, and the only required-reason API in use —
-    `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1` (app's own preferences).
-  - Audited the other required-reason categories (file timestamps, system boot time, disk space,
-    active keyboard); none are used.
+- [ ] **Inline/Giphy images are fetched automatically from arbitrary remote hosts** — `M`
+  - Markdown images and Giphy URLs are loaded directly with `URLSession` without auth,
+    size limits, or a proxy (`MainWindow+Timeline.swift:420-463`). Any message can therefore
+    leak the viewer's IP/User-Agent to a third party and fill memory/disk (caches are
+    unbounded). Add a "Load images automatically" preference (off/known hosts/always),
+    limit response size/type, and cap the disk cache.
 
-- [x] **Raw WebSocket payloads are written to the system log** — `S`
-  - Done: removed the raw `NSLog` calls that printed every frame. Payload-bearing logs (WS
-    RECV/SEND frames, dispatch event dumps, HTTP request/response bodies, MainWindow's event mirror)
-    now go through `DebugLog.logSensitive`, which is disabled unless launched with `--debug-ws` or
-    `debugWebSocketLogging = true` in defaults. The autoclosure means the payload isn't even
-    formatted when logging is off.
-  - Remaining diagnostic logs contain only identifiers, state transitions and error descriptions.
-  - Verified with a new `DebugLogTests` case: the marker string is absent when gated and present when
-    enabled (17 tests total).
-  - Related fix: Keychain reads moved off the main thread at launch, so a pending Keychain
-    authorization prompt can no longer stall `applicationDidFinishLaunching`.
+- [ ] **Per-user state leaks across accounts** — `S`
+  - `customStatusText/Emoji` (`MainWindow.swift:208-209`, `MainWindow+People.swift:179-196`)
+    and `recentEmojis` (`MainWindow+Composer.swift:45,225`) are global `UserDefaults` keys,
+    never cleared on logout. A second account on the same Mac inherits the first account's
+    status and emoji history. Scope them by user id/server or clear on logout.
+
+- [ ] **Re-verify the privacy manifest against file-metadata usage** — `S`
+  - `PrivacyInfo.xcprivacy` declares only `UserDefaults` CA92.1. `DebugLog.rotateIfNeeded`
+    uses `FileManager.attributesOfItem` (`webservice.swift:127-136`) and the GIF cache uses
+    file writes; confirm no required-reason file-timestamp API is in use (or declare it),
+    and re-run the audit when the cache/download code changes.
+  - Also document that messages/attachments are user data stored only in caches/temp.
+
+- [ ] **No application-level integrity/diagnostics story** — `S`
+  - There is no crash reporting, no "Export diagnostics" action, and no way for users to
+    inspect the gated debug log from the UI. Add a diagnostics export (redacted) and a
+    feedback/report path.
 
 ---
 
 ## P3 — Web-parity backlog
 
-- [x] **Post hover toolbar** (emoji/reply/more) and reaction chips — `M`
-  - Done: every post row reveals a hover toolbar at its top-right, matching `ul.post-menu` in
-    the web client — 38pt tall, white, 1pt `rgba(63,67,80,0.2)` border, 4pt radius, three 28pt
-    icon buttons (emoji, reply, more) with 64%-opacity icons that darken to 80% and get an 8%
-    hover fill. Compact (grouped) rows use a 24pt-tall variant so the toolbar stays inside the
-    row. System and deleted posts get no toolbar.
-  - Emoji opens a reaction picker anchored to the button; reply opens a thread view in the right
-    sidebar; more opens a menu with Reply, Copy Link, Pin/Unpin and Delete (own posts only).
-  - Reaction chips now mirror `.Reaction`: 24pt tall, 4pt radius, 1pt border, 0/5pt padding,
-    4pt gap, 16pt emoji, 11pt semibold count. Own reactions use the button blue border and 8%
-    blue fill; unreacted chips hover to white with a 16% border. Reaction chips are clickable and
-    toggle via `POST /reactions` / `DELETE /users/{u}/posts/{p}/reactions/{emoji}`.
-  - Added a matching `+` add-reaction chip (revealed on row hover) and a reaction picker with
-    16 common emoji.
-  - The thread view reuses the timeline row renderer: root post, "N replies" divider, grouped
-    replies, and an inline "Reply to thread…" composer that posts with `root_id`. Opening a reply
-    normalises the target to the thread's root.
-  - Realtime: `reaction_added` / `reaction_removed` WebSocket events (including the stringified
-    `data.reaction` payload) refresh the affected post.
-  - Verified by an in-app harness (synthetic clicks are blocked in the locked desktop session):
-    reaction add → remove → restore, thread load, and reply count 2 → 3. Added WebSocket reaction
-    parsing and endpoint URL tests (19 tests pass).
-- [x] **Attachments and inline images** with correct web sizing, thumbnail previews and lightbox — `M`
-  - Image attachments now match `.file-view--single`: natural size capped at 700pt wide and 350pt
-    tall, 8pt radius, 1pt `rgba(63,67,80,0.16)` border, with a hover download button. Preview data
-    comes from `/files/{id}/preview`; the full file is loaded for the lightbox.
-  - File attachments now render as `.post-image__column` cards: 320×64pt white card, 4pt radius,
-    1pt border, 63pt blue file-type thumbnail, 12pt semibold name, `TYPE SIZE` (e.g. `TXT 20B`) and
-    a 32pt download button. Multiple cards flow horizontally and wrap at the post width.
-  - Inline markdown/Giphy images use the web inline metrics: natural size, 100% max width, 350pt max
-    height, 4pt radius, no upscaling. Pixel dimensions are read from image reps (not `NSImage.size`,
-    which is in points) and cached so the timeline reflows once to the real aspect ratio.
-  - Added the full-screen lightbox: 72pt black header (40pt avatar, 16pt filename, author +
-    `Shared In ~channel`, download and close actions), 40pt translucent zoom bar with −/fit/+,
-    and a 90% black stage with a 48pt padded, 8pt-radius image centred at fit size. `Esc` or a
-    click on the backdrop closes it; the download action saves the file (or remote image) via a
-    save panel; the overlay follows window resize/zoom.
-  - Verified against computed styles from the live web client and screenshots of the timeline and
-    lightbox; 19 tests pass.
-- [x] **"New Messages" divider and unread pill** above the first unread post — `S`
-  - Done: the divider now matches `.NotificationSeparator` from the web client — a 1pt rule in
-    `rgba(255,136,0,0.5)` behind a white 26pt pill with 13pt regular `#ff8800` text and 13pt
-    horizontal padding. It is inserted immediately above the first post newer than the channel's
-    `last_viewed_at`.
-  - Opening a channel with unread messages now scrolls to the divider instead of the bottom.
-  - Added the web's floating jump pill: when the divider is below the viewport, a 32pt blue
-    (`#1c58d9`) 4pt-radius bar with a down arrow and "N new messages" (13pt bold white) floats
-    above the composer; clicking it scrolls to the divider. It hides when the divider is visible.
-  - Scrolling past the divider hides and retires it (once the user has actually scrolled with the
-    wheel/trackpad), matching the web client's collapse behaviour. A programmatic scroll on open
-    does not collapse it.
-  - Verified with a temporary demo harness: divider styling, pill text/positioning and the
-    collapse state transition; temporary hooks were removed. 21 tests pass.
-- [x] **Right-hand sidebar** (threads, members, pinned posts, files) with resize/persist — `L`
-  - Done: the right-hand panel now covers Threads, Members, Pinned Posts, Files, Recent Mentions,
-    Saved Posts, Settings and Browse Channels, all rendered in the same 400pt default panel.
-  - Added the Files view using the web client's channel-file search
-    (`POST /teams/{team}/files/search` with `terms=channel:{id}`). Rows mirror
-    `.FileSearchResultItem`: 64pt bordered cards, 40pt image/file thumbnail, 12pt semibold name and
-    `size • Today at 1:33` metadata; clicking an image opens the lightbox, other files open/download.
-  - Header now matches the web: 56pt tall, 16pt semibold title, 12pt 75% channel subtitle to the
-    right, and a 32pt close button.
-  - Added a draggable 6pt resize handle on the left edge (resize-left-right cursor, hover highlight)
-    with a 280–(chat − 360) clamp. The width persists in `UserDefaults` under `rhsWidth` and is
-    restored at launch; releasing the drag reflows the active panel.
-  - Added a Files button to the channel header and a Files item to the channel menu.
-  - Verified against computed styles from the live web client and screenshots of the Files view at
-    400pt and after resizing to 480pt; `rhsWidth` was persisted and restored. 22 tests pass.
-- [x] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each
-  - Saved posts and Recent Mentions are server-backed RHS lists (`GET /users/{id}/posts/flagged`
-    and post search with `@username`). Both now jump to the exact post: the channel opens, the
-    target post is fetched directly with `GET /posts/{post_id}` when it is outside the latest page,
-    and the row scrolls into view with a short blue highlight.
-  - Settings remains the gear panel with Reset zoom, Reconnect, Account/server details and Log out.
-  - Invite Members (sidebar row and welcome hero) sends a real team email invite through
-    `POST /teams/{team}/invite/email`, with email validation and success/error feedback.
-  - Browse Channels lists public team channels, marks joined channels, joins on click through
-    `POST /channels/{id}/members`, and refreshes the sidebar categories afterwards.
-  - Direct Message creation: the `+` in the DIRECT MESSAGES header now opens a searchable user
-    picker (`GET /users?in_team=…`); choosing a user creates or reuses the DM with
-    `POST /channels/direct`, adds the user to the directory, refreshes categories, and opens the
-    conversation. The picker closes on outside click, the anchor button, or `Esc`.
-  - Also fixed the welcome hero description to wrap instead of truncating long DM intros.
-  - Verified DM creation end-to-end against the live server (test1234) and the picker/search UI;
-    22 tests pass.
-- [x] **Emoji picker** (server emoji list + recent) — `M`
-  - Replaced the fixed 40-emoji palette with a web-metric picker: 350×440pt white panel,
-    4pt radius, 1pt `rgba(63,67,80,0.2)` border and an `0 8px 24px` shadow.
-  - Added a search field and a category bar with Recent plus Smileys & Emotion, People & Body,
-    Animals & Nature, Food & Drink, Travel & Places, Activities, Objects, Symbols and Flags.
-    Categories render as 9×36pt grids with 36pt cells, 12pt uppercase headers and the web's
-    blue-selected / 64%-gray idle category styling.
-  - Recent emojis are stored in `UserDefaults` (`recentEmojis`, newest first, max 18) and appear
-    as the first category once something has been selected.
-  - Custom server emoji are loaded from `GET /api/v4/emoji` and their images from
-    `/api/v4/emoji/{id}/image`; they appear in a Custom category and insert `:name:` shortcodes.
-    Custom emoji now render as 18pt inline attachments in message bodies.
-  - Search filters all standard and custom emoji by shortcode; the selected emoji is inserted into
-    the composer and recorded as recent, and the panel closes.
-  - Verified with screenshots of the Smileys, People, Recent and search states. This server has no
-    custom emoji, so the Custom category is hidden until the API returns results. 23 tests pass.
-- [x] **Server theme support** (read `preferences` theme, custom colors, dark mode) — `M`
-  - Reads the `theme` user preference (`GET /users/{id}/preferences`), preferring the active team's
-    entry and falling back to the global (`name == ""`) entry. Fetched before the main window is
-    created, so the UI starts in the server theme; no preference defaults to Denim.
-  - Supports the built-in Mattermost palettes (Denim, Sapphire, Quartz, Indigo, Onyx) plus custom
-    themes by parsing `sidebarBg`, `sidebarText`, `sidebarTextHoverBg`, `sidebarTextActiveBorder`,
-    `sidebarHeaderBg`, `sidebarTeamBarBg`, `centerChannelBg`, `centerChannelColor`, `linkColor`,
-    `buttonBg`/`buttonColor`, `mention*`, `newMessageSeparator`, indicators and error colors. Dark
-    mode is detected from the center-channel background luminance.
-  - Applied the palette across the window/top bar/sidebar, message timeline, composer, date and
-    "New Messages" separators, hover toolbars, reactions, attachment cards, right-hand panel,
-    Files/Threads rows, search/menus/popovers, emoji picker and DM picker. Derived hover, divider,
-    muted and placeholder colors are blended from the center-channel palette so dark themes get
-    proper layering. Emoji/DM search fields switch between aqua and dark aqua.
-  - Verified with screenshots in Onyx (dark), Quartz (light sidebar with dark text) and the default
-    Denim theme, plus preference-selection and custom-color unit tests. Theme changes made on the
-    server apply on the next launch. 26 tests pass.
-- [x] **Keyboard shortcuts**: ⌘K search, ⌘F in-channel search, `Esc` to close overlays, `↑` to edit
-      last message, focus traversal between sidebar/timeline/composer — `M`
-  - Added Search (⌘K) and Find in Channel (⌘F) to the Edit menu and to `performKeyEquivalent`.
-    ⌘K opens/focuses the global search popover; ⌘F prefills `in:<channel-name> ` and places the
-    caret at the end so typing continues the scoped search.
-  - `Esc` now closes the topmost overlay in order — lightbox, DM picker, emoji picker, reaction/post
-    menus, channel/product/help/status/team/filter menus, search popover/results, right panel — and
-    cancels composer editing when nothing else is open.
-  - Pressing `↑` in an empty composer loads the current user's last post into the composer for
-    editing (help label shows `Editing • Esc to cancel`). Enter saves through
-    `PUT /api/v4/posts/{id}/patch`, updates the timeline/thread in place, and Esc restores the
-    composer. Switching channels cancels an in-progress edit.
-  - `Tab` / `Shift+Tab` cycles focus composer → sidebar → timeline (sidebar focuses Find channel;
-    the timeline container forwards arrow keys to the scroll view). Search/DM/emoji fields keep
-    their normal Tab behaviour.
-  - Verified with an in-app harness: ⌘F produced `in:town-square `, ↑ loaded the last message,
-    Esc cancelled it, and the focus cycle logged composer → sidebar → timeline → composer.
-    27 tests pass.
-- [x] **Drag & drop files** onto the composer — `M`
-  - The composer text view and its outline panel are file-URL drag destinations; dragging over
-    either highlights the composer border in the theme's button color and shows
-    "Drop files to attach".
-  - Dropped files (and the attach button) upload to the current channel and appear as pending
-    attachment chips above the editor, each with a remove button. The composer grows by 36pt while
-    attachments are pending and the timeline stays scrolled to the bottom.
-  - Send includes the pending `file_ids`; text is optional when files are attached. On success the
-    tray clears and the composer shrinks. Switching channels clears pending attachments. File reads
-    use security-scoped access for Finder drops.
-  - Attach now stages files in the draft instead of sending immediately, matching the web client.
-  - Verified with an in-app harness: one uploaded file added a 36pt tray, the composer height became
-    86, sending created a post with one file, the pending list cleared, and the test post was
-    deleted afterwards. 27 tests pass.
-- [x] **Mentions/autocomplete** for `@user`, `#channel`, `:emoji:` while typing — `L`
-  - The composer detects `@`, `#`/`~` and `:query` tokens immediately before the caret (guarding
-    against emails, URLs and times) and shows a 300pt autocomplete panel above the composer.
-  - Users come from a cached `GET /users?in_team=...` list (with an immediate local fallback);
-    channels are filtered from the loaded channel directory; emoji combine the bundled catalog and
-    server custom emoji. Matches are prefix-ranked, capped at 8 rows.
-  - Rows show avatars/initials for users, `#` + channel name/subtitle, or glyph + `:shortcode:`.
-    Selecting inserts `@username `, `#channel-name ` or `:shortcode: `; emoji selections also update
-    the persisted recent emoji list.
-  - Keyboard: Up/Down move the selection, Enter or Tab accepts, Esc dismisses; Tab focus traversal is
-    suspended while the panel is open. Clicking a row accepts, clicking elsewhere closes.
-  - Verified with screenshots for users (`@bo` → @boris), channels (`#` → ch2/off-topic/town-square/zz)
-    and emoji (`:sm` → smile/smiley/…), plus selection and acceptance harness logs. 27 tests pass.
+### Message rendering
+
+- [ ] **Markdown block support is incomplete** — `M`
+  - `formattedMessage` uses `.inlineOnlyPreservingWhitespace`
+    (`MainWindow+Timeline.swift:1961-2037`). Blockquotes are flattened to `|` prefixes,
+    bullets to `•`, and numbered lists/headings/tables/horizontal rules are not rendered;
+    fenced code has no language label, copy button, or syntax highlighting.
+  - Add a proper block parser (or a Markdown renderer) for headings, ordered lists, tables,
+    blockquote styling and fenced-code chrome. Keep the current inline pass for
+    mentions/channels/emoji.
+  - The inline-enhancement pass excludes only fenced code, not backtick inline-code spans
+    (`MainWindow+Timeline.swift:2123-2169`), so `@user`, `~channel` and `:emoji:` inside
+    inline code get styled or replaced; the channel regex also matches `#fragment` in URLs.
+  - The bundled emoji catalog has ~371 entries (`MainWindowSupport.swift:159-551`), so other
+    valid shortcodes render literally (`MainWindow+Timeline.swift:1272-1278`). Ship the full
+    Mattermost emoji data or load it from the server.
+  - Author labels are not truncated and the "Update your status" pill precedes the timestamp
+    (`MainWindow+Timeline.swift:1786-1849`), so long usernames or the pill clip the time.
+
+- [ ] **No reply count/thread indicator on timeline root posts** — `S`
+  - `createPostRow` never shows "N replies" or a participant avatars row, so users cannot
+    tell a root has a thread without opening the hover menu. Add the reply footer from the
+    web client and refresh it on `thread_updated`/reply.
+
+- [ ] **The 216pt welcome hero is rendered above every channel** — `S`
+  - `rebuildTimelineContent` always adds `timelineHeroContainer` and advances by 216 + 16pt
+    before the first post (`MainWindow+Timeline.swift:2230-2239`). Every channel therefore
+    starts with a large intro illustration even when it has history, pushing messages down
+    and changing scroll geometry. Show it only for empty/new channels (or as a compact
+    start-of-history marker).
+
+- [ ] **System messages, presence and bot detection are heuristic** — `S`
+  - `MMPost` has no `props`, so system posts with an empty `message` collapse to
+    "System update" (`MainWindow+Timeline.swift:1561`) instead of the join/leave/header
+    text the web renders.
+  - Unknown/not-yet-fetched users default to a green "online" dot
+    (`MainWindow+Timeline.swift:1910`); Mattermost treats a missing status as offline.
+  - Bot detection is a username substring check (`:1688-1691`), so humans named "abbott" get
+    a BOT badge while a bot named `ci` does not.
+  - Date separators dedupe by formatted label rather than calendar day (`:2338-2347`), and
+    future-dated posts get a weekday because the day difference is negative
+    (`TimelineSupport.swift:75-83`).
+
+- [ ] **No link previews** — `M`
+  - Mattermost renders Open Graph previews for URLs. The native client leaves bare links.
+    Add a metadata fetch (opt-in/privacy aware), card layout, and image proxy/caching.
+
+- [ ] **Reaction UX is limited and partly broken** — `M`
+  - The reaction picker is 16 hardcoded emoji (`MainWindow.swift:681-686`,
+    `MainWindow+Timeline.swift:1049-1091`): no search, no recent reactions, no custom
+    emoji, no "who reacted" tooltip/list.
+  - Custom emoji reactions render as literal `:name:` text because `emojiGlyph` only consults
+    the bundled catalog and never `customEmojiEntries`/`customEmojiImages`
+    (`MainWindow+Timeline.swift:1272-1278`).
+  - Chips do not wrap (they run past the row edge and clip), are sorted alphabetically
+    instead of by count, and have no reaction-details popover (`:507-567,1280-1288`).
+  - Deleted posts still render their reaction chips and allow toggling reactions
+    (`:1657,1718-1725,1897-1900`); reaction add/remove is not optimistic and failures only
+    log (`:698-721`). The picker also anchors to the last toolbar subview (the ellipsis)
+    rather than the emoji button (`:674-679`).
+  - Add a searchable picker (reuse the composer picker), custom-emoji glyphs, wrap + detail
+    tooltips, optimistic toggles and deleted-post guards.
+
+- [ ] **Attachment and inline-image rendering has several correctness gaps** — `M`
+  - Image attachments never set `imageView.animates` and only fetch the static preview, so
+    animated GIF attachments appear frozen (`MainWindow+Timeline.swift:1334-1341,1380`).
+  - Multiple images stack on separate rows instead of using Mattermost's image grid
+    (`:1485-1490`), consuming large vertical space.
+  - When `file.width/height` are absent, the preview's downscaled pixel size is cached as the
+    natural size (`:1383-1389`), so the image can never render at its true size.
+  - Any failed image fetch becomes a hardcoded fake "GIPHY" animation (`:239-273,440,459`),
+    including ordinary PNG/JPEG URLs; Giphy page links are treated as images too
+    (`:279-286`), so a normal link turns into a fallback GIF instead of a link/preview.
+  - Normal Markdown images whose URL has no image extension or query string are dropped by
+    `inlineMarkdown` (`:2083-2111`) and not rescued by `parseGiphyInMessage` (`:289-301`).
+  - Lightbox zoom has no pan/scroll (`:1004-1023`), so >1× content outside the stage is
+    unreachable; the image is also retained after close (`:951-960`).
+
+- [ ] **No Save/Flag post action** — `S`
+  - The hover menu has only Reply, Copy Link, Pin/Unpin and Delete
+    (`MainWindow+Timeline.swift:1125-1144`), yet a Saved Posts panel exists. Add
+    Save/Unsave (Mattermost `POST/DELETE /users/{id}/posts/{post_id}/flag`), plus
+    Edit/Copy Text/Mark Unread. Currently only the ↑ shortcut can start an edit, and pin is
+    restricted to own posts.
+
+### Navigation and sidebar
+
+- [ ] **Sidebar category state is not persisted and categories cannot be managed** — `M`
+  - Toggling a category only flips the in-memory `isCollapsed`
+    (`MainWindow+Sidebar.swift:744-755`); it is lost on relaunch. `isFavoritesCollapsed` is
+    also memory-only. There is no create/rename/delete/reorder API use, no channel
+    drag-and-drop, and custom categories have no add button (`:492-503`).
+  - Done when collapsed state and order persist via the categories API/`UserDefaults`, and
+    categories are manageable from the UI.
+
+- [ ] **No channel context menu or unread/mute filtering** — `M`
+  - Channel rows only left-click (`MainWindow+Sidebar.swift:702-728`); there is no
+    right-click/ellipsis menu, no mute/notification submenu, no mark read/unread, no
+    "Unread" filter (only All/Favorites), and no muted-channel styling.
+  - `MMSidebarCategory.muted` is decoded (`webservice.swift:211`) but never rendered, and the
+    channel menu (`MainWindow+Menus.swift:1029-1056`) has no mute action.
+  - Add a context menu sharing the channel-menu actions plus mute, mark read, copy link and
+    leave.
+
+- [ ] **Sidebar/team-menu state and styling have several parity bugs** — `M`
+  - Native favorites are stored only in the legacy `favorite_channel` preference while the
+    server's own `favorites` category is explicitly skipped (`MainWindow+Sidebar.swift:1016`),
+    so web-created favorites may be missing and native favorites may not sync back. Favorites
+    are a `Set` sorted alphabetically, losing web order (`:143-145,176-180`).
+  - The DM hover "×" has no click handler (`:687-697,803`); the Threads row never gets a
+    selected state or unread badge (`:702-706,107-134`); unread badges hardcode white text /
+    `buttonBg` instead of `sidebarUnreadText`/`mentionBg`/`mentionColor`, and the badge frame
+    overlaps the DM close icon (`:114,1047`).
+  - The team menu has no scroll view, per-team unread, "Join another team", leave or settings
+    entries (`:822-889`); long team names overlap the `+`/chevron, and its light popup colors
+    are hardcoded while the background is themed (`:833-871`, `DesignTokens.swift:78-82`),
+    making it unreadable on Onyx/Indigo.
+  - Favorite toggles are optimistic and never roll back when
+    `saveUserPreferences`/`deleteUserPreferences` fails (`MainWindow+Sidebar.swift:51-75`),
+    leaving the UI and server inconsistent.
+  - Bot rows without a custom avatar lose their tint because the selection renderer clears
+    `contentTintColor` for every `isBotBadge` item (`:733,775-798`), so they can render black
+    on dark sidebars.
+  - Done when these states mirror the web client and custom themes.
+
+- [ ] **The fallback sidebar uses fake IDs and skips unread badges** — `S`
+  - When the categories response is empty, `populateSidebarCategories` returns through
+    `buildDefaultSidebarCategories()` before `loadUnreadState()` (`MainWindow+Sidebar.swift:421-424,550`),
+    so badges never load. The fallback rows use hardcoded `"town-square"`, `"off-topic"`,
+    `"system-bot"` IDs (`:310-323`) that do not match real server IDs, so selection and
+    unread lookup are wrong. Build the fallback from real channels.
+
+- [ ] **"View Info" opens the Members panel instead of channel info** — `S`
+  - `MainWindow+Menus.swift:1030-1033` maps View Info to `.members`. Channel header,
+    purpose, creator, created date, member count, files/pins shortcuts and notification
+    preferences are not shown. Add a Channel Info RHS mode.
+
+- [ ] **Profile is a no-op; there is no user profile view** — `M`
+  - The status menu's Profile row (`MainWindow+Menus.swift:487-506`) does nothing. There is
+    no profile popover/sheet (avatar, title, timezone, local time, status, DM button), and
+    member rows are not clickable (`MainWindow+RightPanel.swift:368-373`).
+  - Add a profile view reused by members, mentions, search authors and the current user;
+    add "Message" and "Copy username".
+
+- [ ] **Status/Help/Product menus have dead rows and hardcoded chrome** — `S`
+  - `setupStatusMenu` (`MainWindow+Menus.swift:315-318`) hardcodes the menu avatar color,
+    never loads the user's actual avatar image, falls back to hardcoded `"boris"`, and never
+    updates `@username` or initial after `fetchCurrentUser()` completes if `UserDefaults`
+    was empty or changed.
+  - `dndSubMenu`'s "Choose date and time" row (`MainWindow+Menus.swift:586,617-632`) has
+    `durationSeconds: nil` and no picker handler, so clicking it silently enables indefinite
+    DND instead of opening a date/time picker.
+  - All rows in `helpMenu` (`MainWindow+Menus.swift:261-283`) and `productSwitcherMenu`
+    (`:156-178`) only close the menu on click (`:694-698`) and perform no action.
+  - `editionBadgeLabel` (`MainWindow.swift:29`) and the product switcher footer
+    (`MainWindow+Menus.swift:192-238`) hardcode `"TEAM EDITION"` / `"free unsupported edition"`
+    instead of reading the server's actual license/config.
+  - The `"Update your status"` pill (`MainWindow+Timeline.swift:1801-1837`) is shown on every
+    non-consecutive message by the current user even when a custom status is already set.
+
+### Composer and account
+
+- [ ] **Formatting toolbar is visual only** — `M`
+  - The nine `composerLeftButtons` (`MainWindow+Layout.swift:304-334`) have hover styling
+    but no `onClick`; the `Aa` toggle only shows/hides them. Wire Bold/Italic/Strike/
+    Heading/Link/Code/Quote/Lists to wrap the selection in Markdown (and update
+    `entryView` styling). This is also a README overclaim.
+
+- [ ] **GIF search is absent while a local fake-post path remains** — `S`
+  - `applyComposerToolbarVisibility` always hides the GIF button
+    (`MainWindow+Composer.swift:803`), but its old handler still fabricates a
+    `giphy_*` post locally and appends it to the timeline (`MainWindow+Layout.swift:414-429`).
+    Remove the dead mock, and if the server has a Giphy plugin (check
+    `GET /plugins`), add real search/attach through the plugin endpoints.
+
+- [ ] **Login window UX is incomplete** — `M`
+  - Fixed frames (`LoginWindow.swift:68-106`) do not reflow on resize and there is no
+    minimum size; there is no spinner/"Connecting…" state, no show-password toggle, no
+    server-discovery-by-email, and errors remain while the user edits. Add Auto Layout, a
+    progress state, validation, and a clear error area.
+
+- [ ] **No notification/mute preferences UI** — `M`
+  - Settings only exposes zoom, reconnect, account and logout
+    (`MainWindow+RightPanel.swift:642-686`). Add desktop notification mode/sound, mention
+    keys, channel mute list, theme override (system/light/dark/server) and advanced
+    connection details.
+
+- [ ] **System dark mode and native controls do not follow the theme** — `M`
+  - `ThemeManager` defaults to Denim (`Theme.swift:361-372`); `builtin(for:)` has no
+    `"system"` mapping, and there is no `effectiveAppearance` fallback or user theme
+    override. A Mattermost "System" theme therefore falls back to light Denim.
+  - Only the emoji and DM pickers force `NSAppearance` (`MainWindow+Composer.swift:25-32`,
+    `MainWindow+Menus.swift:815-817`); `NSApp.appearance` is never set, so native search
+    fields, alerts, menus and text fields stay light on dark custom themes.
+  - Several parsed colors are unused while surfaces hardcode values
+    (`sidebarUnreadText`, `sidebarHoverBg`, `sidebarHeaderBg`, `mentionBg`,
+    `mentionColor`, `newMessageSeparator`, `errorText` — `Theme.swift:23-41`), so custom
+    themes render inconsistently.
+  - Done when system appearance is honored, native controls inherit the palette, and all
+    parsed theme colors are used or removed.
+
+- [ ] **Custom status is local-only and limited** — `S`
+  - It is persisted only in `UserDefaults` (`MainWindow+People.swift:176-181`,
+    `MainWindow.swift:208-209`) and never read from server user props, so statuses set on
+    the web/another device are invisible here; expired statuses are not cleared.
+  - The emoji is a raw text field with no picker/recent statuses, and "custom date and time"
+    is not supported (`:127-161`). Clearing ignores server errors and clears local state
+    regardless (`:188-199`), allowing local/server divergence.
+  - Add a server-backed custom-status read/refresh, an emoji picker, recent statuses and a
+    date/time picker.
+
+- [ ] **Direct messages are 1:1 and picker-limited** — `M`
+  - `POST /channels/direct` only (`MainWindow+Menus.swift:1003-1023`), picker fetches the
+    first 100 team users (`:883-904`) with no pagination, presence, bot/guest distinction, or
+    existing-DM state. No group DM creation, and `dmUsers` is not invalidated on team switch
+    (`:869-873`), so the previous team's users remain until relaunch.
+  - Add search pagination, presence dots, an existing-conversation shortcut, and group DM
+    support where permitted.
+
+- [ ] **Browse Channels only lists public channels** — `S`
+  - `loadBrowseChannels` filters `type == "O"` (`MainWindow+RightPanel.swift:688-724`), so
+    private channels are invisible and join requests are unsupported. Add private-channel
+    discovery (where the API allows) and a join-request flow.
+
+- [ ] **No team administration** — `M`
+  - Only create/switch team exist (`MainWindow+Menus.swift:1199-1242`). There is no leave
+    team, team settings/edit, member management (add/remove/role), or invite-link option.
+    Add at least Leave Team and team member management.
+
+### Platform and accessibility
+
+- [ ] **Accessibility is effectively absent** — `M`
+  - Custom `RoundedEdgePanel` controls have no accessibility role/label/value, no
+    `acceptsFirstResponder`, and no Space/Return activation (`RoundedEdgePanel.swift:10-102`).
+    VoiceOver cannot operate the sidebar, menus, timeline toolbar, reaction chips or
+    composer buttons. `accessibilityDescription` is only passed to SF Symbol images.
+  - Add `setAccessibilityRole/Label/Help`, keyboard focus rings, Space/Return/Arrow
+    handling, and an accessibility audit (VoiceOver, Full Keyboard Access, Increase
+    Contrast).
+
+- [ ] **No localization; all UI strings are hardcoded English** — `M`
+  - Move strings into a String Catalog, use `NSLocalizedString`/`String(localized:)`, and
+    add at least one additional locale. Dates already follow `Locale.current`.
+
+- [ ] **No standard app menus / Preferences / reopen behavior** — `S`
+  - `setupMainMenu` (`AppDelegate.swift:372-454`) omits Services, Hide, Preferences (⌘,),
+    a Help menu and standard About metadata. Add a Settings scene/window (or ⌘, sheet) and
+    `applicationShouldHandleReopen`.
+
+- [ ] **No auto-update path** — `M`
+  - There is no Sparkle/feed or update check. Add a signed appcast/update mechanism (or
+    document that users must download manually) before public distribution.
 
 ---
 
-## P4 — Architecture & maintainability
+## P4 — Architecture, performance & maintainability
 
-- [x] **Split `MainWindow.swift` into view components plus a view model** — `L`
-  - `MainWindow.swift` is now an 867-line window shell (stored view state, init, AppKit overrides).
-    The former ~10,400-line class is split into `MainWindow+Header`, `+Sidebar`, `+Timeline`,
-    `+Composer`, `+Menus`, `+RightPanel`, `+People`, `+Layout` and `+LiveData` extensions, with the
-    shared drag/scroll/timeline helpers and the emoji catalog in `MainWindowSupport.swift`.
-  - Added `ChatViewModel`, which owns the live workspace state: current user/team/channel, channel
-    and user directories, statuses, posts, pagination flags, memberships/read state, thread data and
-    the WebSocket connection flag. `MainWindow` exposes internal forwarding properties so the view
-    components read/write the model without duplicating storage. `MainWindow+LiveData` remains the
-    controller glue that drives the REST/WebSocket service and mutates the model as events arrive.
-  - Widened member access from file-private to internal so extensions can live in separate files;
-    no behavior was intentionally changed.
-  - Verified: the app builds and runs against the live server, all 27 unit tests pass, and the
-    normal workspace view renders unchanged.
-- [x] **Extract shared window/zoom plumbing** — `M`
-  - Added `WindowZoomController`, used by both `MainWindow` and `LoginWindow`. It owns the
-    `contentView.bounds` rewrite, observes `NSWindow.didResizeNotification` and
-    `.zoomFactorDidChange`, applies the current factor, calls the owner's layout closure, shows the
-    zoom HUD and handles ⌘+/⌘=/⌘-/⌘0.
-  - Removed the duplicated `applyZoomFactor`/`windowDidResize`/`zoomDidChangeNotification` methods
-    and observers from both window classes; only the controller rewrites bounds now.
-  - Documented the scaling model in `WindowZoomController.swift`: the OS display scale is separate;
-    the window frame stays in points while contentView `bounds = frame / zoomFactor`, so logical
-    layout points map to `zoomFactor` screen points. Layout code consumes `bounds.size`.
-  - Verified at 125% zoom: the full workspace reflows correctly, then reset to 100%. Build and all
-    27 tests pass.
-- [x] **Actor-isolate `WebService` and enable Swift 6 strict concurrency** — `M`
-  - `WebService` is now `@MainActor`: the bearer token, host/port, socket task, sequence counter,
-    ping/reconnect timers, connection flag and all event callbacks are main-actor isolated.
-    URLSession still performs network I/O off the main thread; receive/ping callbacks hop back with
-    `Task { @MainActor in … }` and the socket receive loop is `nonisolated` while taking the task as a
-    parameter, so no non-Sendable WebService state crosses a concurrency boundary. Stale callbacks
-    are ignored by comparing the task identity.
-  - Marked the remaining UI singletons/helpers `@MainActor` (`AppDelegate`, `ZoomManager`,
-    `ZoomHUD`, `WindowZoomController`, `Theme`/`ThemeManager`, `MMFont`) and used
-    `MainActor.assumeIsolated` inside main-run-loop `Timer` callbacks. `WindowZoomController`'s
-    observer tokens are `nonisolated(unsafe)` so `deinit` can release them.
-  - `DebugLog.isSensitiveLoggingEnabled` is now lock-protected (`OSAllocatedUnfairLock`) instead of
-    nonisolated mutable global state, so tests can still flip it.
-  - Enabled Swift 6 language mode and `SWIFT_STRICT_CONCURRENCY = complete` for both targets in the
-    Xcode project, and marked the XCTest classes `@MainActor`. A clean build now has zero
-    concurrency warnings or errors.
-  - Verified against the live server: login/session restore, workspace render, WebSocket connect and
-    a realtime post all work; all 27 tests pass.
-- [x] **Inject `WebService`** instead of repeated `NSApp.delegate as? AppDelegate` lookups. — `M`
-  - `MainWindow` now exposes `webService` backed by `ChatViewModel.webService`. `AppDelegate`
-    injects the service once via `mainWindow.start(with: webService)` instead of `MainWindow`
-    reaching through `NSApp.delegate` during init.
-  - Replaced the ~70 `(NSApp.delegate as? AppDelegate)?.webService` lookups across the window
-    components with the injected property. The remaining delegate lookups are for non-WebService
-    AppDelegate actions (`logout`, `markChannelRead`) and the login window's service handoff.
-  - Removed the `bindWebServiceAndLoadData()` call from `MainWindow.init`; `start(with:)` sets the
-    service and then binds WebSocket/REST callbacks and loads data, keeping the previous ordering
-    before `connectWebSocket()`.
-  - Verified session restore, workspace render, WebSocket connection and a full token-less launch
-    (stored-password login → injected service → live workspace); all 27 tests pass.
-- [x] **Remove dead/legacy code** — `S`
-  - Deleted the unused `NSOutlineView` sidebar (`treeView`, `mainTreeDelegate`, `MainWindowDelegate`),
-    the hidden `sidebarTopBorder` and its init/layout code, the `dateSep1/2*` prototype divider views,
-    `systemMessageRow`/`userMessageRow`, `statusPromptLabelRef`/`statusPromptIconRef`, and the
-    `sysAuthorLabelRef`/`usr*Ref` leftovers.
-  - Kept `entryView` — it is the live `ComposerTextView` used by send/edit/autocomplete, not dead
-    code. Kept `appendRealtimePost`, which still performs the optimistic realtime insert and user
-    hydration on the WebSocket path.
-  - Verified the workspace renders unchanged; build is clean and all 27 tests pass.
-- [x] **Centralize design tokens** — `M`
-  - Added `DesignTokens.swift`: `MMRadius` (tiny/control/menu/panel/card/window/large),
-    `MMMetric` (sidebar width/leading, gutter, chat-panel leading, top bar, composer heights,
-    default/min right-panel width, search popover width) and `MMPalette` (avatar palette, new-message
-    accent, zoom HUD, lightbox chrome and the team-switcher popup colors).
-  - Replaced the repeated numeric radii across all views (93 assignments now use
-    `MMRadius.*`) plus the duplicated avatar palette in the menus/timeline and the scattered metric
-    literals in layout/sidebar/header/right-panel/composer code.
-  - Theme-driven colors stay in `Theme.swift`; native accents that are not user-themed now live in
-    one palette.
-  - Verified the workspace renders pixel-identically; build is clean and all 27 tests pass.
-- [x] **Deduplicate HTTP request building** — `M`
-  - Added `makeRequest` (URL/auth/Accept/Content-Type/JSON-or-raw body) and `performRequest`
-    (network errors, HTTP status range, server message extraction, optional JSON MIME check and
-    gated status logging) inside `WebService`.
-  - `performAuthenticatedRequest` now builds on the shared pipeline, and `login`, `checkToken`,
-    `fetchUserImage`, `deleteUserPreferences`, `leaveChannel`, `fetchChannelMembers`,
-    `clearCustomStatus`, `fetchFileData`, `sendTeamInvite`, `uploadFile` and `fetchEmojiImage` no
-    longer hand-roll URLSession requests.
-  - Server-side behaviour is preserved: login still reads the `Token` header and requires JSON,
-    preference deletion still falls back from `POST /preferences/delete` to legacy `DELETE`,
-    image/file endpoints keep optional/no auth as before, and payload logging remains gated.
-  - Verified token restore, workspace data, avatars/images and a custom-status PUT against the live
-    server; all 27 tests pass.
+- [ ] **The timeline is fully rebuilt for every post and avatar** — `L`
+  - `rebuildTimelineContent` destroys/recreates every row, date separator and attachment
+    view (`MainWindow+Timeline.swift:2216-2394`). Every realtime post (`LiveData:384-404`),
+    every image load (`Timeline:408-418`), every reaction (`:733`) and every avatar
+    completion (`People:308-354`) triggers a full rebuild. There is no cell reuse,
+    virtualization or diffing, so a 20-user channel can do ~20 full N-row rebuilds just from
+    avatars.
+  - Image/attachment rows unconditionally call `fetchFileData(..., preview: true)` and
+    `loadGiphyAnimatedImage` each time they are recreated (`:1378-1396,388-403`), so every
+    rebuild re-downloads all visible images. There is no in-memory preview image cache.
+  - Inline-image render paths perform synchronous disk I/O on the main thread
+    (`Data(contentsOf:)` at `:357,433`), and image loads rebuild without preserving the clip
+    offset (`:408-419`), so content shifts while reading.
+  - Introduce a row diff/update path keyed by post id, cache decoded previews, load disk data
+    off-main, and virtualize/lazy-load large channels. This is the main scalability risk.
+
+- [ ] **GIF cache filenames use randomized `hashValue`** — `S`
+  - Long URLs are cached as `"\(urlString.hashValue).gif"` (`MainWindow+Timeline.swift:353-356,430-432`).
+    Swift hash seeds change per process, so the on-disk cache misses every launch and
+    duplicate files accumulate; collisions can serve the wrong image. Use a stable hash
+    (SHA-256 or FNV-1a) and add cache eviction.
+
+- [ ] **Timeline pagination can drop edits and refetch the same page** — `S`
+  - `TimelinePager.merge` filters duplicate IDs out of the older page
+    (`TimelineSupport.swift:21-30`), so an edited duplicate keeps the stale copy; sorting by
+    `create_at` alone is unstable for equal timestamps and can flip grouping. In
+    `MainWindow+LiveData.swift:493-496`, a full page containing only duplicates returns
+    without setting `didLoadAllHistory`, so repeated bounds changes refetch it.
+  - Older-page scroll anchoring is skipped when `anchorOffset == 0`
+    (`MainWindow+LiveData.swift:511-515`), so loading at the exact top replaces the viewport
+    instead of preserving the oldest visible post.
+
+- [ ] **Caches and fetch tasks are unbounded** — `M`
+  - `userAvatarsById` (`MainWindow.swift:430`), `inlineImageSizeCache`,
+    `attachmentSizeCache` (`:133-134`), `customEmojiImages` and the GIF disk cache
+    (`MainWindow+Timeline.swift:420-463`) have no cap or eviction. Use `NSCache`/LRU caps,
+    cancel thumbnail tasks when a panel closes, and prune the GIF cache.
+
+- [ ] **Status polling is expensive and duplicative** — `M`
+  - A 15 s timer calls `requestStatuses` plus a REST `POST /users/status/ids` for every known
+    user (`MainWindow+People.swift:356-384`), and each result recursively walks the entire
+    timeline view hierarchy (`:245-271`). Rely on WebSocket status events, batch REST
+    refreshes, and update only visible/known status dots.
+
+- [ ] **Live-data glue is still concentrated in `MainWindow+LiveData`** — `M`
+  - `ChatViewModel` is a 44-line state holder; loading, pagination, read state,
+    notification routing and reconciliation live in a 541-line window extension. Move
+    workspace orchestration into a service/repository layer so it is testable without a
+    window and the view components become read-only projections.
+
+- [ ] **`WebService` is a single 1,500-line class** — `M`
+  - REST, WebSocket lifecycle, payload parsing, file transfer and debug logging share one
+    main-actor type. Split into `APIClient` (typed endpoints), `WebSocketClient` (parsing +
+    backoff) and `FileTransfer` with protocol seams; this also makes unit testing auth,
+    reconnect and event parsing much easier.
+
+- [ ] **Persistence is ad hoc `UserDefaults`** — `S`
+  - Drafts, scroll positions, statuses, emojis and UI state have no unified store or
+    migration story. Add a small `SettingsStore`/`DraftStore` abstraction with per-user,
+    per-server scoping and schema versioning.
+
+- [ ] **Legacy naming and small dead code** — `S`
+  - `typealias webservice = WebService` (`webservice.swift:387`), duplicate
+    `import UniformTypeIdentifiers` (`MainWindow.swift:9-12`), unused
+    `sendActiveChannelPost` (`MainWindow+Composer.swift:922-938`), `makeMattermostCompassIcon`
+    duplication, and test-only launch hooks in production (`MainWindow.swift:519-542`,
+    `LiveData:224`, `Sidebar:926`, `--demo`). Remove or gate behind `#if DEBUG`.
+  - `channelHeaderBorder` is styled then always hidden (`MainWindow+Layout.swift:28-30,545`).
+  - `Dictionary(uniqueKeysWithValues:)` on membership/category arrays traps on duplicate
+    server IDs (`MainWindow+Sidebar.swift:86,415`); use a uniquing initializer.
+  - Remaining force unwraps: `NSImage(named: "E82F")!` and
+    `NSImage(named: "Mattermost Logo")!` at property-init time (`MainWindow.swift:23-24`),
+    `contentView!` (`MainWindow+Layout.swift:657`) and `activeTeam!`
+    (`MainWindow+Sidebar.swift:826`); `LoginWindow.init(coder:)` (`LoginWindow.swift:18-20`)
+    is a `fatalError`.
+  - `AppDelegate.websocketConnected(isConnected:)` (`AppDelegate.swift:178-183`) and
+    `MainWindow.statusPromptPill` (`MainWindow.swift:350`, shadowed in `createPostRow`) are
+    unused dead declarations; `AppDelegate.zoomGestureMonitor` (`AppDelegate.swift:100-141`)
+    is never removed and intercepts pinch/scroll zoom gestures on any window (including modal
+    sheets and file panels).
+  - The theme parser accepts only `#RGB`/`#RRGGBB`/`#RRGGBBAA` (`Theme.swift:322-344`) and
+    silently falls back for CSS `rgba()`, named colors and 4-digit hex; document or support
+    those formats. The Connect button also lacks a Return key equivalent
+    (`LoginWindow.swift:91-95`).
+  - `threadItems` is written but never read outside a test (`MainWindow.swift:82-85`,
+    `MainWindow+RightPanel.swift:196`); `searchChannelFiles` hardcodes
+    `time_zone_offset: 0` (`webservice.swift:1045`); emoji data exists in two sources of
+    truth (`MainWindowSupport.swift:159-551` and `MainWindow.swift:667-686`);
+    `statusString(for:)`/`indexForStatus` duplicate the same mapping and demo IDs
+    `"usr"`/`"sample_usr"` remain in status logic (`MainWindow+People.swift:29-37,65-73,85-86`).
+  - `MainWindowViewController` is an empty stub and `ComposerTextView.isFileDropTarget` is
+    written but never read (`MainWindowSupport.swift:12-21,597,622-661`).
+  - The 60-post page size is duplicated between `MainWindow.swift:304`,
+    `TimelineSupport.swift:28` and the `webservice` default (`webservice.swift:984`); use one
+    shared constant.
 
 ---
 
-## P5 — Quality & tooling
+## P5 — Quality, tooling & documentation
 
-- [x] **Expand tests** — `M`
-  - Added `ChatViewModelTests` (workspace defaults, read/mention/membership state, pagination flags,
-    thread storage), `TimelineSupportTests` (older-page merge, dedupe, end-of-history and the
-    relative/weekday/absolute date-separator styles) and `ZoomTests` (preset stepping, clamping,
-    reset, sorted levels and HUD percentage labels).
-  - Added `WebServiceErrorTests` covering HTTP status/server-message formatting, MIME/error
-    descriptions and wrapped decoding/network errors.
-  - Extracted `TimelinePager`/`TimelineDateSeparator` and moved the zoom percentage helper to
-    `ZoomManager` so the logic is pure and testable without a window.
-  - Added `ChatViewModel.swift`, `TimelineSupport.swift` and `ZoomManager.swift` to the test target,
-    and made `test.sh` build for the host architecture so it matches the app module built by
-    `build.sh`.
-  - Suite grew from 27 to 48 tests (51 after the logging tests); all pass and the workspace still renders correctly.
-- [x] **Add CI** (GitHub Actions) — `S`
-  - Added `.github/workflows/ci.yml` with a `build-test` job (toolchain version, `./build.sh`,
-    `./test.sh`) and a `lint` job (`./lint.sh`) on `macos-15`.
-  - Runs on pushes to `main` and on pull requests.
-- [x] **Add SwiftLint/`swift-format` config and fix the headermap warning** — `S`
-  - Added `.swift-format` (4-space indentation, 120-column lines) and `lint.sh`, which lints the
-    migrated files under `--strict`. The remaining legacy UI files can be added to `lint.sh` as they
-    are reformatted.
-  - Added `ALWAYS_SEARCH_USER_PATHS = NO` at the project level, which removes the
-    "Traditional headermap style is no longer supported" build warning.
-  - The lint allowlist and the full build are clean; all 48 tests pass.
-- [x] **Align README with reality** — `S`
-  - Re-audited the advertised flows against the code: composer send/edit/upload/autocomplete/emoji,
-    global and in-channel search (Messages/Files tabs), threads with inline replies, mentions, saved
-    posts, settings, team invite and Browse Channels are all implemented and server-backed.
-  - Corrected the remaining overclaims: the product-switcher and help menus are visual parity and do
-    not navigate to external/admin pages, and the `Aa` formatting toolbar is visual parity rather
-    than applying markdown. Everything else in the feature list matches the current behaviour.
-  - Updated the test-suite and project-structure sections for the new files and tooling.
-- [x] **Refresh `AUDIT.md`** — `S`
-  - Rewrote the 2026-11-01 audit against the current tree (14,892 Swift lines, 48 tests, Swift 6
-    complete concurrency, clean build/lint) with a finding-by-finding status table.
-  - Marked the deployment target, Keychain, HTTPS, logout, logging, composer/send, reconnect,
-    pagination, channel race, realtime insert, sidebar struct-copy, god class and concurrency
-    findings as fixed; zoom is now documented as intentional bounds scaling.
-  - While re-auditing, fixed the remaining sidebar struct-copy bug in `onAvatarLoaded` and
-    `refreshSidebarDMTitles`, so `isBotBadge`/avatar state now persists in the model.
-  - Documented the genuinely remaining work: release signing/notarization, accessibility and
-    localization, test-target hosting/coverage, and timeline/avatar performance.
-- [x] **Commit the DOM-inspection tooling** — `S`
-  - Added `tools/runjs.py` (run an ad-hoc JS snippet in the logged-in Chrome tab, chunked so large
-    results survive AppleScript reply limits), `tools/mmdrive.py` (capture a computed-style dump) and
-    `tools/dom_dump.js` (viewport, theme variables, key element metrics and a depth-limited style
-    tree).
-  - Added `tools/hud_measure.swift` to measure the native zoom pill/text bounds and padding from a
-    screenshot, and `tools/README.md` with usage, Chrome requirements and a warning not to commit
-    live dumps.
-  - Parameterized the tab matcher via `--match`/`MM_TAB_MATCH` instead of the hardcoded server URL;
-    dumps are git-ignored because they contain live message text.
-  - Verified both the JS bridge and the full dump against the live server (1440×783 viewport, 170
-    tree nodes, 31 measured elements).
-- [x] **Logging strategy** — `S`
-  - `DebugLog` now has `debug`/`info`/`warning`/`error` levels, forwards to `os.Logger` with private
-    interpolation, and uses error/warning for transport failures and reconnect events.
-  - Verbose stdout/file logging only runs in Debug builds or with `--debug-log` /
-    `debugFileLogging`; Release builds persist only warnings and errors through unified logging.
-  - The temp log rotates at 1 MB into a single `.1` archive; raw payload logging remains gated
-    behind `--debug-ws`/`debugWebSocketLogging`.
-  - Added tests for level filtering, error labels and rotation (51 tests total).
+- [ ] **The test target compiles copies of app sources instead of linking the app** — `M`
+  - `project.pbxproj:185-197` lists `webservice.swift`, `KeychainHelper.swift`, `Theme.swift`,
+    `ChatViewModel.swift`, `TimelineSupport.swift` and `ZoomManager.swift` as test sources.
+    Move to a hosted unit-test bundle (`TEST_HOST`/`BUNDLE_LOADER`) and `@testable import`.
+  - Add coverage for authentication/session restore, reconnect/backoff, composer send and
+    failure/retry, drafts, WS event parsing (edit/delete/read), search, attachments,
+    thread ordering and RHS pagination. Add coverage reporting + a threshold.
+
+- [ ] **CI is Debug-only and does not report coverage** — `M`
+  - `.github/workflows/ci.yml` has no caching, no `-resultBundlePath`, no coverage, no
+    Release/universal check, no artifact upload and no notarization job. Add a Release job,
+    `lipo` verification, coverage, and a signed/notarized release workflow (manual gate).
+
+- [ ] **Lint only covers 15 migrated files** — `S`
+  - `lint.sh` explicitly excludes all `MainWindow+*` files, `AppDelegate`, `LoginWindow`,
+    `Theme`, `KeychainHelper`, `MMFont` and the project scripts. Reformat the remaining
+    files and add them to the allowlist; consider SwiftLint for rules swift-format misses.
+
+- [ ] **Docs are stale/overclaiming** — `S`
+  - `AUDIT.md` says 48/48 tests in the verification table but 51 later, and its reported
+    14,892 Swift lines is stale (the current app plus test sources total 15,053). `README.md` advertises a Files tab in the search popover that does
+    nothing, and the GIF mock cleanup is not actually complete.
+  - Update both after each release; add a "Known limitations" section for DND/mute, search
+    Files tab, threads and accessibility.
+
+- [ ] **No reproducible Release checklist** — `S`
+  - Document: bump/tag, clean build, test, lint, Release build, universal check, sign,
+    notarize, staple, `spctl` verify, DMG checksum, clean-machine launch. Add a
+    `Makefile`/script target so the steps cannot drift.
+
+---
+
+## Suggested next 14 (highest value first)
+
+1. **Fix `hitTest` on icon-only custom controls** — image icons currently swallow clicks.
+2. **Drafts + optimistic send/retry** — stops data loss and wrong-channel sends.
+3. **Realtime edit/delete/read events** — the largest correctness gap versus web.
+4. **Filter thread replies out of the channel feed** — replies currently appear inline.
+5. **Sidebar scroll + Favorites filter + per-team isolation** — broken navigation/data leak.
+6. **RHS reflow** — panels currently cover messages instead of shrinking the center column.
+7. **DND units / custom-status duration + mute/notification prefs** — status/notification bugs.
+8. **Search Files tab + result jump** — two visible dead ends.
+9. **Attachment save entitlement + upload progress/size checks** — data integrity.
+10. **Thread read state + rich reply composer + RHS pagination** — daily-use gaps.
+11. **Logout state cleanup + remove credential `NSLog`s** — security/privacy hygiene.
+12. **Sign, harden, notarize and add a Release CI job** — unblocks distribution.
+13. **Accessibility pass** (labels, focus, keyboard activation) — required for real users.
+14. **Timeline incremental updates + image caching** — before channels get large.
+
+---
+
+## Completed baseline
+
+The following were verified as implemented at this revision and should not regress. Detailed
+history is in git; the original long-form checklist lives in prior commits of this file.
+
+- **Composer:** editable editor, Return/Shift-Return, send/edit via ↑, delete, typing events,
+  insertion after a successful send (a true optimistic insert is still P1), emoji picker with
+  categories/search/recents/custom emoji, `@`/`#`/`:emoji:` autocomplete, file attach +
+  drag-and-drop, attachment chips, formatting-toolbar chrome, ⌘K/⌘F, Esc overlay handling,
+  focus traversal.
+- **Search:** real global search field, `POST /teams/{team}/posts/search`, floating results
+  with click-to-open, Messages/Files tab styling, scoped `in:` prefill from ⌘F.
+- **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels, thread
+  view with grouped replies + inline reply, draggable/persisted width, channel subtitle.
+- **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
+  badges, mentions, "New Messages" divider + floating jump pill, date separators with
+  localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,
+  attachments/image cards/lightbox, reactions chips with add/remove, hover toolbar, inline
+  markdown/code/mentions/channels/emoji/images, Giphy rendering.
+- **Realtime:** WebSocket posts, presence, typing, reaction refresh, exponential-backoff
+  reconnect, wake/network reconnect, connection banner, 15 s status backstop.
+- **Sidebar/teams:** server categories, favorites persisted as user preferences, unread/
+  mention state from memberships, live Find channel filter, add/browse/join channels, invite
+  email, create team + switch, DM creation, channel menu (info/pins/files/favorite/copy/
+  leave).
+- **Status:** custom status with duration, DND expiry normalization, status menu/checkmarks,
+  server-backed presence. (Two regressions are tracked in P1: `dnd_end_time` units and the
+  invalid `dont_clear` duration.)
+- **Themes:** Denim/Sapphire/Quartz/Indigo/Onyx + custom palettes, dark detection, app-wide
+  application, design tokens for radii/metrics/native accents.
+- **Security/packaging:** Keychain in Release (documented debug plaintext store), HTTPS/443
+  default with local-network ATS exception, scoped privacy manifest, correct icon set,
+  gated payload logging, macOS 14 deployment target, notarization still open (P0).
+- **Architecture:** `MainWindow` split into focused extensions, `ChatViewModel`, injected
+  `WebService`, `@MainActor` + Swift 6 complete concurrency, deduplicated HTTP request
+  building, dead prototype removal, centralized tokens.
+- **Tooling/tests:** 51 unit tests across URL/JSON/WS/model/timeline/zoom/errors/logging/
+  themes, CI build+test+lint, `swift-format` config, HUD measurement helper under
+  `tools/hud_measure.swift`.
 
 ---
 
 ## How to verify changes
 
 ```bash
-./build.sh                 # must succeed with no new warnings
-./test.sh                  # 51 tests: URL/JSON/WebSocket, model, timeline, zoom, errors, logging
-./run.sh                   # manual smoke test
+./build.sh      # must succeed with no new warnings
+./test.sh       # 51 tests today; keep the count rising
+./lint.sh       # swift-format --strict on the migrated allowlist
+./run.sh        # manual smoke test
 ```
 
-Smoke checklist for any change: launch → token restore → switch channels → scroll timeline →
-switch team → change presence → zoom (⌘0/⌘+/⌘−, pinch, HUD) → resize/relaunch (frame restore).
+Smoke checklist for any change: launch → token restore → switch channels/teams → type a
+draft in A, switch to B and confirm it does not follow → scroll history while a message
+arrives → send/edit/delete → react/pin/save → open Threads/Members/Files/Mentions/Saved →
+upload and download a file → set DND and confirm notifications stop → zoom (⌘0/⌘+/⌘−, pinch,
+HUD) → resize/relaunch (frame + RHS width restore) → log out and back in (no state leakage).
