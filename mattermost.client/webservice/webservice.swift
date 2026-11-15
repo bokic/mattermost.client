@@ -957,6 +957,39 @@ final class WebService: NSObject {
             body: [myId, userId]
         )
     }
+
+    /// Creates (or returns) the group message channel between the current user and multiple users (`POST /api/v4/channels/group`).
+    func createGroupChannel(userIds: [String]) async throws -> MMChannel {
+        let myId = currentUserId.isEmpty
+            ? (UserDefaults.standard.string(forKey: "currentUserId") ?? "")
+            : currentUserId
+        var allIds = userIds
+        if !myId.isEmpty && !allIds.contains(myId) {
+            allIds.append(myId)
+        }
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/channels/group",
+            method: "POST",
+            body: allIds
+        )
+    }
+
+    /// Searches users across a team or globally (`POST /api/v4/users/search`).
+    func searchUsers(term: String, teamId: String? = nil) async throws -> [MMUser] {
+        var body: [String: Any] = [
+            "term": term,
+            "allow_inactive": false
+        ]
+        if let teamId = teamId, !teamId.isEmpty {
+            body["team_id"] = teamId
+            body["in_team_id"] = teamId
+        }
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users/search",
+            method: "POST",
+            body: body
+        )
+    }
     
     func fetchUserImage(userId: String) async throws -> Data {
         guard !userId.isEmpty else {

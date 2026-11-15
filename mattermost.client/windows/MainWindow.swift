@@ -241,12 +241,24 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Direct Message picker (opened from the + in the Direct Messages header)
     let dmPickerPanel = RoundedEdgePanel()
+    let dmTitleLabel = NSTextField(labelWithString: "Direct Messages")
+    let dmCloseButton = RoundedEdgePanel()
     let dmSearchField = NSSearchField()
     let dmScroll = NSScrollView()
     let dmDoc = TimelineFlippedView()
+    let dmBottomBar = RoundedEdgePanel()
+    let dmSelectionCountLabel = NSTextField(labelWithString: "")
+    let dmStartButton = RoundedEdgePanel()
+    let dmStartButtonLabel = NSTextField(labelWithString: "Go")
     var dmUsers: [MMUser] = []
+    var dmSearchResults: [MMUser] = []
+    var selectedDMUserIds: Set<String> = []
+    var dmUsersPage: Int = 0
+    var dmHasMoreUsers: Bool = true
+    var isLoadingDMUsers: Bool = false
     var isDMPickerOpen = false
     var dmAnchorFrame: NSRect = .zero
+    var dmSearchWorkItem: DispatchWorkItem?
 
     // User profile popover
     let profilePopoverPanel = RoundedEdgePanel()

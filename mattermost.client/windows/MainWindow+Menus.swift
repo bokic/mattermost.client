@@ -891,6 +891,26 @@ extension MainWindow {
         }
     }
 
+    func invalidateDMUsers() {
+        dmUsers.removeAll()
+        dmSearchResults.removeAll()
+        selectedDMUserIds.removeAll()
+        dmUsersPage = 0
+        dmHasMoreUsers = true
+        isLoadingDMUsers = false
+        dmSearchWorkItem?.cancel()
+        dmSearchWorkItem = nil
+        if isDMPickerOpen {
+            closeDMPicker()
+        }
+    }
+
+    func existingDMChannel(for userId: String) -> MMChannel? {
+        return channelsById.values.first { ch in
+            ch.type == "D" && resolveDMTargetUserId(for: ch) == userId
+        }
+    }
+
     func setupDMPicker() {
         let dividerColor = Theme.shared.divider
         dmPickerPanel.color = Theme.shared.centerBg
@@ -906,7 +926,26 @@ extension MainWindow {
         dmPickerPanel.appearance = dmAppearance
         dmSearchField.appearance = dmAppearance
 
-        dmSearchField.placeholderString = "Search for a user"
+        dmTitleLabel.font = MMFont.font(ofSize: 14, weight: .semibold)
+        dmTitleLabel.textColor = Theme.shared.centerText
+        dmPickerPanel.addSubview(dmTitleLabel)
+
+        dmCloseButton.color = .clear
+        dmCloseButton.cornerRadius = 10
+        let closeIcon = NSImageView(frame: NSRect(x: 2, y: 2, width: 16, height: 16))
+        closeIcon.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")
+        closeIcon.contentTintColor = Theme.shared.centerTextMuted
+        dmCloseButton.addSubview(closeIcon)
+        dmCloseButton.onClick = { [weak self] in
+            self?.closeDMPicker()
+        }
+        dmCloseButton.onHoverChanged = { [weak dmCloseButton] isHovered in
+            dmCloseButton?.color = isHovered ? Theme.shared.centerHover : .clear
+            dmCloseButton?.setNeedsAppearanceUpdate()
+        }
+        dmPickerPanel.addSubview(dmCloseButton)
+
+        dmSearchField.placeholderString = "Search for people"
         dmSearchField.font = MMFont.font(ofSize: 13)
         dmSearchField.delegate = self
         dmSearchField.sendsSearchStringImmediately = true
@@ -917,6 +956,26 @@ extension MainWindow {
         dmScroll.autohidesScrollers = true
         dmScroll.documentView = dmDoc
         dmPickerPanel.addSubview(dmScroll)
+
+        dmBottomBar.color = Theme.shared.centerBg
+        dmBottomBar.borderWidth = 1
+        dmBottomBar.borderColor = dividerColor
+
+        dmSelectionCountLabel.font = MMFont.font(ofSize: 12)
+        dmSelectionCountLabel.textColor = Theme.shared.centerTextMuted
+        dmBottomBar.addSubview(dmSelectionCountLabel)
+
+        dmStartButton.cornerRadius = 4
+        dmStartButton.color = Theme.shared.buttonBg
+        dmStartButtonLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+        dmStartButtonLabel.textColor = Theme.shared.buttonColor
+        dmStartButtonLabel.alignment = .center
+        dmStartButton.addSubview(dmStartButtonLabel)
+        dmStartButton.onClick = { [weak self] in
+            self?.startSelectedDMs()
+        }
+        dmBottomBar.addSubview(dmStartButton)
+        dmPickerPanel.addSubview(dmBottomBar)
 
         contentView?.addSubview(dmPickerPanel)
     }
@@ -940,18 +999,32 @@ extension MainWindow {
         }
         dmAnchorFrame = anchorRect
 
-        let width: CGFloat = 300
-        let height = min(360, max(220, contentView.bounds.height - 140))
+        let width: CGFloat = 340
+        let height = min(460, max(300, contentView.bounds.height - 100))
         var x = anchorRect.maxX + 8
         var y = anchorRect.midY - height / 2
         if x + width > contentView.bounds.width - 8 {
             x = max(8, anchorRect.minX - width - 8)
         }
         y = min(max(8, y), contentView.bounds.height - height - 8)
+
         dmPickerPanel.frame = NSRect(x: x, y: y, width: width, height: height)
-        dmSearchField.frame = NSRect(x: 12, y: height - 46, width: width - 24, height: 26)
-        dmScroll.frame = NSRect(x: 0, y: 0, width: width, height: height - 58)
+        dmTitleLabel.frame = NSRect(x: 14, y: height - 32, width: width - 50, height: 20)
+        dmCloseButton.frame = NSRect(x: width - 30, y: height - 32, width: 20, height: 20)
+        dmSearchField.frame = NSRect(x: 12, y: height - 66, width: width - 24, height: 26)
+
+        let bottomBarHeight: CGFloat = 46
+        dmBottomBar.frame = NSRect(x: 0, y: 0, width: width, height: bottomBarHeight)
+        dmSelectionCountLabel.frame = NSRect(x: 12, y: 12, width: width - 110, height: 20)
+        dmStartButton.frame = NSRect(x: width - 84, y: 9, width: 72, height: 28)
+        dmStartButtonLabel.frame = NSRect(x: 0, y: 5, width: 72, height: 18)
+
+        dmScroll.frame = NSRect(x: 0, y: bottomBarHeight, width: width, height: height - 68 - bottomBarHeight)
         dmSearchField.stringValue = ""
+        dmSearchResults.removeAll()
+        selectedDMUserIds.removeAll()
+        updateDMStartButtonState()
+
         dmPickerPanel.isHidden = false
         contentView.addSubview(dmPickerPanel)
         isDMPickerOpen = true
@@ -968,29 +1041,137 @@ extension MainWindow {
         dmPickerPanel.isHidden = true
         isDMPickerOpen = false
         dmSearchField.stringValue = ""
+        dmSearchResults.removeAll()
+        selectedDMUserIds.removeAll()
+        dmSearchWorkItem?.cancel()
+        dmSearchWorkItem = nil
     }
 
-    func loadDMUsers() {
+    func userBadgeString(for user: MMUser?) -> String? {
+        guard let user = user else { return nil }
+        if isBotAccount(user) { return "BOT" }
+        let roles = (user.roles ?? "").lowercased()
+        if roles.contains("guest") { return "GUEST" }
+        return nil
+    }
+
+    func updateDMStartButtonState() {
+        let count = selectedDMUserIds.count
+        if count == 0 {
+            dmSelectionCountLabel.stringValue = "Select members"
+            dmStartButtonLabel.stringValue = "Go"
+            dmStartButton.color = Theme.shared.divider.withAlphaComponent(0.2)
+            dmStartButtonLabel.textColor = Theme.shared.centerTextMuted
+        } else if count == 1 {
+            dmSelectionCountLabel.stringValue = "1 member selected"
+            dmStartButtonLabel.stringValue = "Go"
+            dmStartButton.color = Theme.shared.buttonBg
+            dmStartButtonLabel.textColor = Theme.shared.buttonColor
+        } else {
+            dmSelectionCountLabel.stringValue = "\(count) members (up to 7)"
+            dmStartButtonLabel.stringValue = "Go (\(count))"
+            dmStartButton.color = Theme.shared.buttonBg
+            dmStartButtonLabel.textColor = Theme.shared.buttonColor
+        }
+        dmStartButton.setNeedsAppearanceUpdate()
+    }
+
+    func loadDMUsers(page: Int = 0) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+              let team = activeTeam, !isLoadingDMUsers else { return }
+        isLoadingDMUsers = true
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let users = try? await ws.fetchTeamUsers(teamId: team.id) else {
-                self.dmUsers = []
-                self.renderDMUsers(empty: "Could not load users")
+            defer { self.isLoadingDMUsers = false }
+            let pageSize = 60
+            guard let users = try? await ws.fetchTeamUsers(teamId: team.id, page: page, perPage: pageSize) else {
+                if page == 0 {
+                    self.dmUsers = []
+                    self.renderDMUsers(empty: "Could not load users")
+                }
                 return
             }
             let myId = self.currentUser?.id ?? ws.currentUserId
-            for user in users {
+            let filteredUsers = users.filter { $0.id != myId }
+            for user in filteredUsers {
                 self.usersById[user.id] = user
                 self.usersByUsername[user.username.lowercased()] = user
                 self.fetchAvatarIfNeeded(for: user.id)
             }
-            self.dmUsers = users
-                .filter { $0.id != myId }
-                .sorted { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+            if page == 0 {
+                self.dmUsers = filteredUsers
+            } else {
+                var existingIds = Set(self.dmUsers.map(\.id))
+                for u in filteredUsers where !existingIds.contains(u.id) {
+                    self.dmUsers.append(u)
+                    existingIds.insert(u.id)
+                }
+            }
+            self.dmUsersPage = page
+            self.dmHasMoreUsers = (users.count >= pageSize)
+
+            // Fetch presence for new users
+            let unknownStatusIds = filteredUsers.map(\.id).filter { self.userStatusById[$0] == nil }
+            if !unknownStatusIds.isEmpty {
+                if let statuses = try? await ws.fetchUserStatuses(userIds: unknownStatusIds) {
+                    for s in statuses {
+                        let normalized = self.normalizedStatus(s.status, dndEndTime: s.dnd_end_time)
+                        self.userStatusById[s.user_id] = normalized
+                    }
+                }
+            }
+
             self.renderDMUsers()
         }
+    }
+
+    func loadMoreDMUsers() {
+        guard !isLoadingDMUsers, dmHasMoreUsers,
+              dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        loadDMUsers(page: dmUsersPage + 1)
+    }
+
+    func handleDMSearchChanged() {
+        let query = dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        dmSearchWorkItem?.cancel()
+        if query.isEmpty {
+            dmSearchResults.removeAll()
+            renderDMUsers()
+            return
+        }
+        // Immediate local filter rendering
+        renderDMUsers()
+
+        // Debounced server search
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self = self,
+                      let ws = self.webService, ws.isLogged(),
+                      let team = self.activeTeam else { return }
+                let currentQuery = self.dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard currentQuery == query, !query.isEmpty else { return }
+                guard let results = try? await ws.searchUsers(term: query, teamId: team.id) else { return }
+                let myId = self.currentUser?.id ?? ws.currentUserId
+                let otherUsers = results.filter { $0.id != myId }
+                for u in otherUsers {
+                    self.usersById[u.id] = u
+                    self.usersByUsername[u.username.lowercased()] = u
+                    self.fetchAvatarIfNeeded(for: u.id)
+                }
+                // Fetch presence for search results
+                let unknownIds = otherUsers.map(\.id).filter { self.userStatusById[$0] == nil }
+                if !unknownIds.isEmpty, let statuses = try? await ws.fetchUserStatuses(userIds: unknownIds) {
+                    for s in statuses {
+                        let normalized = self.normalizedStatus(s.status, dndEndTime: s.dnd_end_time)
+                        self.userStatusById[s.user_id] = normalized
+                    }
+                }
+                self.dmSearchResults = otherUsers
+                self.renderDMUsers()
+            }
+        }
+        dmSearchWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
     }
 
     func renderDMUsers(empty: String = "No users found") {
@@ -998,20 +1179,35 @@ extension MainWindow {
         dmDoc.subviews.forEach { $0.removeFromSuperview() }
 
         let query = dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let filtered = dmUsers.filter { user in
-            guard !query.isEmpty else { return true }
-            let haystack = [
-                user.username,
-                user.first_name ?? "",
-                user.last_name ?? "",
-                user.nickname ?? ""
-            ].joined(separator: " ").lowercased()
-            return haystack.contains(query)
+        let sourceList: [MMUser]
+        if !query.isEmpty {
+            var seenIds = Set<String>()
+            var merged: [MMUser] = []
+            let localFiltered = dmUsers.filter { user in
+                let haystack = [
+                    user.username,
+                    user.first_name ?? "",
+                    user.last_name ?? "",
+                    user.nickname ?? ""
+                ].joined(separator: " ").lowercased()
+                return haystack.contains(query)
+            }
+            for u in localFiltered {
+                seenIds.insert(u.id)
+                merged.append(u)
+            }
+            for u in dmSearchResults where !seenIds.contains(u.id) {
+                seenIds.insert(u.id)
+                merged.append(u)
+            }
+            sourceList = merged
+        } else {
+            sourceList = dmUsers
         }
 
         var y: CGFloat = 6
-        if filtered.isEmpty {
-            let label = NSTextField(labelWithString: empty)
+        if sourceList.isEmpty {
+            let label = NSTextField(labelWithString: isLoadingDMUsers ? "Loading members…" : empty)
             label.font = MMFont.font(ofSize: 13)
             label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
@@ -1023,16 +1219,38 @@ extension MainWindow {
             return
         }
 
-        for user in filtered {
+        for user in sourceList {
+            let isSelected = selectedDMUserIds.contains(user.id)
+            let existingChannel = existingDMChannel(for: user.id)
+
             let row = RoundedEdgePanel()
             row.cornerRadius = MMRadius.control
-            row.color = .clear
+            row.color = isSelected ? Theme.shared.centerHover : .clear
             row.frame = NSRect(x: 6, y: y, width: max(0, width - 12), height: 44)
 
+            // Selection checkbox/circle on left
+            let checkCircle = RoundedEdgePanel(frame: NSRect(x: 8, y: 14, width: 16, height: 16))
+            checkCircle.cornerRadius = 8
+            if isSelected {
+                checkCircle.color = Theme.shared.buttonBg
+                let checkMark = NSTextField(labelWithString: "✓")
+                checkMark.font = MMFont.font(ofSize: 11, weight: .bold)
+                checkMark.textColor = Theme.shared.buttonColor
+                checkMark.alignment = .center
+                checkMark.frame = NSRect(x: 0, y: 0, width: 16, height: 16)
+                checkCircle.addSubview(checkMark)
+            } else {
+                checkCircle.color = .clear
+                checkCircle.borderWidth = 1.5
+                checkCircle.borderColor = Theme.shared.divider
+            }
+            row.addSubview(checkCircle)
+
+            // Avatar panel
             let avatarPanel = RoundedEdgePanel()
             avatarPanel.cornerRadius = MMRadius.large
             avatarPanel.clipContentToBounds = true
-            avatarPanel.frame = NSRect(x: 8, y: 8, width: MMMetric.avatarMenu, height: MMMetric.avatarMenu)
+            avatarPanel.frame = NSRect(x: 30, y: 8, width: MMMetric.avatarMenu, height: MMMetric.avatarMenu)
             if let avatar = userAvatarsById[user.id] {
                 avatarPanel.color = .clear
                 let imageView = NSImageView(frame: NSRect(origin: .zero, size: avatarPanel.frame.size))
@@ -1053,42 +1271,170 @@ extension MainWindow {
             }
             row.addSubview(avatarPanel)
 
+            // Presence dot
+            let presenceStatus = userStatusById[user.id] ?? "offline"
+            let dot = RoundedEdgePanel(frame: NSRect(x: 50, y: 8, width: 9, height: 9))
+            dot.cornerRadius = 4.5
+            dot.color = statusColor(for: presenceStatus)
+            dot.borderWidth = 1.5
+            dot.borderColor = Theme.shared.centerBg
+            row.addSubview(dot)
+
+            // Username and badge
+            let nameX: CGFloat = 66
+            let availableTextWidth = max(0, width - nameX - (existingChannel != nil ? 70 : 20))
             let name = NSTextField(labelWithString: user.username)
             name.font = MMFont.font(ofSize: 13, weight: .semibold)
             name.textColor = Theme.shared.centerText
             name.isEditable = false
             name.isSelectable = false
-            name.frame = NSRect(x: 44, y: 5, width: max(0, width - 70), height: 17)
+            name.sizeToFit()
+            let nameWidth = min(name.frame.width, availableTextWidth - 50)
+            name.frame = NSRect(x: nameX, y: 22, width: nameWidth, height: 17)
             row.addSubview(name)
 
+            // Bot / Guest badge
+            if let badgeText = userBadgeString(for: user) {
+                let badgePanel = RoundedEdgePanel(frame: NSRect(x: nameX + nameWidth + 6, y: 23, width: 38, height: 15))
+                badgePanel.cornerRadius = 3
+                badgePanel.color = Theme.shared.divider.withAlphaComponent(0.4)
+                let badgeLabel = NSTextField(labelWithString: badgeText)
+                badgeLabel.font = MMFont.font(ofSize: 9, weight: .bold)
+                badgeLabel.textColor = Theme.shared.centerTextMuted
+                badgeLabel.alignment = NSTextAlignment.center
+                badgeLabel.frame = NSRect(x: 0, y: 1, width: 38, height: 13)
+                badgePanel.addSubview(badgeLabel)
+                row.addSubview(badgePanel)
+            }
+
+            // Subtitle: Full name and existing conversation indicator
             let fullName = [user.first_name, user.last_name].compactMap { $0 }.joined(separator: " ")
-            if !fullName.isEmpty {
-                let subtitle = NSTextField(labelWithString: fullName)
+            let subtitleText: String
+            if existingChannel != nil {
+                subtitleText = fullName.isEmpty ? "Existing conversation" : "\(fullName) • Existing conversation"
+            } else {
+                subtitleText = fullName
+            }
+            if !subtitleText.isEmpty {
+                let subtitle = NSTextField(labelWithString: subtitleText)
                 subtitle.font = MMFont.font(ofSize: 11)
-                subtitle.textColor = Theme.shared.centerTextMuted
+                subtitle.textColor = existingChannel != nil ? Theme.shared.linkColor : Theme.shared.centerTextMuted
                 subtitle.isEditable = false
                 subtitle.isSelectable = false
-                subtitle.frame = NSRect(x: 44, y: 22, width: max(0, width - 70), height: 15)
+                subtitle.frame = NSRect(x: nameX, y: 5, width: max(0, width - nameX - 24), height: 15)
                 row.addSubview(subtitle)
             }
 
-            row.onHoverChanged = { [weak row] isHovered in
-                row?.color = isHovered
+            // Hover styling
+            row.onHoverChanged = { [weak self, weak row] isHovered in
+                guard let self = self else { return }
+                let currentlySelected = self.selectedDMUserIds.contains(user.id)
+                row?.color = currentlySelected
                     ? Theme.shared.centerHover
-                    : .clear
+                    : (isHovered ? Theme.shared.centerHover.withAlphaComponent(0.6) : .clear)
                 row?.setNeedsAppearanceUpdate()
             }
+
+            // Click toggles selection
             row.onClick = { [weak self] in
-                self?.startDirectMessage(with: user)
+                guard let self = self else { return }
+                if self.selectedDMUserIds.contains(user.id) {
+                    self.selectedDMUserIds.remove(user.id)
+                } else {
+                    if self.selectedDMUserIds.count >= 7 {
+                        self.showInfoAlert("Group direct messages can include up to 7 people.")
+                        return
+                    }
+                    self.selectedDMUserIds.insert(user.id)
+                }
+                self.updateDMStartButtonState()
+                self.renderDMUsers()
             }
+
             dmDoc.addSubview(row)
             y += 48
+        }
+
+        // Pagination "Load more members" button
+        if query.isEmpty && dmHasMoreUsers {
+            let loadMoreRow = RoundedEdgePanel(frame: NSRect(x: 12, y: y, width: max(0, width - 24), height: 30))
+            loadMoreRow.cornerRadius = 4
+            loadMoreRow.color = Theme.shared.centerHover.withAlphaComponent(0.4)
+            let loadMoreLabel = NSTextField(labelWithString: isLoadingDMUsers ? "Loading…" : "Load more members")
+            loadMoreLabel.font = MMFont.font(ofSize: 12, weight: .medium)
+            loadMoreLabel.textColor = Theme.shared.linkColor
+            loadMoreLabel.alignment = NSTextAlignment.center
+            loadMoreLabel.frame = NSRect(x: 0, y: 6, width: max(0, width - 24), height: 18)
+            loadMoreRow.addSubview(loadMoreLabel)
+            loadMoreRow.onClick = { [weak self] in
+                self?.loadMoreDMUsers()
+            }
+            dmDoc.addSubview(loadMoreRow)
+            y += 36
         }
 
         dmDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y + 6, 1))
     }
 
+    func startSelectedDMs() {
+        guard !selectedDMUserIds.isEmpty else { return }
+        let selectedIds = Array(selectedDMUserIds)
+        if selectedIds.count == 1 {
+            let targetId = selectedIds[0]
+            if let user = usersById[targetId] ?? dmUsers.first(where: { $0.id == targetId }) ?? dmSearchResults.first(where: { $0.id == targetId }) {
+                startDirectMessage(with: user)
+            }
+        } else {
+            startGroupMessage(with: selectedIds)
+        }
+    }
+
+    func startSelectedDMsOrFirstFiltered() {
+        if !selectedDMUserIds.isEmpty {
+            startSelectedDMs()
+            return
+        }
+        let query = dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let matching = dmSearchResults.first ?? dmUsers.first(where: { u in
+            guard !query.isEmpty else { return true }
+            let haystack = [u.username, u.first_name ?? "", u.last_name ?? "", u.nickname ?? ""].joined(separator: " ").lowercased()
+            return haystack.contains(query)
+        })
+        if let first = matching {
+            startDirectMessage(with: first)
+        }
+    }
+
+    func startGroupMessage(with userIds: [String]) {
+        guard let ws = webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let channel = try await ws.createGroupChannel(userIds: userIds)
+                self.channelsById[channel.id] = channel
+                self.channelsByName[channel.name.lowercased()] = channel
+                if let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
+                }
+                self.closeDMPicker()
+                self.selectedSidebarItemId = channel.id
+                self.updateSidebarSelectionAppearance()
+                self.loadChannelPosts(forSidebarItemId: channel.id)
+            } catch {
+                self.showInfoAlert("Could not start group message: \(error.localizedDescription)")
+            }
+        }
+    }
+
     func startDirectMessage(with user: MMUser) {
+        if let existing = existingDMChannel(for: user.id) {
+            closeDMPicker()
+            selectedSidebarItemId = existing.id
+            updateSidebarSelectionAppearance()
+            loadChannelPosts(forSidebarItemId: existing.id)
+            return
+        }
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         Task { @MainActor [weak self] in

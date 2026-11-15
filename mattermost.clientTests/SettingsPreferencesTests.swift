@@ -428,4 +428,101 @@ final class SettingsPreferencesTests: XCTestCase {
         XCTAssertEqual(durationPopup.indexOfSelectedItem, 2)
         XCTAssertTrue(datePicker.isHidden)
     }
+
+    func testExistingDMChannelLookup() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let userJson = """
+        {"id": "myUser", "username": "me"}
+        """.data(using: .utf8)!
+        window.currentUser = try! JSONDecoder().decode(MMUser.self, from: userJson)
+
+        let chJson = """
+        {"id": "dm1", "type": "D", "name": "myUser__otherUser", "display_name": "otherUser"}
+        """.data(using: .utf8)!
+        let ch = try! JSONDecoder().decode(MMChannel.self, from: chJson)
+        window.channelsById[ch.id] = ch
+
+        XCTAssertEqual(window.existingDMChannel(for: "otherUser")?.id, "dm1")
+        XCTAssertNil(window.existingDMChannel(for: "nonexistentUser"))
+    }
+
+    func testUserBadgeString() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let botJson = """
+        {"id": "b1", "username": "botty", "is_bot": true}
+        """.data(using: .utf8)!
+        let bot = try! JSONDecoder().decode(MMUser.self, from: botJson)
+        XCTAssertEqual(window.userBadgeString(for: bot), "BOT")
+
+        let guestJson = """
+        {"id": "g1", "username": "guest_user", "roles": "system_guest"}
+        """.data(using: .utf8)!
+        let guest = try! JSONDecoder().decode(MMUser.self, from: guestJson)
+        XCTAssertEqual(window.userBadgeString(for: guest), "GUEST")
+
+        let regularJson = """
+        {"id": "u1", "username": "alice", "roles": "system_user"}
+        """.data(using: .utf8)!
+        let regular = try! JSONDecoder().decode(MMUser.self, from: regularJson)
+        XCTAssertNil(window.userBadgeString(for: regular))
+    }
+
+    func testInvalidateDMUsers() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let u1 = try! JSONDecoder().decode(MMUser.self, from: "{\"id\":\"u1\",\"username\":\"alice\"}".data(using: .utf8)!)
+        window.dmUsers = [u1]
+        window.dmSearchResults = [u1]
+        window.selectedDMUserIds = ["u1"]
+        window.dmUsersPage = 3
+        window.dmHasMoreUsers = false
+
+        window.invalidateDMUsers()
+
+        XCTAssertTrue(window.dmUsers.isEmpty)
+        XCTAssertTrue(window.dmSearchResults.isEmpty)
+        XCTAssertTrue(window.selectedDMUserIds.isEmpty)
+        XCTAssertEqual(window.dmUsersPage, 0)
+        XCTAssertTrue(window.dmHasMoreUsers)
+    }
+
+    func testTeamSwitchInvalidatesDMUsers() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let teamA = try! JSONDecoder().decode(MMTeam.self, from: "{\"id\":\"tA\",\"name\":\"team-a\",\"display_name\":\"Team A\"}".data(using: .utf8)!)
+        let teamB = try! JSONDecoder().decode(MMTeam.self, from: "{\"id\":\"tB\",\"name\":\"team-b\",\"display_name\":\"Team B\"}".data(using: .utf8)!)
+
+        window.activeTeam = teamA
+        let u1 = try! JSONDecoder().decode(MMUser.self, from: "{\"id\":\"u1\",\"username\":\"alice\"}".data(using: .utf8)!)
+        window.dmUsers = [u1]
+
+        window.updateTeamHeader(with: teamB)
+        XCTAssertTrue(window.dmUsers.isEmpty)
+    }
+
+    func testUpdateDMStartButtonState() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        window.selectedDMUserIds.removeAll()
+        window.updateDMStartButtonState()
+        XCTAssertEqual(window.dmSelectionCountLabel.stringValue, "Select members")
+        XCTAssertEqual(window.dmStartButtonLabel.stringValue, "Go")
+
+        window.selectedDMUserIds = ["u1"]
+        window.updateDMStartButtonState()
+        XCTAssertEqual(window.dmSelectionCountLabel.stringValue, "1 member selected")
+        XCTAssertEqual(window.dmStartButtonLabel.stringValue, "Go")
+
+        window.selectedDMUserIds = ["u1", "u2", "u3"]
+        window.updateDMStartButtonState()
+        XCTAssertEqual(window.dmSelectionCountLabel.stringValue, "3 members (up to 7)")
+        XCTAssertEqual(window.dmStartButtonLabel.stringValue, "Go (3)")
+    }
 }

@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **163/163 pass** |
+| `./test.sh` | **169/169 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,14 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **Direct messages are 1:1 and picker-limited** — `M`
-  - `POST /channels/direct` only (`MainWindow+Menus.swift:1003-1023`), picker fetches the
-    first 100 team users (`:883-904`) with no pagination, presence, bot/guest distinction, or
-    existing-DM state. No group DM creation, and `dmUsers` is not invalidated on team switch
-    (`:869-873`), so the previous team's users remain until relaunch.
-  - Add search pagination, presence dots, an existing-conversation shortcut, and group DM
-    support where permitted.
 
 - [ ] **Browse Channels only lists public channels** — `S`
   - `loadBrowseChannels` filters `type == "O"` (`MainWindow+RightPanel.swift:688-724`), so

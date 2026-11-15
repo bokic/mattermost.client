@@ -1398,6 +1398,9 @@ extension MainWindow {
     }
 
     func updateTeamHeader(with team: MMTeam) {
+        if activeTeam?.id != team.id {
+            invalidateDMUsers()
+        }
         self.activeTeam = team
         self.teamHeaderLabel.stringValue = team.display_name.isEmpty ? team.name : team.display_name
         self.layoutTeamHeader()
@@ -1409,6 +1412,7 @@ extension MainWindow {
             setTeamMenuOpen(false)
             return
         }
+        invalidateDMUsers()
         let previousTeam = activeTeam
         teamSwitchToken += 1
         let token = teamSwitchToken

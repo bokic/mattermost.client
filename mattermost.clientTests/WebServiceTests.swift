@@ -553,4 +553,13 @@ final class WebServiceTests: XCTestCase {
         let meUrl = ws.buildURL(path: "/api/v4/users/me/status")
         XCTAssertEqual(meUrl?.absoluteString, "https://chat.example.com:8065/api/v4/users/me/status")
     }
+
+    func testGroupChannelAndUserSearchURLs() {
+        let ws = WebService(host: "chat.example.com", port: 8065)
+        let groupUrl = ws.buildURL(path: "/api/v4/channels/group")
+        XCTAssertEqual(groupUrl?.absoluteString, "https://chat.example.com:8065/api/v4/channels/group")
+
+        let searchUrl = ws.buildURL(path: "/api/v4/users/search")
+        XCTAssertEqual(searchUrl?.absoluteString, "https://chat.example.com:8065/api/v4/users/search")
+    }
 }

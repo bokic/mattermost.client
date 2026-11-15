@@ -1436,7 +1436,7 @@ extension MainWindow {
             return
         }
         if (notification.object as? NSTextField) === dmSearchField {
-            renderDMUsers()
+            handleDMSearchChanged()
             return
         }
         if (notification.object as? NSTextField) === searchPopoverInputLabel {
