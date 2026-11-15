@@ -5,8 +5,9 @@
 
 import AppKit
 import XCTest
+
 #if canImport(mattermost_client)
-@testable import mattermost_client
+    @testable import mattermost_client
 #endif
 
 @MainActor
@@ -43,7 +44,7 @@ final class ThemeTests: XCTestCase {
             "centerChannelColor": "#eeeeee",
             "buttonBg": "#ff0000",
             "linkColor": "#00ff00",
-            "mentionHighlightBg": "#123456"
+            "mentionHighlightBg": "#123456",
         ])
         XCTAssertTrue(theme.isDark)
         XCTAssertEqual(components(theme.sidebarBg).0, CGFloat(0x11) / 255, accuracy: 0.01)
@@ -55,7 +56,7 @@ final class ThemeTests: XCTestCase {
     func testPreferenceSelectionUsesTeamThenGlobalTheme() {
         let preferences: [[String: String]] = [
             ["category": "theme", "name": "", "value": #"{"type":"Denim"}"#],
-            ["category": "theme", "name": "team1", "value": #"{"type":"Onyx"}"#]
+            ["category": "theme", "name": "team1", "value": #"{"type":"Onyx"}"#],
         ]
 
         ThemeManager.shared.apply(preferences: preferences, teamId: "team1")

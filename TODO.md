@@ -504,8 +504,17 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     and made `test.sh` build for the host architecture so it matches the app module built by
     `build.sh`.
   - Suite grew from 27 to 48 tests; all pass and the workspace still renders correctly.
-- [ ] **Add CI** (GitHub Actions): `./build.sh`, `./test.sh`, plus lint. — `S`
-- [ ] **Add SwiftLint/`swift-format` config** and fix the project headermap warning. — `S`
+- [x] **Add CI** (GitHub Actions) — `S`
+  - Added `.github/workflows/ci.yml` with a `build-test` job (toolchain version, `./build.sh`,
+    `./test.sh`) and a `lint` job (`./lint.sh`) on `macos-15`.
+  - Runs on pushes to `main` and on pull requests.
+- [x] **Add SwiftLint/`swift-format` config and fix the headermap warning** — `S`
+  - Added `.swift-format` (4-space indentation, 120-column lines) and `lint.sh`, which lints the
+    migrated files under `--strict`. The remaining legacy UI files can be added to `lint.sh` as they
+    are reformatted.
+  - Added `ALWAYS_SEARCH_USER_PATHS = NO` at the project level, which removes the
+    "Traditional headermap style is no longer supported" build warning.
+  - The lint allowlist and the full build are clean; all 48 tests pass.
 - [ ] **Align README with reality** — it currently advertises working composer, search, threads,
   mentions, saved posts, settings and invite flows. — `S`
 - [ ] **Refresh or archive `AUDIT.md`** (dated 2026-11-01, some findings fixed). — `S`

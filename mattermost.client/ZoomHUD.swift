@@ -118,15 +118,17 @@ final class ZoomHUD {
 
     private func hide() {
         guard let panel = panel, panel.alphaValue > 0 else { return }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.25
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            MainActor.assumeIsolated {
-                panel.isHidden = true
-                panel.alphaValue = 0
-            }
-        })
+        NSAnimationContext.runAnimationGroup(
+            { context in
+                context.duration = 0.25
+                panel.animator().alphaValue = 0
+            },
+            completionHandler: {
+                MainActor.assumeIsolated {
+                    panel.isHidden = true
+                    panel.alphaValue = 0
+                }
+            })
     }
 
     private func makePanel() -> ZoomHUDPanel {

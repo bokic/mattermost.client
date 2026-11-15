@@ -4,8 +4,9 @@
 //
 
 import XCTest
+
 #if canImport(mattermost_client)
-@testable import mattermost_client
+    @testable import mattermost_client
 #endif
 
 final class WebServiceErrorTests: XCTestCase {
@@ -38,10 +39,12 @@ final class WebServiceErrorTests: XCTestCase {
     }
 
     func testWrappedErrorsKeepDescription() {
-        let decoding = WebServiceError.decodingError(NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "bad json"]))
+        let decoding = WebServiceError.decodingError(
+            NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "bad json"]))
         XCTAssertEqual(decoding.errorDescription, "Failed to decode server response: bad json")
 
-        let network = WebServiceError.networkError(NSError(domain: "test", code: 2, userInfo: [NSLocalizedDescriptionKey: "offline"]))
+        let network = WebServiceError.networkError(
+            NSError(domain: "test", code: 2, userInfo: [NSLocalizedDescriptionKey: "offline"]))
         XCTAssertEqual(network.errorDescription, "Network error: offline")
     }
 }

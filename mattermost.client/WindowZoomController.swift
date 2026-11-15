@@ -77,8 +77,9 @@ final class WindowZoomController {
 
     func apply(_ factor: CGFloat, showHUD: Bool = false) {
         guard factor > 0,
-              let window = window,
-              let contentView = window.contentView else { return }
+            let window = window,
+            let contentView = window.contentView
+        else { return }
 
         contentView.bounds = NSRect(
             x: 0,

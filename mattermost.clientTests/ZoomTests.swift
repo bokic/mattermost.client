@@ -4,8 +4,9 @@
 //
 
 import XCTest
+
 #if canImport(mattermost_client)
-@testable import mattermost_client
+    @testable import mattermost_client
 #endif
 
 @MainActor

@@ -135,6 +135,9 @@ mattermost.client/
 ├── build.sh                                    # Compiles the debug .app bundle
 ├── run.sh                                      # Launches the compiled application
 ├── test.sh                                     # Runs the unit test suite via xcrun xctest
+├── lint.sh                                     # swift-format lint for migrated source files
+├── .swift-format                               # swift-format configuration (4-space indent)
+├── .github/workflows/ci.yml                    # Build, test and lint on macOS runners
 ├── build_release.sh                            # Builds Release build and packages DMG installer
 ├── LICENSE                                     # MIT License
 ├── README.md                                   # Project documentation
@@ -144,6 +147,8 @@ mattermost.client/
 │   ├── AppDelegate.swift                       # Lifecycle, status bar item, and window controller
 │   ├── KeychainHelper.swift                    # Sandboxed persistent credential and token storage
 │   ├── ChatViewModel.swift                     # Live workspace state (REST/WebSocket data model)
+│   ├── DesignTokens.swift                      # Shared radii, metrics and native accents
+│   ├── TimelineSupport.swift                   # Timeline pagination and date separators
 │   ├── Theme.swift                             # Server theme parsing and palettes
 │   ├── mattermost_client.entitlements          # App Sandbox entitlements and network permissions
 │   ├── webservice/

@@ -4,8 +4,9 @@
 //
 
 import XCTest
+
 #if canImport(mattermost_client)
-@testable import mattermost_client
+    @testable import mattermost_client
 #endif
 
 @MainActor
@@ -16,11 +17,11 @@ final class TimelineSupportTests: XCTestCase {
     func testMergeSortsAndDeduplicatesOlderPage() {
         let existing = [
             makePost(id: "c", createAt: 300),
-            makePost(id: "a", createAt: 100)
+            makePost(id: "a", createAt: 100),
         ]
         let older = [
             makePost(id: "b", createAt: 200),
-            makePost(id: "a", createAt: 100)
+            makePost(id: "a", createAt: 100),
         ]
 
         let page = TimelinePager.merge(existing: existing, older: older, pageSize: 2)
@@ -55,7 +56,7 @@ final class TimelineSupportTests: XCTestCase {
     func testDateStyleIsRelativeForTodayAndYesterday() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let now = Date(timeIntervalSince1970: 1_700_000_000) // 2023-11-14 22:13:20 UTC
+        let now = Date(timeIntervalSince1970: 1_700_000_000)  // 2023-11-14 22:13:20 UTC
 
         XCTAssertEqual(
             TimelineDateSeparator.style(for: now, now: now, calendar: calendar),

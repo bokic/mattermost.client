@@ -4,8 +4,9 @@
 //
 
 import XCTest
+
 #if canImport(mattermost_client)
-@testable import mattermost_client
+    @testable import mattermost_client
 #endif
 
 @MainActor
@@ -18,13 +19,13 @@ final class WebServiceTests: XCTestCase {
         let url = ws.buildURL(path: "/api/v4/users/me")
         XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/users/me")
     }
-    
+
     func testBuildURLDefaultsToHTTPSAndNoExplicitPort() {
         let ws = WebService(host: "chat.example.com", port: 0)
         let url = ws.buildURL(path: "/api/v4/users/me")
         XCTAssertEqual(url?.absoluteString, "https://chat.example.com/api/v4/users/me")
     }
-    
+
     func testBuildURLRejectsUnsupportedScheme() {
         let ws = WebService(host: "ftp://chat.example.com", port: 0)
         XCTAssertNil(ws.buildURL(path: "/api/v4/users/me"))
@@ -40,10 +41,11 @@ final class WebServiceTests: XCTestCase {
         let ws = WebService(host: "chat.example.com", port: 8065)
         let queryItems = [
             URLQueryItem(name: "page", value: "0"),
-            URLQueryItem(name: "per_page", value: "60")
+            URLQueryItem(name: "per_page", value: "60"),
         ]
         let url = ws.buildURL(path: "/api/v4/channels/channel123/posts", queryItems: queryItems)
-        XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/channels/channel123/posts?page=0&per_page=60")
+        XCTAssertEqual(
+            url?.absoluteString, "https://chat.example.com:8065/api/v4/channels/channel123/posts?page=0&per_page=60")
     }
 
     func testBuildWebSocketURLUsesWSAndWSSSchemes() {
@@ -71,33 +73,34 @@ final class WebServiceTests: XCTestCase {
     func testBuildUserImageURL() {
         let ws = WebService(host: "chat.example.com", port: 8065)
         let url = ws.buildURL(path: "/api/v4/users/eb9f11xqsjdsf83d1t5cn7e3hy/image")
-        XCTAssertEqual(url?.absoluteString, "https://chat.example.com:8065/api/v4/users/eb9f11xqsjdsf83d1t5cn7e3hy/image")
+        XCTAssertEqual(
+            url?.absoluteString, "https://chat.example.com:8065/api/v4/users/eb9f11xqsjdsf83d1t5cn7e3hy/image")
     }
 
     // MARK: - JSON Decoding Tests
 
     func testDecodeLoginWebService() throws {
         let json = """
-        {
-            "id": "u12345",
-            "create_at": 1700000000000,
-            "username": "boris",
-            "first_name": "Boris",
-            "last_name": "Barbulovski",
-            "email": "boris@example.com",
-            "roles": "system_admin system_user",
-            "notify_props": {
-                "desktop": "all",
-                "desktop_sound": "true",
-                "push": "mention"
-            },
-            "timezone": {
-                "useAutomaticTimezone": "true",
-                "automaticTimezone": "Europe/Skopje",
-                "manualTimezone": ""
+            {
+                "id": "u12345",
+                "create_at": 1700000000000,
+                "username": "boris",
+                "first_name": "Boris",
+                "last_name": "Barbulovski",
+                "email": "boris@example.com",
+                "roles": "system_admin system_user",
+                "notify_props": {
+                    "desktop": "all",
+                    "desktop_sound": "true",
+                    "push": "mention"
+                },
+                "timezone": {
+                    "useAutomaticTimezone": "true",
+                    "automaticTimezone": "Europe/Skopje",
+                    "manualTimezone": ""
+                }
             }
-        }
-        """.data(using: .utf8)!
+            """.data(using: .utf8)!
 
         let user = try JSONDecoder().decode(LoginWebService.self, from: json)
         XCTAssertEqual(user.id, "u12345")
@@ -109,16 +112,16 @@ final class WebServiceTests: XCTestCase {
 
     func testDecodeMMTeamsAndChannels() throws {
         let teamsJSON = """
-        [
-            {
-                "id": "team_none_id",
-                "display_name": "None",
-                "name": "none",
-                "type": "O",
-                "allow_open_invite": true
-            }
-        ]
-        """.data(using: .utf8)!
+            [
+                {
+                    "id": "team_none_id",
+                    "display_name": "None",
+                    "name": "none",
+                    "type": "O",
+                    "allow_open_invite": true
+                }
+            ]
+            """.data(using: .utf8)!
 
         let teams = try JSONDecoder().decode([MMTeam].self, from: teamsJSON)
         XCTAssertEqual(teams.count, 1)
@@ -126,17 +129,17 @@ final class WebServiceTests: XCTestCase {
         XCTAssertEqual(teams.first?.display_name, "None")
 
         let channelsJSON = """
-        [
-            {
-                "id": "ch_town_square",
-                "team_id": "team_none_id",
-                "type": "O",
-                "display_name": "Town Square",
-                "name": "town-square",
-                "total_msg_count": 2
-            }
-        ]
-        """.data(using: .utf8)!
+            [
+                {
+                    "id": "ch_town_square",
+                    "team_id": "team_none_id",
+                    "type": "O",
+                    "display_name": "Town Square",
+                    "name": "town-square",
+                    "total_msg_count": 2
+                }
+            ]
+            """.data(using: .utf8)!
 
         let channels = try JSONDecoder().decode([MMChannel].self, from: channelsJSON)
         XCTAssertEqual(channels.count, 1)
@@ -147,17 +150,17 @@ final class WebServiceTests: XCTestCase {
 
     func testDecodeDirectMessageChannelWithUserIds() throws {
         let dmJSON = """
-        [
-            {
-                "id": "ch_dm_bot",
-                "team_id": "",
-                "type": "D",
-                "display_name": "",
-                "name": "bcmikqjebf878f8w5qweqwe__useridme",
-                "total_msg_count": 5
-            }
-        ]
-        """.data(using: .utf8)!
+            [
+                {
+                    "id": "ch_dm_bot",
+                    "team_id": "",
+                    "type": "D",
+                    "display_name": "",
+                    "name": "bcmikqjebf878f8w5qweqwe__useridme",
+                    "total_msg_count": 5
+                }
+            ]
+            """.data(using: .utf8)!
 
         let channels = try JSONDecoder().decode([MMChannel].self, from: dmJSON)
         XCTAssertEqual(channels.count, 1)
@@ -168,28 +171,28 @@ final class WebServiceTests: XCTestCase {
 
     func testDecodeMMSidebarCategoriesResponse() throws {
         let categoriesJSON = """
-        {
-            "categories": [
-                {
-                    "id": "cat_custom_1",
-                    "team_id": "team_none_id",
-                    "type": "custom",
-                    "display_name": "MOJ_CAT",
-                    "collapsed": false,
-                    "channel_ids": ["ch_off_topic"]
-                },
-                {
-                    "id": "cat_channels",
-                    "team_id": "team_none_id",
-                    "type": "channels",
-                    "display_name": "CHANNELS",
-                    "collapsed": false,
-                    "channel_ids": ["ch_2", "ch_town_square"]
-                }
-            ],
-            "order": ["cat_custom_1", "cat_channels"]
-        }
-        """.data(using: .utf8)!
+            {
+                "categories": [
+                    {
+                        "id": "cat_custom_1",
+                        "team_id": "team_none_id",
+                        "type": "custom",
+                        "display_name": "MOJ_CAT",
+                        "collapsed": false,
+                        "channel_ids": ["ch_off_topic"]
+                    },
+                    {
+                        "id": "cat_channels",
+                        "team_id": "team_none_id",
+                        "type": "channels",
+                        "display_name": "CHANNELS",
+                        "collapsed": false,
+                        "channel_ids": ["ch_2", "ch_town_square"]
+                    }
+                ],
+                "order": ["cat_custom_1", "cat_channels"]
+            }
+            """.data(using: .utf8)!
 
         let response = try JSONDecoder().decode(MMSidebarCategoriesResponse.self, from: categoriesJSON)
         XCTAssertEqual(response.order, ["cat_custom_1", "cat_channels"])
@@ -200,30 +203,30 @@ final class WebServiceTests: XCTestCase {
 
     func testDecodeMMPostListAndChronologicalOrder() throws {
         let postListJSON = """
-        {
-            "order": ["post_newest", "post_oldest"],
-            "posts": {
-                "post_oldest": {
-                    "id": "post_oldest",
-                    "create_at": 1764573180000,
-                    "user_id": "sys_user",
-                    "channel_id": "ch_town_square",
-                    "message": "You joined the team.",
-                    "type": "system_join_team"
+            {
+                "order": ["post_newest", "post_oldest"],
+                "posts": {
+                    "post_oldest": {
+                        "id": "post_oldest",
+                        "create_at": 1764573180000,
+                        "user_id": "sys_user",
+                        "channel_id": "ch_town_square",
+                        "message": "You joined the team.",
+                        "type": "system_join_team"
+                    },
+                    "post_newest": {
+                        "id": "post_newest",
+                        "create_at": 1765415100000,
+                        "user_id": "u12345",
+                        "channel_id": "ch_town_square",
+                        "message": "ok",
+                        "type": ""
+                    }
                 },
-                "post_newest": {
-                    "id": "post_newest",
-                    "create_at": 1765415100000,
-                    "user_id": "u12345",
-                    "channel_id": "ch_town_square",
-                    "message": "ok",
-                    "type": ""
-                }
-            },
-            "next_post_id": "",
-            "prev_post_id": ""
-        }
-        """.data(using: .utf8)!
+                "next_post_id": "",
+                "prev_post_id": ""
+            }
+            """.data(using: .utf8)!
 
         let postList = try JSONDecoder().decode(MMPostList.self, from: postListJSON)
         let chronological = postList.chronologicalPosts
@@ -247,23 +250,25 @@ final class WebServiceTests: XCTestCase {
 
         // 2. Posted event (nested JSON string inside data.post)
         let postedPayload = """
-        {
-            "event": "posted",
-            "data": {
-                "channel_display_name": "Town Square",
-                "channel_name": "town-square",
-                "sender_name": "@boris",
-                "team_id": "team_none_id",
-                "post": "{\\"id\\":\\"p999\\",\\"create_at\\":1765415200000,\\"user_id\\":\\"u12345\\",\\"channel_id\\":\\"ch_town_square\\",\\"message\\":\\"Hello from WebSocket\\"}"
-            },
-            "broadcast": {
-                "channel_id": "ch_town_square"
-            },
-            "seq": 2
-        }
-        """
+            {
+                "event": "posted",
+                "data": {
+                    "channel_display_name": "Town Square",
+                    "channel_name": "town-square",
+                    "sender_name": "@boris",
+                    "team_id": "team_none_id",
+                    "post": "{\\"id\\":\\"p999\\",\\"create_at\\":1765415200000,\\"user_id\\":\\"u12345\\",\\"channel_id\\":\\"ch_town_square\\",\\"message\\":\\"Hello from WebSocket\\"}"
+                },
+                "broadcast": {
+                    "channel_id": "ch_town_square"
+                },
+                "seq": 2
+            }
+            """
         let postedResult = ws.parseWebSocketMessage(postedPayload)
-        if case .posted(let post, let senderName, let channelDisplayName, let channelName, let teamId) = postedResult.event {
+        if case .posted(let post, let senderName, let channelDisplayName, let channelName, let teamId) = postedResult
+            .event
+        {
             XCTAssertEqual(post.id, "p999")
             XCTAssertEqual(post.message, "Hello from WebSocket")
             XCTAssertEqual(senderName, "@boris")
@@ -285,7 +290,8 @@ final class WebServiceTests: XCTestCase {
         }
 
         // 4. Typing event
-        let typingPayload = #"{"event":"typing","data":{"parent_id":"","user_id":"u67890"},"broadcast":{"channel_id":"ch_town_square"},"seq":4}"#
+        let typingPayload =
+            #"{"event":"typing","data":{"parent_id":"","user_id":"u67890"},"broadcast":{"channel_id":"ch_town_square"},"seq":4}"#
         let typingResult = ws.parseWebSocketMessage(typingPayload)
         if case .typing(let userId, let channelId, let parentId) = typingResult.event {
             XCTAssertEqual(userId, "u67890")
@@ -297,14 +303,14 @@ final class WebServiceTests: XCTestCase {
 
         // 5. Update team event
         let updateTeamPayload = """
-        {
-            "event": "update_team",
-            "data": {
-                "team": "{\\"id\\":\\"team_none_id\\",\\"display_name\\":\\"Engineering Team\\",\\"name\\":\\"engineering\\",\\"type\\":\\"O\\"}"
-            },
-            "seq": 5
-        }
-        """
+            {
+                "event": "update_team",
+                "data": {
+                    "team": "{\\"id\\":\\"team_none_id\\",\\"display_name\\":\\"Engineering Team\\",\\"name\\":\\"engineering\\",\\"type\\":\\"O\\"}"
+                },
+                "seq": 5
+            }
+            """
         let updateTeamResult = ws.parseWebSocketMessage(updateTeamPayload)
         if case .updateTeam(let team) = updateTeamResult.event {
             XCTAssertEqual(team.id, "team_none_id")
@@ -351,15 +357,15 @@ final class WebServiceTests: XCTestCase {
         let ws = WebService(host: "chat.example.com", port: 8065)
 
         let addedPayload = """
-        {
-            "event": "reaction_added",
-            "data": {
-                "reaction": "{\\"user_id\\":\\"u1\\",\\"post_id\\":\\"post_abc\\",\\"emoji_name\\":\\"thumbsup\\"}"
-            },
-            "broadcast": {"channel_id": "ch_town_square"},
-            "seq": 2
-        }
-        """
+            {
+                "event": "reaction_added",
+                "data": {
+                    "reaction": "{\\"user_id\\":\\"u1\\",\\"post_id\\":\\"post_abc\\",\\"emoji_name\\":\\"thumbsup\\"}"
+                },
+                "broadcast": {"channel_id": "ch_town_square"},
+                "seq": 2
+            }
+            """
         let added = ws.parseWebSocketMessage(addedPayload)
         if case .reactionChanged(let postId) = added.event {
             XCTAssertEqual(postId, "post_abc")
@@ -406,15 +412,15 @@ final class WebServiceTests: XCTestCase {
 
     func testDecodeCustomEmoji() throws {
         let json = """
-        {
-            "id": "emoji123",
-            "name": "party_parrot",
-            "creator_id": "u12345",
-            "create_at": 1794702804589,
-            "update_at": 1794702804589,
-            "delete_at": 0
-        }
-        """.data(using: .utf8)!
+            {
+                "id": "emoji123",
+                "name": "party_parrot",
+                "creator_id": "u12345",
+                "create_at": 1794702804589,
+                "update_at": 1794702804589,
+                "delete_at": 0
+            }
+            """.data(using: .utf8)!
 
         let emoji = try JSONDecoder().decode(MMEmoji.self, from: json)
         XCTAssertEqual(emoji.id, "emoji123")
@@ -422,40 +428,41 @@ final class WebServiceTests: XCTestCase {
         XCTAssertEqual(emoji.creator_id, "u12345")
     }
 
-    func testDecodeFileSearchResult() throws {        let json = """
-        {
-            "order": ["file_image", "file_text"],
-            "file_infos": {
-                "file_image": {
-                    "id": "file_image",
-                    "user_id": "u12345",
-                    "post_id": "post_1",
-                    "channel_id": "ch_town_square",
-                    "create_at": 1794702804589,
-                    "name": "attach.png",
-                    "extension": "png",
-                    "size": 39192,
-                    "mime_type": "image/png",
-                    "width": 400,
-                    "height": 241,
-                    "has_preview_image": true
+    func testDecodeFileSearchResult() throws {
+        let json = """
+            {
+                "order": ["file_image", "file_text"],
+                "file_infos": {
+                    "file_image": {
+                        "id": "file_image",
+                        "user_id": "u12345",
+                        "post_id": "post_1",
+                        "channel_id": "ch_town_square",
+                        "create_at": 1794702804589,
+                        "name": "attach.png",
+                        "extension": "png",
+                        "size": 39192,
+                        "mime_type": "image/png",
+                        "width": 400,
+                        "height": 241,
+                        "has_preview_image": true
+                    },
+                    "file_text": {
+                        "id": "file_text",
+                        "user_id": "u12345",
+                        "post_id": "post_2",
+                        "channel_id": "ch_town_square",
+                        "create_at": 1794701589295,
+                        "name": "upload-test.txt",
+                        "extension": "txt",
+                        "size": 20,
+                        "mime_type": "text/plain; charset=utf-8"
+                    }
                 },
-                "file_text": {
-                    "id": "file_text",
-                    "user_id": "u12345",
-                    "post_id": "post_2",
-                    "channel_id": "ch_town_square",
-                    "create_at": 1794701589295,
-                    "name": "upload-test.txt",
-                    "extension": "txt",
-                    "size": 20,
-                    "mime_type": "text/plain; charset=utf-8"
-                }
-            },
-            "next_file_info_id": "",
-            "prev_file_info_id": ""
-        }
-        """.data(using: .utf8)!
+                "next_file_info_id": "",
+                "prev_file_info_id": ""
+            }
+            """.data(using: .utf8)!
 
         let result = try JSONDecoder().decode(MMFileSearchResult.self, from: json)
         XCTAssertEqual(result.order, ["file_image", "file_text"])
@@ -464,25 +471,26 @@ final class WebServiceTests: XCTestCase {
         XCTAssertEqual(result.file_infos["file_image"]?.width, 400)
         XCTAssertEqual(result.file_infos["file_image"]?.has_preview_image, true)
         XCTAssertEqual(result.file_infos["file_text"]?.extension, "txt")
-        XCTAssertEqual(result.file_infos["file_text"]?.create_at, 1794701589295)
+        XCTAssertEqual(result.file_infos["file_text"]?.create_at, 1_794_701_589_295)
     }
 
-    func testDecodeMMUserStatus() throws {        let statusJSON = """
-        {
-            "user_id": "u12345",
-            "status": "away",
-            "manual": true,
-            "last_activity_at": 1765415300000,
-            "active_channel": "ch_town_square",
-            "dnd_end_time": 0
-        }
-        """.data(using: .utf8)!
+    func testDecodeMMUserStatus() throws {
+        let statusJSON = """
+            {
+                "user_id": "u12345",
+                "status": "away",
+                "manual": true,
+                "last_activity_at": 1765415300000,
+                "active_channel": "ch_town_square",
+                "dnd_end_time": 0
+            }
+            """.data(using: .utf8)!
 
         let status = try JSONDecoder().decode(MMUserStatus.self, from: statusJSON)
         XCTAssertEqual(status.user_id, "u12345")
         XCTAssertEqual(status.status, "away")
         XCTAssertEqual(status.manual, true)
-        XCTAssertEqual(status.last_activity_at, 1765415300000)
+        XCTAssertEqual(status.last_activity_at, 1_765_415_300_000)
     }
 
     func testUserStatusUpdateURL() {

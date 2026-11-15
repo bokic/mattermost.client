@@ -60,7 +60,7 @@ enum MMPalette {
             NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
             NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
             NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
-            NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0)
+            NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0),
         ]
     }
 
