@@ -397,8 +397,20 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ## P4 — Architecture & maintainability
 
-- [ ] **Split `MainWindow.swift` (4,426 lines)** into view components (sidebar, header, timeline,
-  composer, menus) plus a view model owning REST/WebSocket state. — `L`
+- [x] **Split `MainWindow.swift` into view components plus a view model** — `L`
+  - `MainWindow.swift` is now an 867-line window shell (stored view state, init, AppKit overrides).
+    The former ~10,400-line class is split into `MainWindow+Header`, `+Sidebar`, `+Timeline`,
+    `+Composer`, `+Menus`, `+RightPanel`, `+People`, `+Layout` and `+LiveData` extensions, with the
+    shared drag/scroll/timeline helpers and the emoji catalog in `MainWindowSupport.swift`.
+  - Added `ChatViewModel`, which owns the live workspace state: current user/team/channel, channel
+    and user directories, statuses, posts, pagination flags, memberships/read state, thread data and
+    the WebSocket connection flag. `MainWindow` exposes internal forwarding properties so the view
+    components read/write the model without duplicating storage. `MainWindow+LiveData` remains the
+    controller glue that drives the REST/WebSocket service and mutates the model as events arrive.
+  - Widened member access from file-private to internal so extensions can live in separate files;
+    no behavior was intentionally changed.
+  - Verified: the app builds and runs against the live server, all 27 unit tests pass, and the
+    normal workspace view renders unchanged.
 - [ ] **Extract shared window/zoom plumbing** — zoom is duplicated in `MainWindow` and `LoginWindow`
   and implemented by rewriting `contentView.bounds`; factor it into one controller and document the
   scaling model. — `M`

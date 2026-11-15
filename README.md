@@ -109,6 +109,15 @@ Build a Release configuration and create a standalone `.dmg` installer:
 
 ---
 
+## Architecture
+
+- `ChatViewModel` owns the live workspace state (user, teams, channels, members, posts, read state,
+  thread data and connection state). `MainWindow` forwards to that model.
+- `MainWindow.swift` is the window shell; UI code lives in focused extensions:
+  `MainWindow+Header`, `+Sidebar`, `+Timeline`, `+Composer`, `+Menus`, `+RightPanel`, `+People`,
+  `+Layout` and `+LiveData` (REST/WebSocket glue).
+- `MainWindowSupport.swift` holds shared custom views, drag-and-drop helpers and the emoji catalog.
+
 ## Project Structure
 
 ```text
@@ -124,6 +133,8 @@ mattermost.client/
 │   ├── main.swift                              # Application entry point
 │   ├── AppDelegate.swift                       # Lifecycle, status bar item, and window controller
 │   ├── KeychainHelper.swift                    # Sandboxed persistent credential and token storage
+│   ├── ChatViewModel.swift                     # Live workspace state (REST/WebSocket data model)
+│   ├── Theme.swift                             # Server theme parsing and palettes
 │   ├── mattermost_client.entitlements          # App Sandbox entitlements and network permissions
 │   ├── webservice/
 │   │   └── webservice.swift                    # REST API client and WebSocket service
@@ -132,10 +143,15 @@ mattermost.client/
 │   │   └── RoundedEdgePanel.swift              # Custom rounded container panel widget
 │   ├── windows/
 │   │   ├── LoginWindow.swift                   # Authentication window
-│   │   └── MainWindow.swift                    # Main workspace window (Header, Sidebar, Chat)
+│   │   ├── MainWindow.swift                    # Window shell, state forwarding and overrides
+│   │   ├── MainWindowSupport.swift             # Shared views, drag helpers and emoji catalog
+│   │   └── MainWindow+{Header,Sidebar,Timeline,Composer,Menus,RightPanel,People,Layout,LiveData}.swift
 │   └── Assets.xcassets/                        # App icons, status bar icons, and vector SVGs
 └── mattermost.clientTests/                     # Unit test bundle
-    └── WebServiceTests.swift                   # WebService & WebSocket parsing tests
+    ├── WebServiceTests.swift                   # WebService & WebSocket parsing tests
+    ├── KeychainHelperTests.swift               # Debug credential-store tests
+    ├── DebugLogTests.swift                     # Sensitive-log gating test
+    └── ThemeTests.swift                        # Theme parsing and preference tests
 ```
 
 ---
