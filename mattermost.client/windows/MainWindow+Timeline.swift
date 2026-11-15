@@ -691,12 +691,12 @@ extension MainWindow {
 
     func currentUserId() -> String? {
         if let id = currentUser?.id, !id.isEmpty { return id }
-        let id = (NSApp.delegate as? AppDelegate)?.webService.currentUserId ?? ""
+        let id = webService?.currentUserId ?? ""
         return id.isEmpty ? nil : id
     }
 
     func toggleReaction(postId: String, emojiName: String) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let userId = currentUserId() else { return }
         let post = currentChannelPosts.first(where: { $0.id == postId })
             ?? threadPosts.first(where: { $0.id == postId })
@@ -902,7 +902,7 @@ extension MainWindow {
         lightboxLoadToken = UUID()
         let token = lightboxLoadToken
 
-        if let file = file, let ws = (NSApp.delegate as? AppDelegate)?.webService {
+        if let file = file, let ws = webService {
             Task { @MainActor [weak self] in
                 guard let self = self, self.lightboxLoadToken == token,
                       let data = try? await ws.fetchFileData(fileId: file.id),
@@ -1223,7 +1223,7 @@ extension MainWindow {
     }
 
     func togglePin(_ post: MMPost) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         let shouldPin = post.is_pinned != true
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1243,7 +1243,7 @@ extension MainWindow {
     }
 
     func confirmDeletePost(_ post: MMPost) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         let alert = NSAlert()
         alert.messageText = "Delete this message?"
         alert.informativeText = "This will remove the message for everyone in the channel."
@@ -1375,7 +1375,7 @@ extension MainWindow {
             self?.showLightbox(image: imageView?.image, file: file, filename: file.name ?? "Image")
         }
 
-        if let ws = (NSApp.delegate as? AppDelegate)?.webService {
+        if let ws = webService {
             Task { @MainActor [weak self, weak container, weak imageView] in
                 guard let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
                       let image = NSImage(data: data) else { return }
@@ -1514,7 +1514,7 @@ extension MainWindow {
     }
 
     func openAttachment(_ file: MMFileInfo) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        guard let ws = webService else { return }
         Task { @MainActor in
             guard let data = try? await ws.fetchFileData(fileId: file.id) else { return }
             let filename = file.name ?? file.id
@@ -1525,7 +1525,7 @@ extension MainWindow {
     }
 
     func downloadAttachment(_ file: MMFileInfo) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        guard let ws = webService else { return }
         Task { @MainActor [weak self] in
             guard let self = self, let data = try? await ws.fetchFileData(fileId: file.id) else { return }
             self.saveFileData(data, suggestedName: file.name ?? file.id)
@@ -2259,7 +2259,7 @@ extension MainWindow {
         }
 
         var postsToRender = currentChannelPosts
-        if postsToRender.isEmpty && !((NSApp.delegate as? AppDelegate)?.webService.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
+        if postsToRender.isEmpty && !(webService?.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
             if userStatusById["sarah"] == nil {
                 userStatusById["sarah"] = "away"

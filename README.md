@@ -121,8 +121,9 @@ Build a Release configuration and create a standalone `.dmg` installer:
 - `WindowZoomController` owns app-level zoom for every window (bounds scaling, resize/zoom
   observers, shortcuts and HUD), with the coordinate-space model documented in the file.
 - `WebService` is `@MainActor`: token, socket task, timers and callbacks are main-actor isolated,
-  while URLSession performs network I/O off the main thread and hops back explicitly. The project
-  builds in Swift 6 language mode with complete concurrency checking.
+  while URLSession performs network I/O off the main thread and hops back explicitly. `AppDelegate`
+  injects the service into `MainWindow` (`start(with:)`) so components never look it up through the
+  app delegate. The project builds in Swift 6 language mode with complete concurrency checking.
 
 ## Project Structure
 

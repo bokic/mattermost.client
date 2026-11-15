@@ -177,7 +177,7 @@ extension MainWindow {
     }
 
     func loadThreads() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
             renderRightPanel(empty: "Sign in to see your threads", rows: [])
             return
@@ -234,7 +234,7 @@ extension MainWindow {
     }
 
     func loadThread() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               !threadRootId.isEmpty else {
             renderThreadPanel(empty: "Could not load thread")
             return
@@ -325,7 +325,7 @@ extension MainWindow {
     }
 
     @objc func sendThreadReply() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               !threadRootId.isEmpty else { return }
         let text = threadReplyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -347,7 +347,7 @@ extension MainWindow {
     }
 
     func loadChannelMembers() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               !activeChannelId.isEmpty else {
             renderRightPanel(empty: "No channel selected", rows: [])
             return
@@ -378,7 +378,7 @@ extension MainWindow {
     }
 
     func loadPinnedPosts() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               !activeChannelId.isEmpty else {
             renderRightPanel(empty: "No channel selected", rows: [])
             return
@@ -415,7 +415,7 @@ extension MainWindow {
     }
 
     func loadChannelFiles() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam, !activeChannelId.isEmpty else {
             renderFilesPanel([], empty: "Sign in to see files")
             return
@@ -503,7 +503,7 @@ extension MainWindow {
                 imageView.imageScaling = .scaleProportionallyUpOrDown
                 thumb.addSubview(imageView)
                 card.addSubview(thumb)
-                if let ws = (NSApp.delegate as? AppDelegate)?.webService {
+                if let ws = webService {
                     Task { @MainActor [weak imageView] in
                         if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
                            let image = NSImage(data: data) {
@@ -556,7 +556,7 @@ extension MainWindow {
     }
 
     func loadMentions() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
             renderRightPanel(empty: "Sign in to see mentions", rows: [])
             return
@@ -598,7 +598,7 @@ extension MainWindow {
     }
 
     func loadSavedPosts() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
             renderRightPanel(empty: "Sign in to see saved posts", rows: [])
             return
@@ -658,12 +658,12 @@ extension MainWindow {
             ),
             RightPanelRow(
                 title: "Reconnect",
-                subtitle: (NSApp.delegate as? AppDelegate)?.webService.isWebSocketConnected == true
+                subtitle: webService?.isWebSocketConnected == true
                     ? "Connected"
                     : "Reconnecting…",
                 meta: "Connection",
                 action: { [weak self] in
-                    (NSApp.delegate as? AppDelegate)?.webService.reconnectIfNeeded()
+                    self?.webService?.reconnectIfNeeded()
                     self?.loadSettingsPanel()
                 }
             ),
@@ -686,7 +686,7 @@ extension MainWindow {
     }
 
     func loadBrowseChannels() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
             renderRightPanel(empty: "Sign in to browse channels", rows: [])
             return
@@ -724,7 +724,7 @@ extension MainWindow {
     }
 
     func joinChannel(_ channel: MMChannel) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
@@ -747,7 +747,7 @@ extension MainWindow {
 
     func hydrateUsers(_ ids: [String], completion: @escaping () -> Void) {
         let missing = Array(Set(ids).subtracting(usersById.keys))
-        guard !missing.isEmpty, let ws = (NSApp.delegate as? AppDelegate)?.webService else {
+        guard !missing.isEmpty, let ws = webService else {
             completion()
             return
         }

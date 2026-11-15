@@ -441,7 +441,18 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     concurrency warnings or errors.
   - Verified against the live server: login/session restore, workspace render, WebSocket connect and
     a realtime post all work; all 27 tests pass.
-- [ ] **Inject `WebService`** instead of repeated `NSApp.delegate as? AppDelegate` lookups. — `M`
+- [x] **Inject `WebService`** instead of repeated `NSApp.delegate as? AppDelegate` lookups. — `M`
+  - `MainWindow` now exposes `webService` backed by `ChatViewModel.webService`. `AppDelegate`
+    injects the service once via `mainWindow.start(with: webService)` instead of `MainWindow`
+    reaching through `NSApp.delegate` during init.
+  - Replaced the ~70 `(NSApp.delegate as? AppDelegate)?.webService` lookups across the window
+    components with the injected property. The remaining delegate lookups are for non-WebService
+    AppDelegate actions (`logout`, `markChannelRead`) and the login window's service handoff.
+  - Removed the `bindWebServiceAndLoadData()` call from `MainWindow.init`; `start(with:)` sets the
+    service and then binds WebSocket/REST callbacks and loads data, keeping the previous ordering
+    before `connectWebSocket()`.
+  - Verified session restore, workspace render, WebSocket connection and a full token-less launch
+    (stored-password login → injected service → live workspace); all 27 tests pass.
 - [ ] **Remove dead/legacy code**: hidden `treeView` + `sidebarTopBorder`, hidden `entryView`,
   `appendRealtimePost`, `dateSep1/2*` views, `sysAuthorLabelRef`/`usr*Ref` leftovers. — `S`
 - [ ] **Centralize design tokens** (theme colors, radii, metrics currently repeated as literals in

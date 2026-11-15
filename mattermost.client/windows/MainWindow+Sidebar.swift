@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 extension MainWindow {
 
     func loadFavoriteChannels() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
@@ -44,7 +44,7 @@ extension MainWindow {
     }
 
     func setChannelFavorite(_ favorite: Bool, channelId: String) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
 
@@ -76,7 +76,7 @@ extension MainWindow {
     }
 
     func loadUnreadState() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
@@ -895,7 +895,7 @@ extension MainWindow {
     }
 
     func switchActiveTeam(to team: MMTeam) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        guard let ws = webService else { return }
         self.updateTeamHeader(with: team)
         self.setTeamMenuOpen(false)
         Task { @MainActor [weak self] in

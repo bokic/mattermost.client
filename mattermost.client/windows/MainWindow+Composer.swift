@@ -233,7 +233,7 @@ extension MainWindow {
 
     func loadCustomEmojis() {
         guard !isCustomEmojiLoaded,
-              let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+              let ws = webService, ws.isLogged() else { return }
         isCustomEmojiLoaded = true
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -438,7 +438,7 @@ extension MainWindow {
     }
 
     func ensureCompletionUsers() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam,
               completionUsersTeamId != team.id,
               !completionUsersLoading else { return }
@@ -653,7 +653,7 @@ extension MainWindow {
         let files = urls.filter { !$0.hasDirectoryPath }
         guard !files.isEmpty,
               !activeChannelId.isEmpty,
-              let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+              let ws = webService else { return }
         let channelId = activeChannelId
         composerHelpLabel.stringValue = files.count == 1 ? "Uploading…" : "Uploading \(files.count) files…"
 
@@ -832,7 +832,7 @@ extension MainWindow {
     func startEditingLastMessage() -> Bool {
         guard editingPostId == nil, pendingAttachments.isEmpty else { return false }
         closeCompletion()
-        let myId = currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId ?? ""
+        let myId = currentUser?.id ?? webService?.currentUserId ?? ""
         guard !myId.isEmpty else { return false }
         guard let post = currentChannelPosts.last(where: {
             $0.user_id == myId
@@ -880,7 +880,7 @@ extension MainWindow {
         composerHelpLabel.stringValue = editingId != nil ? "Saving edit…" : "Sending…"
 
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            guard let self = self, let ws = webService else { return }
             do {
                 if let editingId = editingId {
                     let updated = try await ws.patchPost(postId: editingId, message: message)
@@ -924,7 +924,7 @@ extension MainWindow {
         guard !trimmed.isEmpty, !activeChannelId.isEmpty else { return }
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            guard let self = self, let ws = webService else { return }
             do {
                 let post = try await ws.createPost(channelId: channelId, message: trimmed)
                 if self.activeChannelId == channelId {
@@ -959,7 +959,7 @@ extension MainWindow {
         guard !entryView.string.isEmpty, !activeChannelId.isEmpty else { return }
         if let last = lastTypingSentAt, Date().timeIntervalSince(last) < 1.5 { return }
         lastTypingSentAt = Date()
-        (NSApp.delegate as? AppDelegate)?.webService.sendUserTyping(channelId: activeChannelId)
+        webService?.sendUserTyping(channelId: activeChannelId)
     }
 
     func textDidChange(_ notification: Notification) {

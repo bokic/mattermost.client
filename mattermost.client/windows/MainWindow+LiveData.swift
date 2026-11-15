@@ -25,7 +25,7 @@ extension MainWindow {
     func markActiveChannelViewed() {
         guard !activeChannelId.isEmpty,
               (unreadByChannel[activeChannelId] ?? 0) > 0 || (mentionsByChannel[activeChannelId] ?? 0) > 0,
-              let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+              let ws = webService, ws.isLogged() else { return }
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -38,9 +38,15 @@ extension MainWindow {
         }
     }
 
+    /// Called once by `AppDelegate` after the window is created, so the service is
+    /// injected explicitly instead of being looked up throughout the view code.
+    func start(with webService: WebService) {
+        self.webService = webService
+        bindWebServiceAndLoadData()
+    }
+
     func bindWebServiceAndLoadData() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
-        viewModel.webService = ws
+        guard let ws = webService else { return }
 
         ws.onPostReceived = { [weak self] post, _ in
             guard let self = self else { return }
@@ -56,7 +62,7 @@ extension MainWindow {
         ws.onReactionChanged = { [weak self] postId in
             Task { @MainActor [weak self] in
                 guard let self = self,
-                      let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+                      let ws = webService else { return }
                 if let updated = try? await ws.fetchPost(postId: postId) {
                     self.applyUpdatedPost(updated)
                 }
@@ -101,7 +107,7 @@ extension MainWindow {
             let normalized = self.normalizedStatusForKnownUser(status, userId: userId)
             self.userStatusById[userId] = normalized
             self.updateChatWidgetUserStatus(userId: userId, status: normalized)
-            if let myId = self.currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId, myId == userId {
+            if let myId = self.currentUser?.id ?? webService?.currentUserId, myId == userId {
                 self.applyCurrentUserStatus(normalized)
             }
         }
@@ -275,7 +281,7 @@ extension MainWindow {
     }
 
     func fetchAndRenderPosts(channelId: String) async {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         do {
             let postList = try await ws.fetchChannelPosts(channelId: channelId)
             var posts = postList.chronologicalPosts
@@ -385,7 +391,7 @@ extension MainWindow {
         rebuildTimelineContent(scrollToBottom: true)
 
         guard usersById[post.user_id] == nil,
-              let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+              let ws = webService else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             guard let users = try? await ws.fetchUsersByIds([post.user_id]),
@@ -408,7 +414,7 @@ extension MainWindow {
 
     func handleIncomingPost(_ post: MMPost) {
         let isSystemMessage = post.type?.hasPrefix("system_") ?? false
-        let ws = (NSApp.delegate as? AppDelegate)?.webService
+        let ws = webService
         let myUserId = currentUser?.id ?? ws?.currentUserId ?? ""
         let isMine = !myUserId.isEmpty && post.user_id == myUserId
         guard !isSystemMessage, !isMine else { return }
@@ -466,7 +472,7 @@ extension MainWindow {
         guard !isLoadingOlderPosts, !didLoadAllHistory,
               let before = currentChannelPosts.first?.id,
               !activeChannelId.isEmpty,
-              let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+              let ws = webService, ws.isLogged() else { return }
         let channelId = activeChannelId
         isLoadingOlderPosts = true
 

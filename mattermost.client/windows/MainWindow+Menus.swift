@@ -836,7 +836,7 @@ extension MainWindow {
             closeDMPicker()
             return
         }
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               activeTeam != nil, let contentView = contentView else {
             showInfoAlert("Sign in to start a direct message.")
             return
@@ -881,7 +881,7 @@ extension MainWindow {
     }
 
     func loadDMUsers() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1008,7 +1008,7 @@ extension MainWindow {
     }
 
     func startDirectMessage(with user: LoginWebService) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1147,7 +1147,7 @@ extension MainWindow {
     }
 
     func leaveChannel(_ channel: MMChannel) {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+        guard let ws = webService, ws.isLogged(),
               let team = activeTeam else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
@@ -1191,7 +1191,7 @@ extension MainWindow {
                 self.showInfoAlert("Enter a valid email address.")
                 return
             }
-            guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            guard let ws = webService else { return }
             Task { @MainActor in
                 do {
                     try await ws.sendTeamInvite(teamId: team.id, email: email)
@@ -1233,7 +1233,7 @@ extension MainWindow {
                 self.showInfoAlert("Enter a team name.")
                 return
             }
-            guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+            guard let ws = webService else { return }
             Task { @MainActor in
                 do {
                     let team = try await ws.createTeam(name: name, displayName: displayName)

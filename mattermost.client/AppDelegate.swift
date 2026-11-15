@@ -307,10 +307,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
         let defaultWidth = min(1440, visible.width)
         let defaultHeight = min(783, max(480, visible.height - 28))
-        mainWindow = MainWindow(
+        let window = MainWindow(
             contentRect: NSRect(x: 0, y: 0, width: defaultWidth, height: defaultHeight),
             styleMask: [.miniaturizable, .closable, .resizable, .titled],
             backing: .buffered, defer: false)
+        mainWindow = window
+        window.start(with: webService)
         webService.connectWebSocket()
     }
     

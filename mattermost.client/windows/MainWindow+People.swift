@@ -97,7 +97,7 @@ extension MainWindow {
         setStatusMenuOpen(false)
         setDndSubMenuOpen(false)
 
-        if let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() {
+        if let ws = webService, ws.isLogged() {
             let targetUserId = currentUser?.id ?? ws.currentUserId
             DebugLog.log("selectUserStatus: index=\(index), statStr=\(statStr), targetUserId=\(targetUserId), dndEndTime=\(String(describing: dndEndTime))")
             Task {
@@ -168,7 +168,7 @@ extension MainWindow {
         let durations = ["dont_clear", "thirty_minutes", "one_hour", "four_hours", "today", "this_week"]
         let index = max(0, min(durationIndex, durations.count - 1))
         let expiresAt = customStatusExpiry(for: index)
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        guard let ws = webService else { return }
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -186,7 +186,7 @@ extension MainWindow {
     }
 
     func unsetCustomStatus() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        guard let ws = webService else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             _ = try? await ws.clearCustomStatus()
@@ -272,7 +272,7 @@ extension MainWindow {
 
     func fetchAvatarIfNeeded(for userId: String) {
         guard !userId.isEmpty, userAvatarsById[userId] == nil, userAvatarFetchTasks[userId] == nil else { return }
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
 
         userAvatarFetchTasks[userId] = Task { @MainActor [weak self] () -> NSImage? in
             defer { self?.userAvatarFetchTasks.removeValue(forKey: userId) }
@@ -296,7 +296,7 @@ extension MainWindow {
             fetchAvatarIfNeeded(for: u.id)
             return
         }
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             if let user = try? await ws.fetchUserByUsername(norm) {
@@ -354,7 +354,7 @@ extension MainWindow {
     }
 
     func refreshUserStatuses() {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         DebugLog.log("refreshUserStatuses triggered, requesting via WS get_statuses")
         ws.requestStatuses()
         let knownIds = Array(Set(usersById.keys.filter { isLikelyMattermostId($0) }))
@@ -384,7 +384,7 @@ extension MainWindow {
     }
 
     func preloadDMUsers(for channels: [MMChannel]) async {
-        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged() else { return }
+        guard let ws = webService, ws.isLogged() else { return }
         let dmChannels = channels.filter { $0.type == "D" }
         var targetIds = Set<String>()
         for ch in dmChannels {

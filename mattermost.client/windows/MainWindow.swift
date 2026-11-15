@@ -420,6 +420,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var composerTotalHeight: CGFloat { composerBaseHeight + composerPendingHeight }
 
     // Live WebService state (owned by the view model; exposed for the views).
+    /// Injected by `AppDelegate` when the workspace window is created.
+    var webService: WebService? {
+        get { viewModel.webService }
+        set { viewModel.webService = newValue }
+    }
     var currentUser: LoginWebService? {
         get { viewModel.currentUser }
         set { viewModel.currentUser = newValue }
@@ -574,7 +579,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
         if CommandLine.arguments.contains("--view-test") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-                guard let self = self, let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+                guard let self = self, let ws = self.webService else { return }
                 ws.sendWebSocketMessage(action: "view_channel", data: [
                     "channel_id": self.activeChannelId,
                     "prev_channel_id": "",
@@ -585,7 +590,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         self.makeKeyAndOrderFront(nil)
 
         NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
-        bindWebServiceAndLoadData()
     }
 
     enum FocusRegion {
