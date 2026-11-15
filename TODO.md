@@ -515,8 +515,14 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Added `ALWAYS_SEARCH_USER_PATHS = NO` at the project level, which removes the
     "Traditional headermap style is no longer supported" build warning.
   - The lint allowlist and the full build are clean; all 48 tests pass.
-- [ ] **Align README with reality** — it currently advertises working composer, search, threads,
-  mentions, saved posts, settings and invite flows. — `S`
+- [x] **Align README with reality** — `S`
+  - Re-audited the advertised flows against the code: composer send/edit/upload/autocomplete/emoji,
+    global and in-channel search (Messages/Files tabs), threads with inline replies, mentions, saved
+    posts, settings, team invite and Browse Channels are all implemented and server-backed.
+  - Corrected the remaining overclaims: the product-switcher and help menus are visual parity and do
+    not navigate to external/admin pages, and the `Aa` formatting toolbar is visual parity rather
+    than applying markdown. Everything else in the feature list matches the current behaviour.
+  - Updated the test-suite and project-structure sections for the new files and tooling.
 - [ ] **Refresh or archive `AUDIT.md`** (dated 2026-11-01, some findings fixed). — `S`
 - [ ] **Commit the DOM-inspection tooling** used for parity work (AppleScript/Chrome driver +
   measurement scripts) under `tools/`, so metrics can be re-verified. — `S`

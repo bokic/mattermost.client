@@ -7,9 +7,9 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 ## Highlights & Features
 
 ### 1. Top Global Header Bar (`#192A4D`)
-- **Product Switcher**: Custom grid app switcher (`E82F`) and Mattermost logo with `TEAM EDITION` badge, opening an interactive menu (*Channels*, *System Console*, *Integrations*, *App Marketplace*, *Download Apps*, *About Mattermost*).
+- **Product Switcher**: Custom grid app switcher (`E82F`) and Mattermost logo with `TEAM EDITION` badge, opening a menu (*Channels*, *System Console*, *Integrations*, *App Marketplace*, *Download Apps*, *About Mattermost*). The menu is visual parity with the web client; its rows do not navigate to server admin pages.
 - **Search Popover**: Centered search bar with quick popover offering *Messages* / *Files* tabs, bordered search input, and filter hint pills (`from:`, `in:`, `on:`).
-- **Help Menu**: Quick help (`?`) popup menu linking to Mattermost guides, resources, and shortcuts.
+- **Help Menu**: Quick help (`?`) popup menu listing Mattermost guides, training resources, community links and keyboard shortcuts.
 - **User Status & Profile**: User avatar with presence dot and dropdown menu (*@username*, custom status editor with emoji/text/expiry — shown in the menu, *Online*, *Away*, *Do not disturb* with *Clear after:* submenu, *Offline*, *Profile*, *Log out*). Expired DND automatically reverts to online.
 - **Action Shortcuts**: Mentions (`@`), Saved posts (bookmark) and Settings (gear) each open the right-hand panel — recent mentions, flagged posts, and app actions (zoom reset, reconnect, account info, logout).
 
@@ -35,7 +35,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Threads**: Right-hand thread view with the root post, grouped replies, and an inline reply composer.
 - **Rich Text**: Bold/italic/strike, fenced and inline code with tinted backgrounds, highlighted `@mentions`, clickable `~channel` links, expanded `:emoji:` shortcodes, inline images and external links.
 - **Localized Dates**: Timestamps, date separators and panel rows use the system locale and 24-hour setting, with relative Today/Yesterday labels.
-- **Message Composer**: Single-row composer matching the web client (2 pt translucent border, 4 pt radius, 50 pt editor plus a 24 pt `Help` footer), with an `Aa` toggle that expands the full formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*), a web-style emoji picker (categories, search, persisted recents and server custom emojis), attachment upload via `NSOpenPanel` or drag-and-drop (pending chips with remove buttons; `POST /files` + `file_ids` on send), and a 48×32 *Send* button.
+- **Message Composer**: Single-row composer matching the web client (2 pt translucent border, 4 pt radius, 50 pt editor plus a 24 pt `Help` footer), with an `Aa` toggle that reveals the web client's formatting toolbar (*Bold*, *Italic*, *Strikethrough*, *Heading*, *Link*, *Code*, *Quote*, *Bulleted/Numbered Lists*; the buttons are visual parity and do not yet apply markdown), a web-style emoji picker (categories, search, persisted recents and server custom emojis), attachment upload via `NSOpenPanel` or drag-and-drop (pending chips with remove buttons; `POST /files` + `file_ids` on send), and a 48×32 *Send* button.
 - **Keyboard Shortcuts**: `⌘K` global search, `⌘F` in-channel search, `Esc` closes the topmost overlay (or cancels an edit), `↑` in an empty composer edits your last message, and `Tab`/`Shift+Tab` cycle focus between the composer, sidebar and timeline.
 - **Composer Autocomplete**: Type `@` for team members, `#`/`~` for channels and `:name` for emoji; a themed typeahead above the composer supports Up/Down, Enter/Tab to insert and Esc to dismiss.
 - **Typography**: Bundles Open Sans (SIL OFL 1.1, see `mattermost.client/OpenSans-OFL.txt`) and registers it at launch so text metrics match the web client instead of falling back to the system font.
