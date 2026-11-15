@@ -39,10 +39,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Remaining: a Files tab in the RHS and true thread-reply rendering (root + replies) inside the
     panel instead of a flat list.
 
-- [ ] **Top-right `@`, bookmark and gear do nothing** — `M`
-  - Where: `configureIconButton` (≈1548) only wires hover state; no `onClick` is ever assigned to
-    `mentionsPanel`, `savedPostsPanel`, `settingsPanel`.
-  - Done when: Mentions/Saved open real lists and Settings opens a preferences sheet.
+- [x] **Top-right `@`, bookmark and gear do nothing** — `M`
+  - Done: all three open the right-hand panel. `@` lists recent mentions (server-side search for
+    `@username` because this server version 404s `/users/{id}/teams/{team}/posts/mention`), the
+    bookmark lists flagged posts (`/users/{id}/posts/flagged`), and the gear shows an app panel with
+    zoom reset, forced reconnect, account/server info and logout.
+  - Remaining: a full preferences sheet (notifications, theme, advanced settings).
 
 - [x] **Log out does not log out** — `S`  
   _Done `4ff36b3`: clears token/password, disconnects, shows login._

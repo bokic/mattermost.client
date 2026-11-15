@@ -109,7 +109,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let rightPanelCloseButton = RoundedEdgePanel()
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
-    private enum RightPanelMode { case threads, members, pinned }
+    private enum RightPanelMode { case threads, members, pinned, mentions, saved, settings }
     private var rightPanelMode: RightPanelMode = .threads
     private var isRightPanelVisible = false
     private var threadItems: [MMThread] = []
@@ -438,7 +438,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             pointSize: 14,
             accessibilityDescription: "Recent Mentions",
             defaultTint: topBarTint,
-            hoverBg: hoverBg
+            hoverBg: hoverBg,
+            onClick: { [weak self] in
+                self?.toggleRightPanel(mode: .mentions)
+            }
         )
         configureIconButton(
             panel: savedPostsPanel,
@@ -447,7 +450,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             pointSize: 13,
             accessibilityDescription: "Saved Posts",
             defaultTint: topBarTint,
-            hoverBg: hoverBg
+            hoverBg: hoverBg,
+            onClick: { [weak self] in
+                self?.toggleRightPanel(mode: .saved)
+            }
         )
         configureIconButton(
             panel: settingsPanel,
@@ -456,7 +462,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             pointSize: 14,
             accessibilityDescription: "Settings",
             defaultTint: topBarTint,
-            hoverBg: hoverBg
+            hoverBg: hoverBg,
+            onClick: { [weak self] in
+                self?.toggleRightPanel(mode: .settings)
+            }
         )
         
         // User avatar circle + online status indicator dot
@@ -1901,7 +1910,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         pointSize: CGFloat,
         accessibilityDescription: String,
         defaultTint: NSColor,
-        hoverBg: NSColor
+        hoverBg: NSColor,
+        onClick: (() -> Void)? = nil
     ) {
         panel.color = .clear
         panel.cornerRadius = 4
@@ -1915,6 +1925,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             panel?.setNeedsAppearanceUpdate()
             iconView?.contentTintColor = isHovered ? .white : defaultTint
         }
+        panel.onClick = onClick
         contentView?.addSubview(panel)
     }
     
@@ -3419,6 +3430,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .pinned:
             rightPanelTitle.stringValue = "Pinned Posts"
             loadPinnedPosts()
+        case .mentions:
+            rightPanelTitle.stringValue = "Recent Mentions"
+            loadMentions()
+        case .saved:
+            rightPanelTitle.stringValue = "Saved Posts"
+            loadSavedPosts()
+        case .settings:
+            rightPanelTitle.stringValue = "Settings"
+            loadSettingsPanel()
         }
     }
     
@@ -3441,6 +3461,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         case .threads: loadThreads()
         case .members: loadChannelMembers()
         case .pinned: loadPinnedPosts()
+        case .mentions: loadMentions()
+        case .saved: loadSavedPosts()
+        case .settings: loadSettingsPanel()
         }
     }
     
@@ -3549,6 +3572,130 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 self.renderRightPanel(empty: "No pinned posts", rows: rows)
             }
         }
+    }
+    
+    private func loadMentions() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else {
+            renderRightPanel(empty: "Sign in to see mentions", rows: [])
+            return
+        }
+        let username = currentUser?.username ?? UserDefaults.standard.string(forKey: "username") ?? ""
+        guard !username.isEmpty else {
+            renderRightPanel(empty: "Sign in to see mentions", rows: [])
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let list = try? await ws.searchPosts(teamId: team.id, terms: "@" + username, perPage: 30) else {
+                self.renderRightPanel(empty: "Could not load mentions", rows: [])
+                return
+            }
+            let posts = list.order.compactMap { list.posts[$0] }
+            self.hydrateUsers(posts.map { $0.user_id }) {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "MMM d, h:mm a"
+                let rows = posts.map { post -> RightPanelRow in
+                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
+                    let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
+                    let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+                    return RightPanelRow(
+                        title: post.message.replacingOccurrences(of: "\n", with: " "),
+                        subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
+                        meta: "",
+                        action: { [weak self] in
+                            self?.openChannel(withId: post.channel_id)
+                            self?.closeRightPanel()
+                        }
+                    )
+                }
+                self.renderRightPanel(empty: "No recent mentions", rows: rows)
+            }
+        }
+    }
+    
+    private func loadSavedPosts() {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else {
+            renderRightPanel(empty: "Sign in to see saved posts", rows: [])
+            return
+        }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else {
+            renderRightPanel(empty: "Sign in to see saved posts", rows: [])
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            guard let list = try? await ws.fetchFlaggedPosts(userId: userId, teamId: team.id) else {
+                self.renderRightPanel(empty: "Could not load saved posts", rows: [])
+                return
+            }
+            let posts = list.order.compactMap { list.posts[$0] }
+            self.hydrateUsers(posts.map { $0.user_id }) {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "MMM d, h:mm a"
+                let rows = posts.map { post -> RightPanelRow in
+                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
+                    let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
+                    let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+                    return RightPanelRow(
+                        title: post.message.replacingOccurrences(of: "\n", with: " "),
+                        subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
+                        meta: "Saved",
+                        action: { [weak self] in
+                            self?.openChannel(withId: post.channel_id)
+                            self?.closeRightPanel()
+                        }
+                    )
+                }
+                self.renderRightPanel(empty: "No saved posts", rows: rows)
+            }
+        }
+    }
+    
+    private func loadSettingsPanel() {
+        let host = UserDefaults.standard.string(forKey: "host") ?? ""
+        let port = UserDefaults.standard.integer(forKey: "port")
+        let username = currentUser?.username ?? UserDefaults.standard.string(forKey: "username") ?? ""
+        let zoomPercent = Int((ZoomManager.shared.currentZoomFactor * 100).rounded())
+        let server = port > 0 ? "\(host):\(port)" : host
+        
+        let rows: [RightPanelRow] = [
+            RightPanelRow(
+                title: "Reset zoom",
+                subtitle: "Currently \(zoomPercent)%",
+                meta: "Appearance",
+                action: { [weak self] in
+                    ZoomManager.shared.resetZoom()
+                    self?.loadSettingsPanel()
+                }
+            ),
+            RightPanelRow(
+                title: "Reconnect",
+                subtitle: "Re-establish the realtime connection",
+                meta: "Connection",
+                action: { [weak self] in
+                    (NSApp.delegate as? AppDelegate)?.webService.reconnectIfNeeded()
+                    self?.loadSettingsPanel()
+                }
+            ),
+            RightPanelRow(
+                title: "Account",
+                subtitle: username,
+                meta: server,
+                action: nil
+            ),
+            RightPanelRow(
+                title: "Log out",
+                subtitle: "Clear credentials and return to sign in",
+                meta: "",
+                action: {
+                    (NSApp.delegate as? AppDelegate)?.logout()
+                }
+            )
+        ]
+        renderRightPanel(empty: "", rows: rows)
     }
     
     private struct RightPanelRow {

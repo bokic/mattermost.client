@@ -657,6 +657,17 @@ final class WebService: NSObject {
         )
     }
     
+    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws -> MMPostList {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/posts/flagged",
+            queryItems: [
+                URLQueryItem(name: "team_id", value: teamId),
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
+        )
+    }
+    
     func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
         struct ThreadsResponse: Decodable { let threads: [MMThread] }
         let response: ThreadsResponse = try await performAuthenticatedRequest(

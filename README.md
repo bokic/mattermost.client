@@ -11,7 +11,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Search Popover**: Centered search bar with quick popover offering *Messages* / *Files* tabs, bordered search input, and filter hint pills (`from:`, `in:`, `on:`).
 - **Help Menu**: Quick help (`?`) popup menu linking to Mattermost guides, resources, and shortcuts.
 - **User Status & Profile**: User avatar with online dot and dropdown menu (*@username*, *Set custom status*, *Online*, *Away*, *Do not disturb* with *Clear after:* submenu, *Offline*, *Profile*, *Log out*).
-- **Action Shortcuts**: Direct access buttons for Mentions (`@`), Saved posts (bookmark), and Settings.
+- **Action Shortcuts**: Mentions (`@`), Saved posts (bookmark) and Settings (gear) each open the right-hand panel — recent mentions, flagged posts, and app actions (zoom reset, reconnect, account info, logout).
 
 ### 2. Left Channel Sidebar (`#1E325C`)
 - **Team Header**: Dropdown team selector header (*None ⌄*) with quick-create (`+`) action.
