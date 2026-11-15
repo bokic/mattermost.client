@@ -473,8 +473,19 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Theme-driven colors stay in `Theme.swift`; native accents that are not user-themed now live in
     one palette.
   - Verified the workspace renders pixel-identically; build is clean and all 27 tests pass.
-- [ ] **Deduplicate HTTP request building** (`login`, `performAuthenticatedRequest`,
-  `fetchUserImage` share status/error handling). — `M`
+- [x] **Deduplicate HTTP request building** — `M`
+  - Added `makeRequest` (URL/auth/Accept/Content-Type/JSON-or-raw body) and `performRequest`
+    (network errors, HTTP status range, server message extraction, optional JSON MIME check and
+    gated status logging) inside `WebService`.
+  - `performAuthenticatedRequest` now builds on the shared pipeline, and `login`, `checkToken`,
+    `fetchUserImage`, `deleteUserPreferences`, `leaveChannel`, `fetchChannelMembers`,
+    `clearCustomStatus`, `fetchFileData`, `sendTeamInvite`, `uploadFile` and `fetchEmojiImage` no
+    longer hand-roll URLSession requests.
+  - Server-side behaviour is preserved: login still reads the `Token` header and requires JSON,
+    preference deletion still falls back from `POST /preferences/delete` to legacy `DELETE`,
+    image/file endpoints keep optional/no auth as before, and payload logging remains gated.
+  - Verified token restore, workspace data, avatars/images and a custom-status PUT against the live
+    server; all 27 tests pass.
 
 ---
 

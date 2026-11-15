@@ -374,105 +374,117 @@ final class WebService: NSObject {
         return components.url
     }
     
-    private func performAuthenticatedRequest<T: Decodable>(
+    /// How a request should authenticate.
+    private enum RequestAuth {
+        case none
+        case optionalToken
+        case requiredToken
+        case bearer(String)
+    }
+
+    /// Builds a URLRequest for the REST API with shared auth/header/body handling.
+    private func makeRequest(
         path: String,
         method: String = "GET",
         queryItems: [URLQueryItem]? = nil,
-        body: Any? = nil
-    ) async throws -> T {
+        jsonBody: Any? = nil,
+        rawBody: Data? = nil,
+        auth: RequestAuth = .requiredToken,
+        accept: String? = "application/json",
+        contentType: String? = nil
+    ) throws -> URLRequest {
         guard let url = buildURL(path: path, queryItems: queryItems) else {
             throw WebServiceError.invalidHostname
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        
-        if let body = body {
+
+        let token: String?
+        switch auth {
+        case .none:
+            token = nil
+        case .optionalToken:
+            token = mToken.isEmpty ? nil : mToken
+        case .requiredToken:
+            token = mToken
+        case .bearer(let value):
+            token = value
+        }
+        if let token = token, !token.isEmpty {
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        }
+        if let accept = accept {
+            request.setValue(accept, forHTTPHeaderField: "Accept")
+        }
+        if let contentType = contentType {
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+        if let jsonBody = jsonBody {
             do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: body)
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONSerialization.data(withJSONObject: jsonBody)
+                if contentType == nil {
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                }
             } catch {
                 throw WebServiceError.invalidRequestBody
             }
+        } else if let rawBody = rawBody {
+            request.httpBody = rawBody
         }
-        
-        if path.contains("status") {
-            DebugLog.logSensitive("HTTP \(method) \(path) sending body=\(String(describing: body))")
-        }
-        
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            if path.contains("status") {
-                DebugLog.log("HTTP \(method) \(path) network error: \(error.localizedDescription)")
-            }
-            throw WebServiceError.networkError(error)
-        }
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw WebServiceError.invalidResponse
-        }
-        
-        if path.contains("status") {
-            DebugLog.logSensitive("HTTP \(method) \(path) status=\(httpResponse.statusCode), body=\(String(decoding: data, as: UTF8.self))")
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            var serverMsg: String?
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let msg = json["message"] as? String, !msg.isEmpty {
-                serverMsg = msg
-            }
-            throw WebServiceError.httpStatus(code: httpResponse.statusCode, message: serverMsg)
-        }
-        
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw WebServiceError.decodingError(error)
-        }
+        return request
     }
-    
-    @discardableResult
-    func login(username: String, password: String) async throws -> LoginWebService {
-        let jsonObject: [String: String] = [
-            "login_id": username,
-            "password": password
-        ]
-        
-        let jsonRequestBody: Data
-        do {
-            jsonRequestBody = try JSONSerialization.data(withJSONObject: jsonObject)
-        } catch {
-            throw WebServiceError.invalidRequestBody
+
+    /// Runs a request and applies the shared network/status/error handling.
+    private func performRequest(
+        path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem]? = nil,
+        jsonBody: Any? = nil,
+        rawBody: Data? = nil,
+        auth: RequestAuth = .requiredToken,
+        accept: String? = "application/json",
+        contentType: String? = nil,
+        acceptableStatus: ClosedRange<Int> = 200...299,
+        requireJSONMime: Bool = false,
+        logPayload: Bool = true
+    ) async throws -> (Data, HTTPURLResponse) {
+        let request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            jsonBody: jsonBody,
+            rawBody: rawBody,
+            auth: auth,
+            accept: accept,
+            contentType: contentType
+        )
+
+        let logStatusPath = logPayload && path.contains("status")
+        if logStatusPath {
+            DebugLog.logSensitive("HTTP \(method) \(path) sending body=\(String(describing: jsonBody))")
         }
-        
-        guard let url = buildURL(path: "/api/v4/users/login") else {
-            throw WebServiceError.invalidHostname
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = jsonRequestBody
 
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
+            if logStatusPath {
+                DebugLog.log("HTTP \(method) \(path) network error: \(error.localizedDescription)")
+            }
             throw WebServiceError.networkError(error)
         }
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw WebServiceError.invalidResponse
         }
-        
-        guard httpResponse.statusCode == 200 else {
+
+        if logStatusPath {
+            DebugLog.logSensitive("HTTP \(method) \(path) status=\(httpResponse.statusCode), body=\(String(decoding: data, as: UTF8.self))")
+        }
+
+        guard acceptableStatus.contains(httpResponse.statusCode) else {
             var serverMsg: String?
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let msg = json["message"] as? String, !msg.isEmpty {
@@ -480,13 +492,47 @@ final class WebService: NSObject {
             }
             throw WebServiceError.httpStatus(code: httpResponse.statusCode, message: serverMsg)
         }
-        
-        updateToken(token: httpResponse.value(forHTTPHeaderField: "Token") ?? "")
-        
-        guard response.mimeType == "application/json" else {
+
+        if requireJSONMime, response.mimeType != "application/json" {
             throw WebServiceError.invalidMimeType(response.mimeType)
         }
-        
+
+        return (data, httpResponse)
+    }
+
+    private func performAuthenticatedRequest<T: Decodable>(
+        path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem]? = nil,
+        body: Any? = nil
+    ) async throws -> T {
+        let (data, _) = try await performRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            jsonBody: body
+        )
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw WebServiceError.decodingError(error)
+        }
+    }
+
+    @discardableResult
+    func login(username: String, password: String) async throws -> LoginWebService {
+        let (data, response) = try await performRequest(
+            path: "/api/v4/users/login",
+            method: "POST",
+            jsonBody: ["login_id": username, "password": password],
+            auth: .none,
+            acceptableStatus: 200...200,
+            requireJSONMime: true,
+            logPayload: false
+        )
+
+        updateToken(token: response.value(forHTTPHeaderField: "Token") ?? "")
+
         do {
             let user = try JSONDecoder().decode(LoginWebService.self, from: data)
             self.currentUserId = user.id
@@ -496,33 +542,16 @@ final class WebService: NSObject {
             throw WebServiceError.decodingError(error)
         }
     }
-    
+
     func checkToken(token: String) async -> Bool {
-        guard let url = buildURL(path: "/api/v4/users/me") else {
-            return false
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
-
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                logger.error("httpResponse == nil")
-                return false
-            }
-
-            guard response.mimeType == "application/json" else {
-                logger.error("mimeType: \(response.mimeType ?? "Unknown")")
-                return false
-            }
-            
-            guard httpResponse.statusCode == 200 else {
-                logger.error("statusCode: \(httpResponse.statusCode), data: \(String(decoding: data, as: UTF8.self))")
-                return false
-            }
-
+            let (data, _) = try await performRequest(
+                path: "/api/v4/users/me",
+                auth: .bearer(token),
+                acceptableStatus: 200...200,
+                requireJSONMime: true,
+                logPayload: false
+            )
             updateToken(token: token)
             if let user = try? JSONDecoder().decode(LoginWebService.self, from: data) {
                 self.currentUserId = user.id
@@ -531,11 +560,11 @@ final class WebService: NSObject {
             logger.info("checkToken succeeded")
             return true
         } catch {
-            logger.error("Error: \(error.localizedDescription)")
+            logger.error("checkToken failed: \(error.localizedDescription)")
             return false
         }
     }
-    
+
     // MARK: - Users, Teams, Channels, Categories & Posts REST API
     
     func fetchCurrentUser() async throws -> LoginWebService {
@@ -587,40 +616,15 @@ final class WebService: NSObject {
         guard !userId.isEmpty else {
             throw WebServiceError.invalidRequestBody
         }
-        guard let url = buildURL(path: "/api/v4/users/\(userId)/image") else {
-            throw WebServiceError.invalidHostname
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        if !mToken.isEmpty {
-            request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        }
-        
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw WebServiceError.networkError(error)
-        }
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw WebServiceError.invalidResponse
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            var serverMsg: String?
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let msg = json["message"] as? String, !msg.isEmpty {
-                serverMsg = msg
-            }
-            throw WebServiceError.httpStatus(code: httpResponse.statusCode, message: serverMsg)
-        }
-        
+        let (data, _) = try await performRequest(
+            path: "/api/v4/users/\(userId)/image",
+            auth: .optionalToken,
+            accept: nil,
+            logPayload: false
+        )
         return data
     }
-    
+
     @discardableResult
     func updateUserStatus(userId: String = "", status: String, dndEndTime: Int64? = nil) async throws -> MMUserStatus {
         var resolvedUserId = userId
@@ -698,33 +702,22 @@ final class WebService: NSObject {
     func deleteUserPreferences(userId: String, preferences: [[String: String]]) async throws {
         // Newer servers expose POST /preferences/delete; older ones accept a
         // DELETE against /preferences with the same body.
-        guard let url = buildURL(path: "/api/v4/users/\(userId)/preferences/delete") else {
-            throw WebServiceError.invalidHostname
+        do {
+            _ = try await performRequest(
+                path: "/api/v4/users/\(userId)/preferences/delete",
+                method: "POST",
+                jsonBody: preferences
+            )
+            return
+        } catch let error as WebServiceError {
+            guard case .httpStatus = error else { throw error }
         }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: preferences)
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw WebServiceError.invalidResponse
-        }
-        if (200...299).contains(http.statusCode) { return }
-        
-        guard let legacyURL = buildURL(path: "/api/v4/users/\(userId)/preferences") else {
-            throw WebServiceError.invalidResponse
-        }
-        var legacy = URLRequest(url: legacyURL)
-        legacy.httpMethod = "DELETE"
-        legacy.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        legacy.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        legacy.httpBody = request.httpBody
-        let (_, legacyResponse) = try await URLSession.shared.data(for: legacy)
-        guard let legacyHTTP = legacyResponse as? HTTPURLResponse,
-              (200...299).contains(legacyHTTP.statusCode) else {
-            throw WebServiceError.httpStatus(code: http.statusCode, message: nil)
-        }
+
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/preferences",
+            method: "DELETE",
+            jsonBody: preferences
+        )
     }
     
     func saveUserPreferences(userId: String, preferences: [[String: String]]) async throws {
@@ -736,33 +729,23 @@ final class WebService: NSObject {
     }
     
     func leaveChannel(channelId: String, userId: String) async throws {
-        guard let url = buildURL(path: "/api/v4/channels/\(channelId)/members/\(userId)") else {
-            throw WebServiceError.invalidHostname
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
-        }
+        _ = try await performRequest(
+            path: "/api/v4/channels/\(channelId)/members/\(userId)",
+            method: "DELETE",
+            accept: nil
+        )
     }
     
     func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMChannelMember] {
         // Decoded loosely because member objects carry many optional fields.
-        guard let url = buildURL(path: "/api/v4/channels/\(channelId)/members", queryItems: [
-            URLQueryItem(name: "page", value: String(page)),
-            URLQueryItem(name: "per_page", value: String(perPage))
-        ]) else { throw WebServiceError.invalidHostname }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WebServiceError.invalidResponse
-        }
-        let decoder = JSONDecoder()
-        return try decoder.decode([MMChannelMember].self, from: data)
+        let (data, _) = try await performRequest(
+            path: "/api/v4/channels/\(channelId)/members",
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage))
+            ]
+        )
+        return try JSONDecoder().decode([MMChannelMember].self, from: data)
     }
     
     func fetchPinnedPosts(channelId: String) async throws -> MMPostList {
@@ -806,16 +789,11 @@ final class WebService: NSObject {
     }
     
     func clearCustomStatus() async throws {
-        guard let url = buildURL(path: "/api/v4/users/me/status/custom") else {
-            throw WebServiceError.invalidHostname
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
-        }
+        _ = try await performRequest(
+            path: "/api/v4/users/me/status/custom",
+            method: "DELETE",
+            accept: nil
+        )
     }
     
     func fetchChannelMemberships(userId: String, teamId: String, page: Int = 0, perPage: Int = 200) async throws -> [MMChannelMembership] {
@@ -841,13 +819,7 @@ final class WebService: NSObject {
     
     func fetchFileData(fileId: String, preview: Bool = false) async throws -> Data {
         let path = preview ? "/api/v4/files/\(fileId)/preview" : "/api/v4/files/\(fileId)"
-        guard let url = buildURL(path: path) else { throw WebServiceError.invalidHostname }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
-        }
+        let (data, _) = try await performRequest(path: path, accept: nil, logPayload: false)
         return data
     }
     
@@ -870,26 +842,14 @@ final class WebService: NSObject {
     }
     
     func sendTeamInvite(teamId: String, email: String) async throws {
-        guard let url = buildURL(path: "/api/v4/teams/\(teamId)/invite/email") else {
-            throw WebServiceError.invalidHostname
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["user_email": email])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw WebServiceError.httpStatus(code: code, message: message)
-        }
+        _ = try await performRequest(
+            path: "/api/v4/teams/\(teamId)/invite/email",
+            method: "POST",
+            jsonBody: ["user_email": email]
+        )
     }
     
     func uploadFile(channelId: String, data: Data, filename: String, mimeType: String) async throws -> String {
-        guard let url = buildURL(path: "/api/v4/files", queryItems: [URLQueryItem(name: "channel_id", value: channelId)]) else {
-            throw WebServiceError.invalidHostname
-        }
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
         func append(_ text: String) { body.append(Data(text.utf8)) }
@@ -899,20 +859,17 @@ final class WebService: NSObject {
         body.append(data)
         append("\r\n--\(boundary)--\r\n")
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
-        
         struct UploadResponse: Decodable {
             struct FileInfo: Decodable { let id: String }
             let file_infos: [FileInfo]
         }
-        let (responseData, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
-        }
+        let (responseData, _) = try await performRequest(
+            path: "/api/v4/files",
+            method: "POST",
+            queryItems: [URLQueryItem(name: "channel_id", value: channelId)],
+            rawBody: body,
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
         let decoded = try JSONDecoder().decode(UploadResponse.self, from: responseData)
         guard let fileId = decoded.file_infos.first?.id else {
             throw WebServiceError.invalidResponse
@@ -1021,15 +978,11 @@ final class WebService: NSObject {
     }
 
     func fetchEmojiImage(emojiId: String) async throws -> Data {
-        guard let url = buildURL(path: "/api/v4/emoji/\(emojiId)/image") else {
-            throw WebServiceError.invalidHostname
-        }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
-        }
+        let (data, _) = try await performRequest(
+            path: "/api/v4/emoji/\(emojiId)/image",
+            accept: nil,
+            logPayload: false
+        )
         return data
     }
 
