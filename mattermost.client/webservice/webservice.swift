@@ -759,11 +759,18 @@ final class WebService: NSObject {
     }
 
     @discardableResult
-    func login(username: String, password: String) async throws -> MMUser {
+    func login(username: String, password: String, mfaToken: String? = nil) async throws -> MMUser {
+        var body: [String: Any] = [
+            "login_id": username,
+            "password": password
+        ]
+        if let mfaToken = mfaToken, !mfaToken.isEmpty {
+            body["token"] = mfaToken
+        }
         let (data, response) = try await performRequest(
             path: "/api/v4/users/login",
             method: "POST",
-            jsonBody: ["login_id": username, "password": password],
+            jsonBody: body,
             auth: .none,
             acceptableStatus: 200...200,
             requireJSONMime: true,
@@ -780,6 +787,34 @@ final class WebService: NSObject {
         } catch {
             throw WebServiceError.decodingError(error)
         }
+    }
+
+    /// Adopts a session token obtained from browser/SSO authentication and
+    /// verifies it against `/users/me` before the caller persists it.
+    @discardableResult
+    func loginWithSessionToken(_ token: String) async throws -> MMUser {
+        updateToken(token: token)
+        do {
+            let user: MMUser = try await performAuthenticatedRequest(path: "/api/v4/users/me")
+            self.currentUserId = user.id
+            UserDefaults.standard.set(user.id, forKey: "currentUserId")
+            return user
+        } catch {
+            updateToken(token: "")
+            throw error
+        }
+    }
+
+    /// Fetches the public client configuration used to discover enabled SSO
+    /// providers before the user has a session.
+    func fetchClientConfigData() async -> Data? {
+        try? await performRequest(
+            path: "/api/v4/config/client",
+            queryItems: [URLQueryItem(name: "format", value: "old")],
+            auth: .none,
+            accept: "application/json",
+            logPayload: false
+        ).0
     }
 
     func checkToken(token: String) async -> Bool {

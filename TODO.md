@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **79/79 pass** |
+| `./test.sh` | **85/85 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -23,16 +23,6 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 Line references below reflect the original audit revision and may drift as files change.
 Finished checklist items are removed from this file and preserved in git history; the broader
 completed baseline remains at the end.
-
----
-
-## P2 — Security, privacy & packaging
-
-- [ ] **No SSO / SAML / OAuth / MFA login** — `L`
-  - `LoginWindow` only supports username+password (`LoginWindow.swift:128-176`); the login
-    payload has no `mfa_token`, token-less flows, or browser-based SSO callback. Many
-    Mattermost deployments require one of these. Add MFA first (simple field), then an
-    external-browser SSO flow with a registered URL scheme.
 
 ---
 
@@ -158,11 +148,10 @@ completed baseline remains at the end.
 
 ### Composer and account
 
-- [ ] **Login window UX is incomplete** — `M`
-  - Fixed frames (`LoginWindow.swift:68-106`) do not reflow on resize and there is no
-    minimum size; there is no spinner/"Connecting…" state, no show-password toggle, no
-    server-discovery-by-email, and errors remain while the user edits. Add Auto Layout, a
-    progress state, validation, and a clear error area.
+- [ ] **Login window lacks server discovery by email** — `S`
+  - The redesigned login window covers password/MFA/SSO, progress, validation,
+    show-password and edit-clearing errors, but users still need to know the server URL;
+    there is no email-domain based server discovery.
 
 - [ ] **No notification/mute preferences UI** — `M`
   - Settings only exposes zoom, reconnect, account and logout
@@ -364,6 +353,9 @@ history is in git; the original long-form checklist lives in prior commits of th
   Messages/Files results with scroll/load-more, Up/Down/Enter navigation, term highlighting,
   recent searches, working `From:`/`In:`/`On:`/`Before:`/`After:` filter pills, and scoped
   `in:` prefill from ⌘F.
+- **Login:** password login with MFA retry, SAML/OAuth provider discovery and in-app SSO
+  browser, session-token verification, Keychain persistence, show-password, progress and
+  inline validation.
 - **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels;
   paginated thread/member/file/mention/saved/pinned lists with load-more on scroll and
   stale-response guards; member search plus admin/presence grouping and DM click-through;
@@ -401,7 +393,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 79 tests today; keep the count rising
+./test.sh       # 85 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

@@ -43,4 +43,21 @@ final class LayoutTests: XCTestCase {
         window.closeRightPanel()
         XCTAssertFalse(window.isRightPanelVisible)
     }
+
+    func testLoginWindowExposesPasswordMFAAndSSOControls() {
+        let window = LoginWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: true
+        )
+        defer { window.close() }
+
+        XCTAssertEqual(window.contentView?.bounds.width, 560)
+        XCTAssertEqual(window.contentView?.bounds.height, 660)
+        XCTAssertTrue(window.mfaField.isHidden)
+        XCTAssertGreaterThan(window.connectButton.frame.width, 0)
+        XCTAssertGreaterThan(window.ssoButton.frame.width, 0)
+        XCTAssertEqual(window.ssoButton.title, "Continue with single sign-on")
+    }
 }

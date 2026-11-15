@@ -189,6 +189,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                     DebugLog.error("Password login failed: \(message)")
                     showLoginWindow()
                     loginWindow?.errorLabel.stringValue = message
+                    if LoginSupport.isMFARequired(error) {
+                        loginWindow?.showMFAField()
+                    }
                 }
             }
         } else {
