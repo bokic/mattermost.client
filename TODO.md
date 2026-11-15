@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **139/139 pass** |
+| `./test.sh` | **144/144 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,11 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **Login window lacks server discovery by email** — `S`
-  - The redesigned login window covers password/MFA/SSO, progress, validation,
-    show-password and edit-clearing errors, but users still need to know the server URL;
-    there is no email-domain based server discovery.
 
 - [ ] **No notification/mute preferences UI** — `M`
   - Settings only exposes zoom, reconnect, account and logout

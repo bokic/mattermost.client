@@ -78,6 +78,8 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
     var connectButton: NSButton!
     var ssoButton: NSButton!
     var errorLabel: NSTextField!
+    var findServerButton: NSButton!
+    var discoveryStatusLabel: NSTextField!
     var zoomController: WindowZoomController?
 
     private let cardPanel = RoundedEdgePanel()
@@ -92,6 +94,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
     private var ssoWindow: NSWindow?
     private var ssoHost = ""
     private var ssoPort: UInt16 = 0
+    private var discoveryTask: Task<Void, Never>?
 
     private let contentWidth: CGFloat = 560
     private let contentHeight: CGFloat = 660
@@ -162,8 +165,31 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         contentView.addSubview(cardPanel)
 
         serverCaption = makeCaption("Server URL")
-        serverCaption.frame = NSRect(x: 20, y: 376, width: 448, height: 16)
+        serverCaption.frame = NSRect(x: 20, y: 376, width: 220, height: 16)
         cardPanel.addSubview(serverCaption)
+
+        findServerButton = NSButton(
+            title: "Find server by email",
+            target: self,
+            action: #selector(findServerButtonPressed)
+        )
+        findServerButton.bezelStyle = .inline
+        findServerButton.isBordered = false
+        findServerButton.font = MMFont.font(ofSize: 11, weight: .medium)
+        findServerButton.contentTintColor = .controlAccentColor
+        findServerButton.alignment = .right
+        findServerButton.frame = NSRect(x: 280, y: 376, width: 188, height: 16)
+        cardPanel.addSubview(findServerButton)
+
+        discoveryStatusLabel = NSTextField(labelWithString: "")
+        discoveryStatusLabel.font = MMFont.font(ofSize: 11)
+        discoveryStatusLabel.textColor = .secondaryLabelColor
+        discoveryStatusLabel.alignment = .right
+        discoveryStatusLabel.frame = NSRect(x: 200, y: 376, width: 268, height: 16)
+        discoveryStatusLabel.isHidden = true
+        discoveryStatusLabel.isEditable = false
+        discoveryStatusLabel.isSelectable = false
+        cardPanel.addSubview(discoveryStatusLabel)
 
         hostLabel = makeField(placeholder: "chat.example.com")
         hostLabel.delegate = self
@@ -316,6 +342,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         isBusy = !enabled
         hostLabel.isEnabled = enabled
         portLabel.isEnabled = enabled
+        findServerButton?.isEnabled = enabled
         usernameLabel.isEnabled = enabled
         passwordLabel.isEnabled = enabled
         visiblePasswordField.isEnabled = enabled
@@ -341,6 +368,41 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         let mfaToken = mfaField.isHidden
             ? nil
             : mfaField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if host.isEmpty, let domain = LoginSupport.extractDomain(fromEmail: username) {
+            if LoginSupport.isPublicWebmail(domain: domain) {
+                errorLabel.stringValue = "'\(domain)' is a public email provider. Please enter your server URL."
+                makeFirstResponder(hostLabel)
+                return
+            }
+            setInputsEnabled(false)
+            connectButton.title = "Discovering server…"
+            discoveryStatusLabel.isHidden = false
+            discoveryStatusLabel.stringValue = "Discovering server for \(domain)…"
+            discoveryStatusLabel.textColor = .secondaryLabelColor
+
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if let discovered = await LoginSupport.discoverServer(forEmail: username) {
+                    self.hostLabel.stringValue = discovered.host
+                    if discovered.port != 443 && discovered.port != 0 {
+                        self.portLabel.stringValue = "\(discovered.port)"
+                    }
+                    let name = discovered.siteName.flatMap { $0.isEmpty ? nil : $0 } ?? discovered.host
+                    self.discoveryStatusLabel.stringValue = "Discovered: \(name)"
+                    self.discoveryStatusLabel.textColor = .systemGreen
+                    self.setInputsEnabled(true)
+                    self.connectButtonPressed()
+                } else {
+                    self.setInputsEnabled(true)
+                    self.discoveryStatusLabel.isHidden = true
+                    self.errorLabel.stringValue =
+                        "Could not discover a server for '\(domain)'. Please enter the server URL."
+                    self.makeFirstResponder(self.hostLabel)
+                }
+            }
+            return
+        }
 
         guard !host.isEmpty, !username.isEmpty, !password.isEmpty else {
             errorLabel.stringValue = L10n.string("Please enter host, username, and password.")
@@ -423,6 +485,127 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         }
     }
 
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        if field === usernameLabel {
+            let username = usernameLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let currentHost = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if currentHost.isEmpty, let domain = LoginSupport.extractDomain(fromEmail: username) {
+                startServerDiscovery(forEmail: username, domain: domain, silentOnFailure: true)
+            }
+        } else if field === hostLabel {
+            let host = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let domain = LoginSupport.extractDomain(fromEmail: host) {
+                if usernameLabel.stringValue.isEmpty {
+                    usernameLabel.stringValue = host
+                }
+                hostLabel.stringValue = ""
+                startServerDiscovery(forEmail: host, domain: domain, silentOnFailure: false)
+            }
+        }
+    }
+
+    // MARK: - Server Discovery by Email
+
+    @objc func findServerButtonPressed() {
+        guard !isBusy else { return }
+        errorLabel.stringValue = ""
+
+        let emailInUsername = usernameLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let domain = LoginSupport.extractDomain(fromEmail: emailInUsername) {
+            startServerDiscovery(forEmail: emailInUsername, domain: domain, silentOnFailure: false)
+            return
+        }
+
+        let textInHost = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let domain = LoginSupport.extractDomain(fromEmail: textInHost) {
+            usernameLabel.stringValue = textInHost
+            hostLabel.stringValue = ""
+            startServerDiscovery(forEmail: textInHost, domain: domain, silentOnFailure: false)
+            return
+        }
+
+        promptForEmailDiscovery()
+    }
+
+    func promptForEmailDiscovery() {
+        let alert = NSAlert()
+        alert.messageText = "Find your server"
+        alert.informativeText = "Enter your work or organizational email address to discover your Mattermost server."
+        alert.addButton(withTitle: "Find server")
+        alert.addButton(withTitle: "Cancel")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.placeholderString = "you@company.com"
+        alert.accessoryView = input
+
+        alert.beginSheetModal(for: self) { [weak self, weak input] response in
+            guard let self = self, response == .alertFirstButtonReturn, let text = input?.stringValue else { return }
+            let email = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let domain = LoginSupport.extractDomain(fromEmail: email) {
+                if self.usernameLabel.stringValue.isEmpty {
+                    self.usernameLabel.stringValue = email
+                }
+                self.startServerDiscovery(forEmail: email, domain: domain, silentOnFailure: false)
+            } else {
+                self.errorLabel.stringValue = "Please enter a valid email address (e.g. you@company.com)."
+            }
+        }
+    }
+
+    func startServerDiscovery(forEmail email: String, domain: String, silentOnFailure: Bool = false) {
+        if LoginSupport.isPublicWebmail(domain: domain) {
+            if !silentOnFailure {
+                errorLabel.stringValue =
+                    "'\(domain)' is a public email provider. Please enter your organization's Mattermost server URL."
+                makeFirstResponder(hostLabel)
+            }
+            return
+        }
+
+        discoveryTask?.cancel()
+        findServerButton.isHidden = true
+        discoveryStatusLabel.isHidden = false
+        discoveryStatusLabel.stringValue = "Discovering server for \(domain)…"
+        discoveryStatusLabel.textColor = .secondaryLabelColor
+
+        discoveryTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let discovered = await LoginSupport.discoverServer(forEmail: email)
+            guard !Task.isCancelled else { return }
+
+            if let discovered = discovered {
+                self.hostLabel.stringValue = discovered.host
+                if discovered.port != 443 && discovered.port != 0 {
+                    self.portLabel.stringValue = "\(discovered.port)"
+                } else {
+                    self.portLabel.stringValue = ""
+                }
+                let name = discovered.siteName.flatMap { $0.isEmpty ? nil : $0 } ?? discovered.host
+                self.discoveryStatusLabel.stringValue = "Discovered: \(name)"
+                self.discoveryStatusLabel.textColor = .systemGreen
+                if self.usernameLabel.stringValue.isEmpty {
+                    self.usernameLabel.stringValue = email
+                }
+                if self.passwordLabel.stringValue.isEmpty && self.visiblePasswordField.stringValue.isEmpty {
+                    self.makeFirstResponder(self.passwordLabel)
+                }
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard !Task.isCancelled else { return }
+                self.discoveryStatusLabel.isHidden = true
+                self.findServerButton.isHidden = false
+            } else {
+                self.discoveryStatusLabel.isHidden = true
+                self.findServerButton.isHidden = false
+                if !silentOnFailure {
+                    self.errorLabel.stringValue =
+                        "Could not discover a Mattermost server for '\(domain)'. Please enter the server URL manually."
+                    self.makeFirstResponder(self.hostLabel)
+                }
+            }
+        }
+    }
+
     func showMFAField() {
         mfaCaption.isHidden = false
         mfaField.isHidden = false
@@ -463,8 +646,45 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
 
     @objc func ssoButtonPressed() {
         guard !isBusy else { return }
-        let host = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        var host = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let port: UInt16 = portLabel.intValue > 0 ? UInt16(clamping: portLabel.intValue) : 0
+        let username = usernameLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if host.isEmpty, let domain = LoginSupport.extractDomain(fromEmail: username) {
+            if LoginSupport.isPublicWebmail(domain: domain) {
+                errorLabel.stringValue = "'\(domain)' is a public email provider. Please enter your server URL."
+                makeFirstResponder(hostLabel)
+                return
+            }
+            setInputsEnabled(false)
+            ssoButton.title = "Discovering server…"
+            discoveryStatusLabel.isHidden = false
+            discoveryStatusLabel.stringValue = "Discovering server for \(domain)…"
+            discoveryStatusLabel.textColor = .secondaryLabelColor
+
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if let discovered = await LoginSupport.discoverServer(forEmail: username) {
+                    self.hostLabel.stringValue = discovered.host
+                    if discovered.port != 443 && discovered.port != 0 {
+                        self.portLabel.stringValue = "\(discovered.port)"
+                    }
+                    let name = discovered.siteName.flatMap { $0.isEmpty ? nil : $0 } ?? discovered.host
+                    self.discoveryStatusLabel.stringValue = "Discovered: \(name)"
+                    self.discoveryStatusLabel.textColor = .systemGreen
+                    self.setInputsEnabled(true)
+                    self.ssoButtonPressed()
+                } else {
+                    self.setInputsEnabled(true)
+                    self.discoveryStatusLabel.isHidden = true
+                    self.errorLabel.stringValue =
+                        "Could not discover a server for '\(domain)'. Enter the server URL first."
+                    self.makeFirstResponder(self.hostLabel)
+                }
+            }
+            return
+        }
+
         guard !host.isEmpty else {
             errorLabel.stringValue = L10n.string("Enter the server URL first.")
             makeFirstResponder(hostLabel)

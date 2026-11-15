@@ -59,5 +59,7 @@ final class LayoutTests: XCTestCase {
         XCTAssertGreaterThan(window.connectButton.frame.width, 0)
         XCTAssertGreaterThan(window.ssoButton.frame.width, 0)
         XCTAssertEqual(window.ssoButton.title, "Continue with single sign-on")
+        XCTAssertNotNil(window.findServerButton)
+        XCTAssertEqual(window.findServerButton.title, "Find server by email")
     }
 }
