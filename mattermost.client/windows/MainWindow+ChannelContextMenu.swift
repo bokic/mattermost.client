@@ -184,9 +184,6 @@ extension MainWindow {
     }
 
     func setChannelNotificationPreference(channelId: String, desktop: String) {
-        guard let ws = webService, ws.isLogged() else { return }
-        let userId = currentUser?.id ?? ws.currentUserId
-        guard !userId.isEmpty else { return }
         let previous = channelDesktopNotificationByChannel[channelId]
         let wasMuted = isChannelMuted(channelId)
         channelDesktopNotificationByChannel[channelId] = desktop
@@ -197,6 +194,13 @@ extension MainWindow {
         }
         updateSidebarSelectionAppearance()
         updateSidebarBadges()
+        if rightPanelMode == .settings {
+            loadSettingsPanel()
+        }
+
+        guard let ws = webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -222,6 +226,9 @@ extension MainWindow {
                 }
                 self.updateSidebarSelectionAppearance()
                 self.updateSidebarBadges()
+                if self.rightPanelMode == .settings {
+                    self.loadSettingsPanel()
+                }
                 self.showInfoAlert("Could not update notifications: \(error.localizedDescription)")
             }
         }

@@ -349,6 +349,22 @@ struct MMTheme {
     }
 }
 
+enum ThemeOverride: String, CaseIterable {
+    case server
+    case system
+    case light
+    case dark
+
+    var displayName: String {
+        switch self {
+        case .server: return "Server (Default)"
+        case .system: return "System (macOS)"
+        case .light: return "Light (Denim)"
+        case .dark: return "Dark (Onyx)"
+        }
+    }
+}
+
 @MainActor
 final class ThemeManager {
     static let shared = ThemeManager()
@@ -361,12 +377,42 @@ final class ThemeManager {
     private var lastPreferences: [[String: String]] = []
     private var lastTeamId: String?
 
+    var themeOverride: ThemeOverride {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: "themeOverride"),
+                  let override = ThemeOverride(rawValue: raw) else {
+                return .server
+            }
+            return override
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "themeOverride")
+        }
+    }
+
     private init() {}
 
     /// Applies the theme preference for the active team, falling back to the global one.
     func apply(preferences: [[String: String]], teamId: String?) {
         lastPreferences = preferences
         lastTeamId = teamId
+
+        switch themeOverride {
+        case .system:
+            applySystemTheme()
+            return
+        case .light:
+            usesSystemAppearance = false
+            theme = .denim
+            return
+        case .dark:
+            usesSystemAppearance = false
+            theme = .onyx
+            return
+        case .server:
+            break
+        }
+
         let themePreferences = preferences.filter { $0["category"] == "theme" }
         let teamKey = teamId ?? ""
         let preference = themePreferences.first { $0["name"] == teamKey }

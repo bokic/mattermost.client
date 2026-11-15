@@ -82,4 +82,32 @@ final class ThemeTests: XCTestCase {
         )
         XCTAssertFalse(ThemeManager.shared.usesSystemAppearance)
     }
+
+    func testThemeOverrides() {
+        let preferences: [[String: String]] = [
+            ["category": "theme", "name": "", "value": #"{"type":"Denim"}"#]
+        ]
+        defer {
+            ThemeManager.shared.themeOverride = .server
+            ThemeManager.shared.apply(preferences: preferences, teamId: nil)
+        }
+
+        ThemeManager.shared.themeOverride = .light
+        ThemeManager.shared.apply(preferences: preferences, teamId: nil)
+        XCTAssertFalse(ThemeManager.shared.theme.isDark)
+        XCTAssertFalse(ThemeManager.shared.usesSystemAppearance)
+
+        ThemeManager.shared.themeOverride = .dark
+        ThemeManager.shared.apply(preferences: preferences, teamId: nil)
+        XCTAssertTrue(ThemeManager.shared.theme.isDark)
+        XCTAssertFalse(ThemeManager.shared.usesSystemAppearance)
+
+        ThemeManager.shared.themeOverride = .system
+        ThemeManager.shared.apply(preferences: preferences, teamId: nil)
+        XCTAssertTrue(ThemeManager.shared.usesSystemAppearance)
+
+        ThemeManager.shared.themeOverride = .server
+        ThemeManager.shared.apply(preferences: preferences, teamId: nil)
+        XCTAssertFalse(ThemeManager.shared.usesSystemAppearance)
+    }
 }

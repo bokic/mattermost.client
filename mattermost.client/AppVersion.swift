@@ -19,4 +19,8 @@ enum AppVersion {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return title(base: "Mattermost", version: version)
     }
+
+    static var versionString: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "Development"
+    }
 }

@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **144/144 pass** |
+| `./test.sh` | **152/152 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,12 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **No notification/mute preferences UI** — `M`
-  - Settings only exposes zoom, reconnect, account and logout
-    (`MainWindow+RightPanel.swift:642-686`). Add desktop notification mode/sound, mention
-    keys, channel mute list, theme override (system/light/dark/server) and advanced
-    connection details.
 
 - [ ] **System dark mode and native controls do not follow the theme** — `M`
   - `ThemeManager` defaults to Denim (`Theme.swift:361-372`); `builtin(for:)` has no

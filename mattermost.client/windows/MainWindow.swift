@@ -857,6 +857,23 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         return super.performKeyEquivalent(with: event)
     }
 
+    func applyCurrentTheme() {
+        if ThemeManager.shared.usesSystemAppearance {
+            NSApp.appearance = nil
+        } else {
+            NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+        }
+        backgroundColor = Theme.shared.sidebarTeamBarBg
+        mainPanel.color = Theme.shared.sidebarBg
+        chatPanel.color = Theme.shared.centerBg
+        mainPanel.setNeedsAppearanceUpdate()
+        chatPanel.setNeedsAppearanceUpdate()
+        updateSidebarSelectionAppearance()
+        updateSidebarBadges()
+        rebuildTimelineContent(scrollToBottom: false)
+        reloadRightPanelIfNeeded()
+    }
+
     struct CompletionTrigger {
         let kind: CompletionKind
         let query: String

@@ -500,6 +500,10 @@ final class WebService: NSObject {
     func isLogged() -> Bool {
         return !mToken.isEmpty
     }
+
+    var webSocketURL: URL? {
+        buildURL(path: "/api/v4/websocket", isWebSocket: true)
+    }
     
     func buildURL(path: String, queryItems: [URLQueryItem]? = nil, isWebSocket: Bool = false) -> URL? {
         var cleanHost = mHost.trimmingCharacters(in: .whitespacesAndNewlines)

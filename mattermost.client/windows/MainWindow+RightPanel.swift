@@ -1609,6 +1609,93 @@ extension MainWindow {
         renderRightPanel(empty: empty, rows: rows)
     }
 
+    func allMutedChannelIds() -> [String] {
+        var ids = Set<String>()
+        ids.formUnion(mutedChannelIds)
+        for (id, pref) in channelDesktopNotificationByChannel where pref.lowercased() == "none" {
+            ids.insert(id)
+        }
+        for (id, membership) in membershipsByChannel {
+            if membership.notify_props?.desktop?.lowercased() == "none"
+                || membership.notify_props?.mark_unread?.lowercased() == "mention" {
+                ids.insert(id)
+            }
+        }
+        return ids.sorted { id1, id2 in
+            let name1 = channelsById[id1].map { channelDisplayName(for: $0) } ?? id1
+            let name2 = channelsById[id2].map { channelDisplayName(for: $0) } ?? id2
+            return name1.localizedCaseInsensitiveCompare(name2) == .orderedAscending
+        }
+    }
+
+    func editMentionKeys() {
+        let alert = NSAlert()
+        alert.messageText = "Mention Keys"
+        alert.informativeText = "Comma-separated keywords or phrases that trigger a notification when mentioned in channels."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let currentKeys = currentUser?.notify_props?.mention_keys ?? ""
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        textField.stringValue = currentKeys
+        textField.placeholderString = "e.g. urgent, project-x, @alerts"
+        alert.accessoryView = textField
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self = self else { return }
+            let newKeys = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.updateDesktopNotificationPreferences(["mention_keys": newKeys])
+        }
+    }
+
+    func cycleThemeOverride() {
+        let all = ThemeOverride.allCases
+        let current = ThemeManager.shared.themeOverride
+        let nextIndex = ((all.firstIndex(of: current) ?? 0) + 1) % all.count
+        ThemeManager.shared.themeOverride = all[nextIndex]
+        ThemeManager.shared.reapply()
+        applyCurrentTheme()
+        loadSettingsPanel()
+    }
+
+    func showConnectionDetails() {
+        let alert = NSAlert()
+        alert.messageText = "Connection Details"
+
+        let host = UserDefaults.standard.string(forKey: "host") ?? ""
+        let port = UserDefaults.standard.integer(forKey: "port")
+        let server = port > 0 ? "\(host):\(port)" : host
+        let wsURL = webService?.webSocketURL?.absoluteString ?? "N/A"
+        let wsStatus = webService?.isWebSocketConnected == true ? "Connected" : "Disconnected"
+        let user = currentUser?.username ?? UserDefaults.standard.string(forKey: "username") ?? "Unknown"
+        let userId = currentUser?.id ?? webService?.currentUserId ?? "Unknown"
+        let email = currentUser?.email ?? "Unknown"
+        let team = activeTeam?.display_name ?? activeTeam?.name ?? "None"
+        let version = AppVersion.versionString
+
+        let infoLines = [
+            "Server: \(server.isEmpty ? "Not configured" : server)",
+            "WebSocket URL: \(wsURL)",
+            "WebSocket Status: \(wsStatus)",
+            "User: @\(user)",
+            "User ID: \(userId)",
+            "Email: \(email.isEmpty ? "None" : email)",
+            "Active Team: \(team)",
+            "Client Version: \(version)"
+        ]
+        let fullText = infoLines.joined(separator: "\n")
+        alert.informativeText = fullText
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Copy Details")
+
+        alert.beginSheetModal(for: self) { response in
+            if response == .alertSecondButtonReturn {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(fullText, forType: .string)
+            }
+        }
+    }
+
     func loadSettingsPanel() {
         let host = UserDefaults.standard.string(forKey: "host") ?? ""
         let port = UserDefaults.standard.integer(forKey: "port")
@@ -1616,99 +1703,209 @@ extension MainWindow {
         let zoomPercent = Int((ZoomManager.shared.currentZoomFactor * 100).rounded())
         let server = port > 0 ? "\(host):\(port)" : host
 
-        let rows: [RightPanelRow] = [
-            RightPanelRow(
-                title: "Reset zoom",
-                subtitle: "Currently \(zoomPercent)%",
-                meta: "Appearance",
-                action: { [weak self] in
-                    ZoomManager.shared.resetZoom()
-                    self?.loadSettingsPanel()
-                }
-            ),
-            RightPanelRow(
-                title: "Reconnect",
-                subtitle: webService?.isWebSocketConnected == true
-                    ? "Connected"
-                    : "Reconnecting…",
-                meta: "Connection",
-                action: { [weak self] in
-                    guard let self = self else { return }
-                    self.settingsAwaitingReconnect = self.webService?.isWebSocketConnected != true
-                    self.webService?.reconnectIfNeeded()
-                    self.loadSettingsPanel()
-                }
-            ),
-            RightPanelRow(
-                title: "Account",
-                subtitle: username,
-                meta: server,
-                action: nil
-            ),
-            RightPanelRow(
-                title: "Desktop notifications",
-                subtitle: desktopNotificationModeLabel(),
-                meta: "Change",
-                action: { [weak self] in self?.cycleDesktopNotificationMode() }
-            ),
-            RightPanelRow(
-                title: "Notification sound",
-                subtitle: desktopSoundsEnabled() ? "On" : "Off",
-                meta: "Toggle",
-                action: { [weak self] in self?.toggleDesktopNotificationSound() }
-            ),
-            RightPanelRow(
-                title: loadRemoteImagesAutomatically ? "Disable automatic remote images" : "Enable automatic remote images",
-                subtitle: "When off, inline/Giphy images are not fetched from third-party hosts",
-                meta: "Privacy",
-                action: { [weak self] in
-                    guard let self = self else { return }
-                    self.loadRemoteImagesAutomatically.toggle()
-                    UserDefaults.standard.set(
-                        self.loadRemoteImagesAutomatically,
-                        forKey: "loadRemoteImagesAutomatically"
-                    )
-                    self.rebuildTimelineContent(scrollToBottom: false)
-                    self.loadSettingsPanel()
-                }
-            ),
-            RightPanelRow(
-                title: linkPreviewsEnabled ? "Disable link previews" : "Enable link previews",
-                subtitle: linkPreviewsEnabled
-                    ? "Linked pages are summarized in the timeline"
-                    : "Off by default; enabling contacts linked sites or the server",
-                meta: "Privacy",
-                action: { [weak self] in
-                    guard let self = self else { return }
-                    self.linkPreviewsEnabled.toggle()
-                    UserDefaults.standard.set(
-                        self.linkPreviewsEnabled,
-                        forKey: "linkPreviewsEnabled"
-                    )
-                    if self.linkPreviewsEnabled {
-                        self.linkPreviewFailures.removeAll()
-                    }
-                    self.rebuildTimelineContent(scrollToBottom: false)
-                    self.loadSettingsPanel()
-                }
-            ),
-            RightPanelRow(
-                title: "Export diagnostics",
-                subtitle: "Redacted log and build information for support",
-                meta: "Support",
-                action: { [weak self] in
-                    self?.exportDiagnostics()
-                }
-            ),
-            RightPanelRow(
-                title: "Log out",
-                subtitle: "Clear credentials and return to sign in",
+        var rows: [RightPanelRow] = []
+
+        // ACCOUNT & CONNECTION
+        rows.append(RightPanelRow(
+            title: "ACCOUNT & CONNECTION",
+            subtitle: "",
+            meta: "",
+            action: nil,
+            isSectionHeader: true
+        ))
+        rows.append(RightPanelRow(
+            title: "Account",
+            subtitle: username.isEmpty ? "Not logged in" : "@\(username)",
+            meta: server,
+            action: nil
+        ))
+        rows.append(RightPanelRow(
+            title: "Connection details",
+            subtitle: "Server URL, WebSocket and session diagnostics",
+            meta: "View",
+            action: { [weak self] in self?.showConnectionDetails() }
+        ))
+        rows.append(RightPanelRow(
+            title: "Reconnect",
+            subtitle: webService?.isWebSocketConnected == true
+                ? "Connected"
+                : "Reconnecting…",
+            meta: "Connection",
+            action: { [weak self] in
+                guard let self = self else { return }
+                self.settingsAwaitingReconnect = self.webService?.isWebSocketConnected != true
+                self.webService?.reconnectIfNeeded()
+                self.loadSettingsPanel()
+            }
+        ))
+
+        // NOTIFICATIONS & MUTE
+        rows.append(RightPanelRow(
+            title: "NOTIFICATIONS & MUTE",
+            subtitle: "",
+            meta: "",
+            action: nil,
+            isSectionHeader: true
+        ))
+        rows.append(RightPanelRow(
+            title: "Desktop notifications",
+            subtitle: desktopNotificationModeLabel(),
+            meta: "Change",
+            action: { [weak self] in self?.cycleDesktopNotificationMode() }
+        ))
+        rows.append(RightPanelRow(
+            title: "Notification sound",
+            subtitle: desktopSoundsEnabled() ? "On" : "Off",
+            meta: "Toggle",
+            action: { [weak self] in self?.toggleDesktopNotificationSound() }
+        ))
+        let mentionKeys = currentUser?.notify_props?.mention_keys?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        rows.append(RightPanelRow(
+            title: "Mention keys",
+            subtitle: mentionKeys.isEmpty ? "None configured" : mentionKeys,
+            meta: "Edit",
+            action: { [weak self] in self?.editMentionKeys() }
+        ))
+
+        // MUTED CHANNELS
+        let mutedChannels = allMutedChannelIds()
+        rows.append(RightPanelRow(
+            title: "MUTED CHANNELS",
+            subtitle: "",
+            meta: "\(mutedChannels.count)",
+            action: nil,
+            isSectionHeader: true
+        ))
+        if mutedChannels.isEmpty {
+            rows.append(RightPanelRow(
+                title: "No muted channels",
+                subtitle: "All channels currently follow your default notification settings",
                 meta: "",
-                action: { [weak self] in
-                    self?.confirmLogout()
+                action: nil
+            ))
+        } else {
+            for chId in mutedChannels {
+                let channel = channelsById[chId]
+                let name = channel.map { channelDisplayName(for: $0) } ?? chId
+                let prefix: String
+                if let type = channel?.type {
+                    switch type {
+                    case "P": prefix = "Private • "
+                    case "D": prefix = "Direct Message • "
+                    case "G": prefix = "Group • "
+                    default: prefix = "Channel • "
+                    }
+                } else {
+                    prefix = "Channel • "
                 }
-            )
-        ]
+                rows.append(RightPanelRow(
+                    title: name,
+                    subtitle: "\(prefix)Notifications muted",
+                    meta: "",
+                    action: nil,
+                    secondaryActionTitle: "Unmute",
+                    secondaryAction: { [weak self] in
+                        guard let self = self else { return }
+                        self.setChannelNotificationPreference(channelId: chId, desktop: "default")
+                        self.loadSettingsPanel()
+                    }
+                ))
+            }
+        }
+
+        // APPEARANCE
+        rows.append(RightPanelRow(
+            title: "APPEARANCE",
+            subtitle: "",
+            meta: "",
+            action: nil,
+            isSectionHeader: true
+        ))
+        rows.append(RightPanelRow(
+            title: "Theme override",
+            subtitle: ThemeManager.shared.themeOverride.displayName,
+            meta: "Change",
+            action: { [weak self] in self?.cycleThemeOverride() }
+        ))
+        rows.append(RightPanelRow(
+            title: "Reset zoom",
+            subtitle: "Currently \(zoomPercent)%",
+            meta: "Appearance",
+            action: { [weak self] in
+                ZoomManager.shared.resetZoom()
+                self?.loadSettingsPanel()
+            }
+        ))
+
+        // PRIVACY & MEDIA
+        rows.append(RightPanelRow(
+            title: "PRIVACY & MEDIA",
+            subtitle: "",
+            meta: "",
+            action: nil,
+            isSectionHeader: true
+        ))
+        rows.append(RightPanelRow(
+            title: loadRemoteImagesAutomatically ? "Disable automatic remote images" : "Enable automatic remote images",
+            subtitle: "When off, inline/Giphy images are not fetched from third-party hosts",
+            meta: "Privacy",
+            action: { [weak self] in
+                guard let self = self else { return }
+                self.loadRemoteImagesAutomatically.toggle()
+                UserDefaults.standard.set(
+                    self.loadRemoteImagesAutomatically,
+                    forKey: "loadRemoteImagesAutomatically"
+                )
+                self.rebuildTimelineContent(scrollToBottom: false)
+                self.loadSettingsPanel()
+            }
+        ))
+        rows.append(RightPanelRow(
+            title: linkPreviewsEnabled ? "Disable link previews" : "Enable link previews",
+            subtitle: linkPreviewsEnabled
+                ? "Linked pages are summarized in the timeline"
+                : "Off by default; enabling contacts linked sites or the server",
+            meta: "Privacy",
+            action: { [weak self] in
+                guard let self = self else { return }
+                self.linkPreviewsEnabled.toggle()
+                UserDefaults.standard.set(
+                    self.linkPreviewsEnabled,
+                    forKey: "linkPreviewsEnabled"
+                )
+                if self.linkPreviewsEnabled {
+                    self.linkPreviewFailures.removeAll()
+                }
+                self.rebuildTimelineContent(scrollToBottom: false)
+                self.loadSettingsPanel()
+            }
+        ))
+
+        // SESSION & DIAGNOSTICS
+        rows.append(RightPanelRow(
+            title: "SESSION & DIAGNOSTICS",
+            subtitle: "",
+            meta: "",
+            action: nil,
+            isSectionHeader: true
+        ))
+        rows.append(RightPanelRow(
+            title: "Export diagnostics",
+            subtitle: "Redacted log and build information for support",
+            meta: "Support",
+            action: { [weak self] in
+                self?.exportDiagnostics()
+            }
+        ))
+        rows.append(RightPanelRow(
+            title: "Log out",
+            subtitle: "Clear credentials and return to sign in",
+            meta: "",
+            action: { [weak self] in
+                self?.confirmLogout()
+            }
+        ))
+
         renderRightPanel(empty: "", rows: rows)
     }
 
