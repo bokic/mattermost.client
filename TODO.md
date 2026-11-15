@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **116/116 pass** |
+| `./test.sh` | **120/120 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -29,21 +29,6 @@ completed baseline remains at the end.
 ## P3 — Web-parity backlog
 
 ### Message rendering
-
-- [ ] **Attachment and inline-image rendering has several correctness gaps** — `M`
-  - Image attachments never set `imageView.animates` and only fetch the static preview, so
-    animated GIF attachments appear frozen (`MainWindow+Timeline.swift:1334-1341,1380`).
-  - Multiple images stack on separate rows instead of using Mattermost's image grid
-    (`:1485-1490`), consuming large vertical space.
-  - When `file.width/height` are absent, the preview's downscaled pixel size is cached as the
-    natural size (`:1383-1389`), so the image can never render at its true size.
-  - Any failed image fetch becomes a hardcoded fake "GIPHY" animation (`:239-273,440,459`),
-    including ordinary PNG/JPEG URLs; Giphy page links are treated as images too
-    (`:279-286`), so a normal link turns into a fallback GIF instead of a link/preview.
-  - Normal Markdown images whose URL has no image extension or query string are dropped by
-    `inlineMarkdown` (`:2083-2111`) and not rescued by `parseGiphyInMessage` (`:289-301`).
-  - Lightbox zoom has no pan/scroll (`:1004-1023`), so >1× content outside the stage is
-    unreachable; the image is also retained after close (`:951-960`).
 
 ### Navigation and sidebar
 
@@ -313,9 +298,11 @@ history is in git; the original long-form checklist lives in prior commits of th
   clickable reply-count thread footers refreshed from live reply/thread events,
   props-backed system messages, role/is_bot-based bot detection, offline-by-default
   presence and calendar-day date separators including future dates,
-  attachments/image cards/lightbox, opt-in Open Graph link-preview cards with cached
-  images, searchable recent/custom-emoji reaction picker, wrapping count-sorted reaction
-  chips with participant tooltips and optimistic toggles, hover toolbar,
+  attachments/image cards, animated GIF/WebP attachments, responsive multi-image grids,
+  true-size handling when server dimensions are missing, inline Markdown images with or
+  without extensions, scrollable zoomable lightbox, opt-in Open Graph link-preview cards
+  with cached images, searchable recent/custom-emoji reaction picker, wrapping
+  count-sorted reaction chips with participant tooltips and optimistic toggles, hover toolbar,
   block-level Markdown (headings, ordered/nested lists, blockquotes, tables, rules),
   fenced code with language labels, syntax highlighting and copy links, inline
   markdown/mentions/channels/emoji/images, full Mattermost emoji catalog, Giphy rendering.
@@ -345,7 +332,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 116 tests today; keep the count rising
+./test.sh       # 120 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

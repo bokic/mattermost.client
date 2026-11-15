@@ -13,8 +13,8 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Check | Result |
 |---|---|
 | Clean build (`./build.sh`) | **Succeeds** |
-| Unit tests (`./test.sh`) | **116/116 pass** |
-| Coverage | **40.3% line coverage**, enforced by a 30% gate in `test.sh` |
+| Unit tests (`./test.sh`) | **120/120 pass** |
+| Coverage | **41.4% line coverage**, enforced by a 30% gate in `test.sh` |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
 | Deployment target | **macOS 15.0** (app and tests) |
@@ -58,7 +58,7 @@ None. Resolved findings and the previously verified feature list are preserved i
 
 ```bash
 ./build.sh     # clean build, zero warnings
-./test.sh      # 116 tests + coverage gate
+./test.sh      # 120 tests + coverage gate
 ./lint.sh      # swift-format --strict on migrated files
 ```
 

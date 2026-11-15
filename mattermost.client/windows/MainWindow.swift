@@ -144,6 +144,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let lightboxHeaderPanel = RoundedEdgePanel()
     let lightboxZoomBar = RoundedEdgePanel()
     let lightboxContentPanel = RoundedEdgePanel()
+    let lightboxScrollView = NSScrollView()
+    let lightboxCanvas = NSView()
     let lightboxImageView = NSImageView()
     let lightboxAvatarView = NSImageView()
     let lightboxAvatarPanel = RoundedEdgePanel()

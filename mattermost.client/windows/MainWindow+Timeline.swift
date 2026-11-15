@@ -246,54 +246,17 @@ extension MainWindow {
         return container
     }
 
-    func createFallbackAnimatedGif() -> NSImage? {
-        let size = CGSize(width: 140, height: 100)
-        let rep1 = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 140, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
-        if let rep1 = rep1 {
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep1)
-            NSColor(red: 0.1, green: 0.5, blue: 0.9, alpha: 1.0).setFill()
-            NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-            let str = NSAttributedString(string: "GIPHY", attributes: [.font: MMFont.bold(20), .foregroundColor: NSColor.white])
-            str.draw(at: NSPoint(x: (140 - str.size().width) / 2, y: (100 - str.size().height) / 2))
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        let rep2 = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 140, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
-        if let rep2 = rep2 {
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep2)
-            NSColor(red: 0.9, green: 0.2, blue: 0.5, alpha: 1.0).setFill()
-            NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-            let str2 = NSAttributedString(string: "GIPHY", attributes: [.font: MMFont.bold(22), .foregroundColor: NSColor.white])
-            str2.draw(at: NSPoint(x: (140 - str2.size().width) / 2, y: (100 - str2.size().height) / 2))
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        guard let cg1 = rep1?.cgImage, let cg2 = rep2?.cgImage else { return nil }
-        let data = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, UTType.gif.identifier as CFString, 2, nil) else { return nil }
-        let gifProps = [kCGImagePropertyGIFDictionary as String: [kCGImagePropertyGIFLoopCount as String: 0]]
-        CGImageDestinationSetProperties(dest, gifProps as CFDictionary)
-        let frameProps = [kCGImagePropertyGIFDictionary as String: [kCGImagePropertyGIFDelayTime as String: 0.4]]
-        CGImageDestinationAddImage(dest, cg1, frameProps as CFDictionary)
-        CGImageDestinationAddImage(dest, cg2, frameProps as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { return nil }
-        return NSImage(data: data as Data)
-    }
-
     func parseGiphyInMessage(_ message: String) -> ParsedGiphyMessage {
         var text = message
         var gifURLs: [String] = []
 
-        func isGiphyOrGifURL(_ urlStr: String) -> Bool {
+        func isDirectImageURL(_ urlStr: String) -> Bool {
             guard let url = URL(string: urlStr) else { return false }
             let host = (url.host ?? "").lowercased()
+            if host == "media.giphy.com" || host == "i.giphy.com" { return true }
             let path = url.path.lowercased()
-            if host.contains("giphy.com") || host.contains("gph.is") { return true }
-            let imageExtensions = [".gif", ".webp", ".png", ".jpg", ".jpeg", ".bmp"]
-            if imageExtensions.contains(where: { path.hasSuffix($0) }) { return true }
-            return false
+            let imageExtensions = [".gif", ".webp", ".png", ".jpg", ".jpeg", ".bmp", ".avif"]
+            return imageExtensions.contains(where: { path.hasSuffix($0) })
         }
 
         // 1. Match Markdown images: ![alt](url)
@@ -303,10 +266,8 @@ extension MainWindow {
             let matches = mdRegex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
             for match in matches.reversed() {
                 let url = nsText.substring(with: match.range(at: 3))
-                if isGiphyOrGifURL(url) {
-                    gifURLs.insert(url, at: 0)
-                    text = (text as NSString).replacingCharacters(in: match.range(at: 1), with: "")
-                }
+                gifURLs.insert(url, at: 0)
+                text = (text as NSString).replacingCharacters(in: match.range(at: 1), with: "")
             }
         }
 
@@ -317,7 +278,7 @@ extension MainWindow {
             let matches = urlRegex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
             for match in matches.reversed() {
                 let url = nsText.substring(with: match.range(at: 1))
-                if isGiphyOrGifURL(url) && !gifURLs.contains(url) {
+                if isDirectImageURL(url) && !gifURLs.contains(url) {
                     gifURLs.insert(url, at: 0)
                     text = (text as NSString).replacingCharacters(in: match.range(at: 1), with: "")
                 }
@@ -403,13 +364,30 @@ extension MainWindow {
         imageView.image = cachedImage
         container.addSubview(imageView)
 
+        let failureLabel = NSTextField(labelWithString: "Image unavailable")
+        failureLabel.font = MMFont.font(ofSize: 12)
+        failureLabel.textColor = Theme.shared.centerTextMuted
+        failureLabel.alignment = .center
+        failureLabel.isEditable = false
+        failureLabel.isSelectable = false
+        failureLabel.frame = container.bounds.insetBy(dx: 8, dy: 8)
+        failureLabel.isHidden = cachedImage != nil
+        container.addSubview(failureLabel)
+
         container.onClick = { [weak self, weak imageView] in
             let name = URL(string: urlString)?.lastPathComponent ?? "Image"
             self?.showLightbox(image: imageView?.image, remoteURL: urlString, filename: name, authorId: authorId)
         }
 
-        loadGiphyAnimatedImage(from: urlString) { [weak self, weak container, weak imageView] image in
-            guard let self = self, let image = image else { return }
+        loadGiphyAnimatedImage(from: urlString) { [weak self, weak container, weak imageView, weak failureLabel] image in
+            guard let self = self else { return }
+            guard let image = image else {
+                imageView?.isHidden = true
+                failureLabel?.isHidden = false
+                return
+            }
+            imageView?.isHidden = false
+            failureLabel?.isHidden = true
             imageView?.image = image
             let pixels = self.pixelSize(of: image)
             guard pixels.width > 0, pixels.height > 0 else { return }
@@ -459,7 +437,7 @@ extension MainWindow {
         }
 
         guard let url = URL(string: urlString) else {
-            completion(createFallbackAnimatedGif())
+            completion(nil)
             return
         }
 
@@ -479,7 +457,7 @@ extension MainWindow {
                 if let data = responseData, data.count <= maxBytes, let image = NSImage(data: data) {
                     completion(image)
                 } else {
-                    completion(self.createFallbackAnimatedGif())
+                    completion(nil)
                 }
             }
         }.resume()
@@ -1002,13 +980,21 @@ extension MainWindow {
         lightboxZoomBar.addSubview(lightboxZoomFitButton)
         lightboxZoomBar.addSubview(lightboxZoomInButton)
 
-        lightboxImageView.imageScaling = .scaleProportionallyUpOrDown
+        lightboxScrollView.drawsBackground = false
+        lightboxScrollView.hasVerticalScroller = true
+        lightboxScrollView.hasHorizontalScroller = true
+        lightboxScrollView.autohidesScrollers = true
+        lightboxScrollView.borderType = .noBorder
+        lightboxScrollView.documentView = lightboxCanvas
+        lightboxContentPanel.addSubview(lightboxScrollView)
+
+        lightboxImageView.imageScaling = .scaleAxesIndependently
         lightboxImageView.imageAlignment = .alignCenter
         lightboxImageView.animates = true
         lightboxImageView.wantsLayer = true
         lightboxImageView.layer?.cornerRadius = MMRadius.panel
         lightboxImageView.layer?.masksToBounds = true
-        lightboxContentPanel.addSubview(lightboxImageView)
+        lightboxCanvas.addSubview(lightboxImageView)
     }
 
     func configureLightboxButton(
@@ -1124,6 +1110,11 @@ extension MainWindow {
         lightboxOverlay.removeFromSuperview()
         isLightboxVisible = false
         lightboxLoadToken = UUID()
+        lightboxImageView.image = nil
+        lightboxNaturalSize = .zero
+        lightboxFile = nil
+        lightboxRemoteURL = nil
+        lightboxCanvas.frame = .zero
         if let monitor = lightboxKeyMonitor {
             NSEvent.removeMonitor(monitor)
             lightboxKeyMonitor = nil
@@ -1152,6 +1143,7 @@ extension MainWindow {
         lightboxHeaderPanel.frame = NSRect(x: 0, y: height - headerH, width: width, height: headerH)
         lightboxZoomBar.frame = NSRect(x: 0, y: height - headerH - zoomH, width: width, height: zoomH)
         lightboxContentPanel.frame = NSRect(x: 0, y: 0, width: width, height: max(0, height - headerH - zoomH))
+        lightboxScrollView.frame = lightboxContentPanel.bounds
 
         lightboxAvatarPanel.frame = NSRect(x: 16, y: 16, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
         lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
@@ -1180,17 +1172,29 @@ extension MainWindow {
         let maxH = max(1, stage.height - padding * 2)
         guard lightboxNaturalSize.width > 0, lightboxNaturalSize.height > 0 else {
             lightboxImageView.frame = .zero
+            lightboxCanvas.frame = stage
             return
         }
         let fitted = fitImageSize(natural: lightboxNaturalSize, maxWidth: maxW, maxHeight: maxH)
         let width = fitted.width * lightboxScale
         let height = fitted.height * lightboxScale
+        let canvasWidth = max(stage.width, width + padding * 2)
+        let canvasHeight = max(stage.height, height + padding * 2)
+        lightboxCanvas.frame = NSRect(x: 0, y: 0, width: canvasWidth, height: canvasHeight)
         lightboxImageView.frame = NSRect(
-            x: (stage.width - width) / 2,
-            y: (stage.height - height) / 2,
+            x: (canvasWidth - width) / 2,
+            y: (canvasHeight - height) / 2,
             width: width,
             height: height
         )
+        if canvasWidth > stage.width || canvasHeight > stage.height {
+            let clip = lightboxScrollView.contentView
+            clip.scroll(to: NSPoint(
+                x: max(0, (canvasWidth - stage.width) / 2),
+                y: max(0, (canvasHeight - stage.height) / 2)
+            ))
+            lightboxScrollView.reflectScrolledClipView(clip)
+        }
     }
 
     func downloadFromLightbox() {
@@ -1621,6 +1625,7 @@ extension MainWindow {
         let imageView = NSImageView()
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.imageAlignment = .alignLeft
+        imageView.animates = true
         imageView.frame = NSRect(x: 1, y: 1, width: displaySize.width - 2, height: displaySize.height - 2)
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = 7
@@ -1664,13 +1669,29 @@ extension MainWindow {
 
         if let ws = webService {
             Task { @MainActor [weak self, weak container, weak imageView] in
-                guard let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
+                let mime = file.mime_type ?? ""
+                let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
+                let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
+                guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
                       let image = NSImage(data: data) else { return }
                 imageView?.image = image
-                let pixels = self?.pixelSize(of: image) ?? image.size
-                guard natural == .zero, pixels.width > 0, pixels.height > 0 else { return }
-                self?.attachmentSizeCache[file.id] = pixels
-                let fitted = self?.fitImageSize(natural: pixels, maxWidth: maxW, maxHeight: maxH)
+                let previewPixels = self?.pixelSize(of: image) ?? image.size
+
+                var measured = previewPixels
+                var measuredFromOriginal = isAnimated
+                if natural == .zero, !isAnimated,
+                   let fullData = try? await ws.fetchFileData(fileId: file.id),
+                   let fullImage = NSImage(data: fullData) {
+                    measured = self?.pixelSize(of: fullImage) ?? previewPixels
+                    measuredFromOriginal = true
+                }
+                guard natural == .zero, measured.width > 0, measured.height > 0 else { return }
+                // A preview can be downscaled; only cache dimensions measured from
+                // the original image. Otherwise keep the placeholder layout and do
+                // not trigger an endless relayout loop.
+                guard measuredFromOriginal else { return }
+                self?.attachmentSizeCache[file.id] = measured
+                let fitted = self?.fitImageSize(natural: measured, maxWidth: maxW, maxHeight: maxH)
                     ?? displaySize
                 container?.frame.size = fitted
                 imageView?.frame = NSRect(x: 1, y: 1, width: fitted.width - 2, height: fitted.height - 2)
@@ -1683,6 +1704,80 @@ extension MainWindow {
         }
 
         return (container, displaySize.height)
+    }
+
+    func createImageAttachmentGridCell(_ file: MMFileInfo, size: NSSize) -> NSView {
+        let container = RoundedEdgePanel()
+        container.cornerRadius = MMRadius.control
+        container.color = .clear
+        container.borderWidth = 1
+        container.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
+        container.clipContentToBounds = true
+        container.frame = NSRect(origin: .zero, size: size)
+
+        let imageView = NSImageView(frame: NSRect(x: 1, y: 1, width: size.width - 2, height: size.height - 2))
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        imageView.animates = true
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = MMRadius.control - 1
+        imageView.layer?.masksToBounds = true
+        container.addSubview(imageView)
+
+        let download = RoundedEdgePanel()
+        download.cornerRadius = MMRadius.control
+        download.color = Theme.shared.centerBg
+        download.borderWidth = 1
+        download.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
+        download.frame = NSRect(
+            x: size.width - 8 - 24,
+            y: size.height - 8 - 24,
+            width: 24,
+            height: 24
+        )
+        download.isHidden = true
+        let downloadIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
+            downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+            downloadIcon.contentTintColor = Theme.shared.centerText.withAlphaComponent(0.75)
+        }
+        downloadIcon.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+        download.addSubview(downloadIcon)
+        download.onClick = { [weak self] in
+            self?.downloadAttachment(file)
+        }
+        container.addSubview(download)
+
+        container.onHoverChanged = { [weak container, weak download] isHovered in
+            download?.isHidden = !isHovered
+            container?.borderColor = isHovered
+                ? Theme.shared.centerText.withAlphaComponent(0.3)
+                : Theme.shared.centerText.withAlphaComponent(0.16)
+            container?.setNeedsAppearanceUpdate()
+        }
+        container.onClick = { [weak self, weak imageView] in
+            self?.showLightbox(
+                image: imageView?.image,
+                file: file,
+                filename: file.name ?? "Image",
+                authorId: file.user_id
+            )
+        }
+
+        if let ws = webService {
+            Task { @MainActor [weak imageView] in
+                let mime = file.mime_type ?? ""
+                let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
+                let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
+                guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
+                      let image = NSImage(data: data)
+                else { return }
+                imageView?.image = image
+            }
+        }
+
+        container.accessibilityTitle = file.name ?? "Image attachment"
+        return container
     }
 
     func createFileAttachmentCard(_ file: MMFileInfo, maxWidth: CGFloat) -> NSView {
@@ -1769,11 +1864,33 @@ extension MainWindow {
         let others = files.filter { !($0.mime_type ?? "").hasPrefix("image/") }
 
         var y: CGFloat = 0
-        for file in images {
+        if images.count == 1, let file = images.first {
             let (view, height) = createImageAttachmentView(file, maxWidth: maxWidth)
             view.frame.origin = NSPoint(x: 0, y: y)
             container.addSubview(view)
             y += height + 5
+        } else if !images.isEmpty {
+            let gap: CGFloat = 5
+            let preferredColumns = images.count == 2 ? 2 : (images.count >= 5 ? 3 : 2)
+            let maxColumns = max(1, Int((maxWidth + gap) / 130))
+            let columns = min(preferredColumns, maxColumns)
+            let cellWidth = max(40, (maxWidth - gap * CGFloat(columns - 1)) / CGFloat(columns))
+            let cellHeight = min(210, max(120, cellWidth * 0.62))
+            for (index, file) in images.enumerated() {
+                let row = index / columns
+                let column = index % columns
+                let cell = createImageAttachmentGridCell(
+                    file,
+                    size: NSSize(width: cellWidth, height: cellHeight)
+                )
+                cell.frame.origin = NSPoint(
+                    x: CGFloat(column) * (cellWidth + gap),
+                    y: y + CGFloat(row) * (cellHeight + gap)
+                )
+                container.addSubview(cell)
+            }
+            let rows = (images.count + columns - 1) / columns
+            y += CGFloat(rows) * cellHeight + CGFloat(max(0, rows - 1)) * gap + 5
         }
 
         if !others.isEmpty {
