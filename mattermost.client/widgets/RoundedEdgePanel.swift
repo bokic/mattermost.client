@@ -31,6 +31,30 @@ class RoundedEdgePanel: NSView {
 
     var shadowOffset: CGSize = .zero
 
+    enum ArrowDirection {
+        case up, down, left, right
+    }
+
+    /// Custom arrow key callback. Returning true consumes the event.
+    var onArrowKey: ((ArrowDirection) -> Bool)?
+
+    /// Allows overriding the accessibility role (e.g. .menuItem, .checkBox, .toolbar).
+    var accessibilityRoleOverride: NSAccessibility.Role? {
+        didSet {
+            updateAccessibility()
+        }
+    }
+
+    /// VoiceOver accessibility value (e.g. "Checked", "Reacted", count, etc.).
+    var accessibilityValueString: String? {
+        didSet {
+            updateAccessibility()
+        }
+    }
+
+    /// Controls whether the panel accepts keyboard focus when clickable. Defaults to true.
+    var allowsKeyboardFocus: Bool = true
+
     var onHoverChanged: ((Bool) -> Void)? {
         didSet {
             updateTrackingAreas()
@@ -39,9 +63,11 @@ class RoundedEdgePanel: NSView {
 
     var onClick: (() -> Void)? {
         didSet {
-            setAccessibilityElement(onClick != nil)
+            setAccessibilityElement(
+                onClick != nil || accessibilityRoleOverride != nil || accessibilityTitle != nil
+            )
             if onClick != nil {
-                setAccessibilityRole(.button)
+                setAccessibilityRole(accessibilityRoleOverride ?? .button)
                 focusRingType = .default
             }
             needsLayout = true
@@ -52,16 +78,51 @@ class RoundedEdgePanel: NSView {
 
     /// Optional VoiceOver label; when nil the panel derives one from its first
     /// text label or image description.
-    var accessibilityTitle: String?
+    var accessibilityTitle: String? {
+        didSet {
+            updateAccessibility()
+        }
+    }
 
     /// Optional VoiceOver help text (for example “Opens the channel menu”).
-    var accessibilityHelp: String?
+    var accessibilityHelp: String? {
+        didSet {
+            updateAccessibility()
+        }
+    }
 
     private(set) var isHovered: Bool = false
 
     private var trackingArea: NSTrackingArea?
 
     private var shadowLayer: CALayer?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupAccessibilityNotifications()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupAccessibilityNotifications()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    private func setupAccessibilityNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAccessibilityDisplayOptionsChanged),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleAccessibilityDisplayOptionsChanged() {
+        setNeedsAppearanceUpdate()
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -127,15 +188,21 @@ class RoundedEdgePanel: NSView {
         }
     }
 
-    override var acceptsFirstResponder: Bool { onClick != nil }
+    override var acceptsFirstResponder: Bool {
+        onClick != nil && allowsKeyboardFocus
+    }
 
     override func becomeFirstResponder() -> Bool {
         needsDisplay = true
+        setNeedsAppearanceUpdate()
+        noteFocusRingMaskChanged()
         return true
     }
 
     override func resignFirstResponder() -> Bool {
         needsDisplay = true
+        setNeedsAppearanceUpdate()
+        noteFocusRingMaskChanged()
         return true
     }
 
@@ -147,6 +214,22 @@ class RoundedEdgePanel: NSView {
         switch event.keyCode {
         case 36, 49, 76: // Return, Space, Enter
             onClick?()
+        case 123: // Left Arrow
+            if !(onArrowKey?(.left) ?? false) {
+                window?.selectKeyView(preceding: self)
+            }
+        case 124: // Right Arrow
+            if !(onArrowKey?(.right) ?? false) {
+                window?.selectKeyView(following: self)
+            }
+        case 125: // Down Arrow
+            if !(onArrowKey?(.down) ?? false) {
+                window?.selectKeyView(following: self)
+            }
+        case 126: // Up Arrow
+            if !(onArrowKey?(.up) ?? false) {
+                window?.selectKeyView(preceding: self)
+            }
         default:
             super.keyDown(with: event)
         }
@@ -165,14 +248,17 @@ class RoundedEdgePanel: NSView {
     }
 
     private func updateAccessibility() {
-        guard onClick != nil else {
+        guard onClick != nil || accessibilityRoleOverride != nil || accessibilityTitle != nil else {
             setAccessibilityElement(false)
             return
         }
         setAccessibilityElement(true)
-        setAccessibilityRole(.button)
+        setAccessibilityRole(accessibilityRoleOverride ?? .button)
         if let accessibilityHelp = accessibilityHelp, !accessibilityHelp.isEmpty {
             setAccessibilityHelp(accessibilityHelp)
+        }
+        if let accessibilityValueString = accessibilityValueString {
+            setAccessibilityValue(accessibilityValueString)
         }
         if let accessibilityTitle = accessibilityTitle, !accessibilityTitle.isEmpty {
             setAccessibilityLabel(accessibilityTitle)
@@ -261,9 +347,18 @@ class RoundedEdgePanel: NSView {
         baseLayer.cornerRadius = cornerRadius
         baseLayer.masksToBounds = clipContentToBounds ?? !hasShadow // allow shadow to render outside bounds when active
 
-        if let borderColor = borderColor, borderWidth > 0 {
+        let increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let isFocused = (window?.firstResponder === self)
+
+        if isFocused {
+            baseLayer.borderColor = NSColor.keyboardFocusIndicatorColor.cgColor
+            baseLayer.borderWidth = max(2.0, borderWidth)
+        } else if let borderColor = borderColor, borderWidth > 0 {
             baseLayer.borderColor = borderColor.cgColor
-            baseLayer.borderWidth = borderWidth
+            baseLayer.borderWidth = increaseContrast ? max(1.5, borderWidth) : borderWidth
+        } else if increaseContrast && (onClick != nil) {
+            baseLayer.borderColor = Theme.shared.centerText.withAlphaComponent(0.35).cgColor
+            baseLayer.borderWidth = 1.0
         } else {
             baseLayer.borderColor = nil
             baseLayer.borderWidth = 0

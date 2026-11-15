@@ -53,6 +53,9 @@ extension MainWindow {
 
         rightPanelCloseButton.cornerRadius = MMRadius.control
         rightPanelCloseButton.color = .clear
+        rightPanelCloseButton.accessibilityTitle = "Close panel"
+        rightPanelCloseButton.accessibilityHelp = "Close right sidebar"
+        rightPanelCloseButton.accessibilityRoleOverride = .button
         let closeIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close panel") {
             closeIcon.image = image.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
@@ -137,6 +140,7 @@ extension MainWindow {
             self?.toggleEmojiPanel(for: .thread)
         }
         threadEmojiButton.accessibilityTitle = "Add emoji"
+        threadEmojiButton.accessibilityRoleOverride = .button
         threadReplyPanel.addSubview(threadEmojiButton)
 
         threadAttachButton.color = .clear
@@ -152,6 +156,7 @@ extension MainWindow {
             self?.attachThreadFiles()
         }
         threadAttachButton.accessibilityTitle = "Attach files"
+        threadAttachButton.accessibilityRoleOverride = .button
         threadReplyPanel.addSubview(threadAttachButton)
 
         threadSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
@@ -166,6 +171,7 @@ extension MainWindow {
             self?.sendThreadReply()
         }
         threadSendButton.accessibilityTitle = "Send reply"
+        threadSendButton.accessibilityRoleOverride = .button
         threadReplyPanel.addSubview(threadSendButton)
         rightPanel.addSubview(threadReplyPanel)
 

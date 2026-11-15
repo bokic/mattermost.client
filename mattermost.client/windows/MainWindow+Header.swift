@@ -44,11 +44,17 @@ extension MainWindow {
         productSwitcherPanel.onClick = { [weak self] in
             self?.toggleProductSwitcherMenu()
         }
+        productSwitcherPanel.accessibilityTitle = "Product Switcher"
+        productSwitcherPanel.accessibilityHelp = "Open product switcher menu"
+        productSwitcherPanel.accessibilityRoleOverride = .button
         contentView?.addSubview(productSwitcherPanel)
 
         // Center: Search bar (non-editable trigger, no caret) + Help (?) button
         searchPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         searchPanel.cornerRadius = MMRadius.control
+        searchPanel.accessibilityTitle = "Search"
+        searchPanel.accessibilityHelp = "Search messages and files"
+        searchPanel.accessibilityRoleOverride = .button
         if let searchImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search") {
             searchIconView.image = searchImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
             searchIconView.contentTintColor = searchTint
@@ -84,6 +90,9 @@ extension MainWindow {
         helpPanel.onClick = { [weak self] in
             self?.toggleHelpMenu()
         }
+        helpPanel.accessibilityTitle = "Help"
+        helpPanel.accessibilityHelp = "Open help menu"
+        helpPanel.accessibilityRoleOverride = .button
         contentView?.addSubview(helpPanel)
 
         // Right action buttons (@, Bookmark, Settings)
@@ -159,6 +168,10 @@ extension MainWindow {
         avatarButtonPanel.onClick = { [weak self] in
             self?.toggleStatusMenu()
         }
+        avatarButtonPanel.accessibilityTitle = "Profile and Status"
+        avatarButtonPanel.accessibilityHelp = "Open status and profile menu"
+        avatarButtonPanel.accessibilityRoleOverride = .button
+        avatarButtonPanel.accessibilityValueString = currentUserStatus.capitalized
         contentView?.addSubview(avatarButtonPanel)
 
         setupProductSwitcherMenu()
@@ -237,6 +250,9 @@ extension MainWindow {
 
         searchResultsCloseButton.cornerRadius = MMRadius.control
         searchResultsCloseButton.color = .clear
+        searchResultsCloseButton.accessibilityTitle = "Close search results"
+        searchResultsCloseButton.accessibilityHelp = "Dismiss search results"
+        searchResultsCloseButton.accessibilityRoleOverride = .button
         let closeIcon = NSImageView()
         if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close search") {
             closeIcon.image = img.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))

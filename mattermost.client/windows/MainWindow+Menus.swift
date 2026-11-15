@@ -750,6 +750,10 @@ extension MainWindow {
             row.addSubview(checkView)
         }
 
+        row.accessibilityTitle = title
+        row.accessibilityRoleOverride = .menuItem
+        row.accessibilityValueString = showsCheckmark ? "Selected" : nil
+
         row.onHoverChanged = { [weak row] isHovered in
             row?.color = isHovered ? hoverBg : .clear
             row?.setNeedsAppearanceUpdate()
@@ -795,6 +799,9 @@ extension MainWindow {
             }
             check.frame = NSRect(x: 146, y: 7, width: 14, height: 14)
             row.addSubview(check)
+            row.accessibilityTitle = title
+            row.accessibilityRoleOverride = .menuItem
+
             row.onHoverChanged = { [weak row] isHovered in
                 row?.color = isHovered
                     ? Theme.shared.centerHover
@@ -1550,6 +1557,9 @@ extension MainWindow {
             label.isSelectable = false
             label.frame = NSRect(x: 32, y: 7, width: width - 48, height: 18)
             row.addSubview(label)
+
+            row.accessibilityTitle = item.title
+            row.accessibilityRoleOverride = .menuItem
 
             row.onHoverChanged = { [weak row] isHovered in
                 row?.color = isHovered

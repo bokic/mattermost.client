@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **175/175 pass** |
+| `./test.sh` | **181/181 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -35,15 +35,6 @@ completed baseline remains at the end.
 ### Composer and account
 
 ### Platform and accessibility
-
-- [ ] **Accessibility is effectively absent** — `M`
-  - Custom `RoundedEdgePanel` controls have no accessibility role/label/value, no
-    `acceptsFirstResponder`, and no Space/Return activation (`RoundedEdgePanel.swift:10-102`).
-    VoiceOver cannot operate the sidebar, menus, timeline toolbar, reaction chips or
-    composer buttons. `accessibilityDescription` is only passed to SF Symbol images.
-  - Add `setAccessibilityRole/Label/Help`, keyboard focus rings, Space/Return/Arrow
-    handling, and an accessibility audit (VoiceOver, Full Keyboard Access, Increase
-    Contrast).
 
 - [ ] **No localization; all UI strings are hardcoded English** — `M`
   - Move strings into a String Catalog, use `NSLocalizedString`/`String(localized:)`, and

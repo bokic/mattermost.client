@@ -326,6 +326,8 @@ extension MainWindow {
         teamHeaderButton.onClick = { [weak self] in
             self?.toggleTeamMenu()
         }
+        teamHeaderButton.accessibilityTitle = "Team menu"
+        teamHeaderButton.accessibilityHelp = "Switch team or manage active team"
         mainPanel.addSubview(teamHeaderButton)
 
         teamDropdownMenu.isHidden = true
@@ -347,6 +349,8 @@ extension MainWindow {
         teamAddButton.onClick = { [weak self] in
             self?.showCreateTeamDialog()
         }
+        teamAddButton.accessibilityTitle = "Add Team"
+        teamAddButton.accessibilityHelp = "Create or join a team"
         mainPanel.addSubview(teamAddButton)
 
         // 2. Filter & Find Channel Row
@@ -367,10 +371,14 @@ extension MainWindow {
             guard let self = self else { return }
             self.setFilterMenuOpen(!self.isFilterMenuOpen)
         }
+        filterChannelButton.accessibilityTitle = "Filter channels"
+        filterChannelButton.accessibilityHelp = "Filter channel list"
         mainPanel.addSubview(filterChannelButton)
 
         findChannelPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         findChannelPanel.cornerRadius = MMRadius.control
+        findChannelPanel.accessibilityTitle = "Find channel"
+        findChannelPanel.accessibilityHelp = "Search channels by name"
         if let findImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find channel") {
             findChannelIconView.image = findImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
             findChannelIconView.contentTintColor = mutedTint
@@ -806,6 +814,8 @@ extension MainWindow {
             let btn = RoundedEdgePanel()
             btn.cornerRadius = MMRadius.control
             btn.color = .clear
+            btn.accessibilityTitle = "Add to \(title)"
+            btn.accessibilityHelp = "Start direct message or add channel"
             let addIcon = NSImageView()
             if let plusImg = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Direct Message") {
                 addIcon.image = plusImg.withSymbolConfiguration(.init(pointSize: 10.5, weight: .semibold))
@@ -821,6 +831,11 @@ extension MainWindow {
             headerRow.addSubview(btn)
             addBtn = btn
         }
+
+        headerRow.accessibilityTitle = "\(title) category"
+        headerRow.accessibilityHelp = initiallyCollapsed ? "Expand category" : "Collapse category"
+        headerRow.accessibilityRoleOverride = .disclosureTriangle
+        headerRow.accessibilityValueString = initiallyCollapsed ? "Collapsed" : "Expanded"
 
         headerRow.onHoverChanged = { [weak chevronView, weak titleLabel] isHovered in
             chevronView?.contentTintColor = isHovered ? Theme.shared.sidebarText : mutedTint
@@ -917,6 +932,8 @@ extension MainWindow {
             let btn = RoundedEdgePanel()
             btn.cornerRadius = MMRadius.control
             btn.color = .clear
+            btn.accessibilityTitle = "Close \(title)"
+            btn.accessibilityHelp = "Close conversation"
             let xView = NSImageView()
             if let xImg = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close") {
                 xView.image = xImg.withSymbolConfiguration(.init(pointSize: 9.5, weight: .bold))
@@ -1242,6 +1259,11 @@ extension MainWindow {
                     row.addSubview(checkView)
                 }
 
+                row.accessibilityTitle = team.display_name.isEmpty ? team.name : team.display_name
+                row.accessibilityRoleOverride = .menuItem
+                row.accessibilityValueString = isActive ? "Active" : nil
+                row.accessibilityHelp = "Switch to this team"
+
                 row.onHoverChanged = { [weak row] isHovered in
                     row?.color = isHovered ? Theme.shared.centerText.withAlphaComponent(0.08) : .clear
                     row?.setNeedsAppearanceUpdate()
@@ -1294,6 +1316,10 @@ extension MainWindow {
             label.isSelectable = false
             label.frame = NSRect(x: 32, y: 5, width: menuWidth - 44, height: 20)
             row.addSubview(label)
+
+            row.accessibilityTitle = entry.title
+            row.accessibilityRoleOverride = .menuItem
+            row.accessibilityHelp = entry.title
 
             row.onHoverChanged = { [weak row, weak iconView] isHovered in
                 row?.color = isHovered ? Theme.shared.centerText.withAlphaComponent(0.08) : .clear

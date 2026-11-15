@@ -83,10 +83,16 @@ extension MainWindow {
         channelTitleButton.onClick = { [weak self] in
             self?.toggleChannelMenu()
         }
+        channelTitleButton.accessibilityTitle = "Channel Menu"
+        channelTitleButton.accessibilityHelp = "Open channel menu"
+        channelTitleButton.accessibilityRoleOverride = .button
         chatPanel.addSubview(channelTitleButton)
 
         channelMembersButton.cornerRadius = MMRadius.control
         channelMembersButton.color = .clear
+        channelMembersButton.accessibilityTitle = "Channel Members"
+        channelMembersButton.accessibilityHelp = "View and manage channel members"
+        channelMembersButton.accessibilityRoleOverride = .button
         if let personImg = NSImage(systemSymbolName: "person", accessibilityDescription: "Members") {
             channelMembersIconView.image = personImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
             channelMembersIconView.contentTintColor = mutedText
@@ -111,6 +117,9 @@ extension MainWindow {
 
         channelPinsButton.cornerRadius = MMRadius.control
         channelPinsButton.color = .clear
+        channelPinsButton.accessibilityTitle = "Pinned Posts"
+        channelPinsButton.accessibilityHelp = "View pinned messages"
+        channelPinsButton.accessibilityRoleOverride = .button
         if let pinImg = NSImage(systemSymbolName: "pin", accessibilityDescription: "Pinned Messages") {
             channelPinsIconView.image = pinImg.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
             channelPinsIconView.contentTintColor = mutedText
@@ -129,6 +138,9 @@ extension MainWindow {
 
         channelFilesButton.cornerRadius = MMRadius.control
         channelFilesButton.color = .clear
+        channelFilesButton.accessibilityTitle = "Files"
+        channelFilesButton.accessibilityHelp = "View files shared in this channel"
+        channelFilesButton.accessibilityRoleOverride = .button
         if let filesImg = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Channel files") {
             channelFilesIconView.image = filesImg.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
             channelFilesIconView.contentTintColor = mutedText
@@ -147,6 +159,9 @@ extension MainWindow {
 
         channelSidebarButton.cornerRadius = MMRadius.control
         channelSidebarButton.color = .clear
+        channelSidebarButton.accessibilityTitle = "Threads"
+        channelSidebarButton.accessibilityHelp = "Toggle threads right panel"
+        channelSidebarButton.accessibilityRoleOverride = .button
         if let sideImg = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Channel Sidebar") {
             channelSidebarIconView.image = sideImg.withSymbolConfiguration(.init(pointSize: 13.5, weight: .regular))
             channelSidebarIconView.contentTintColor = mutedText
@@ -165,6 +180,9 @@ extension MainWindow {
 
         channelInfoButton.cornerRadius = MMRadius.control
         channelInfoButton.color = .clear
+        channelInfoButton.accessibilityTitle = "Channel Info"
+        channelInfoButton.accessibilityHelp = "View channel details"
+        channelInfoButton.accessibilityRoleOverride = .button
         if let infoImg = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "View Info") {
             channelInfoIconView.image = infoImg.withSymbolConfiguration(.init(pointSize: 13.5, weight: .medium))
             channelInfoIconView.contentTintColor = mutedText
@@ -304,24 +322,27 @@ extension MainWindow {
         composerPlaceholderLabel.isHidden = true
 
         composerLeftButtons.removeAll()
-        let leftSymbols: [String] = [
-            "bold",
-            "italic",
-            "strikethrough",
-            "number",
-            "link",
-            "chevron.left.forwardslash.chevron.right",
-            "text.quote",
-            "list.bullet",
-            "list.number",
-            "info.circle"
+        let formatDescriptors: [(symbol: String, title: String, help: String)] = [
+            ("bold", "Bold", "Format selection as bold"),
+            ("italic", "Italic", "Format selection as italic"),
+            ("strikethrough", "Strikethrough", "Format selection as strikethrough"),
+            ("number", "Heading", "Format selection as heading"),
+            ("link", "Link", "Insert markdown link"),
+            ("chevron.left.forwardslash.chevron.right", "Code", "Format selection as code block"),
+            ("text.quote", "Quote", "Format selection as quote"),
+            ("list.bullet", "Bulleted List", "Insert bulleted list"),
+            ("list.number", "Numbered List", "Insert numbered list"),
+            ("info.circle", "Formatting Help", "Show markdown formatting help"),
         ]
-        for sym in leftSymbols {
+        for desc in formatDescriptors {
             let btn = RoundedEdgePanel()
             btn.cornerRadius = MMRadius.control
             btn.color = .clear
+            btn.accessibilityTitle = desc.title
+            btn.accessibilityHelp = desc.help
+            btn.accessibilityRoleOverride = .button
             let icon = NSImageView()
-            if let img = NSImage(systemSymbolName: sym, accessibilityDescription: sym) {
+            if let img = NSImage(systemSymbolName: desc.symbol, accessibilityDescription: desc.title) {
                 icon.image = img.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
                 icon.contentTintColor = mutedText
             }
@@ -332,7 +353,7 @@ extension MainWindow {
                 btn?.setNeedsAppearanceUpdate()
                 icon?.contentTintColor = isHovered ? darkText : mutedText
             }
-            let symbol = sym
+            let symbol = desc.symbol
             btn.onClick = { [weak self] in
                 self?.applyComposerFormat(symbol)
             }
@@ -373,6 +394,9 @@ extension MainWindow {
         composerAaButton.onClick = { [weak self] in
             self?.toggleComposerToolbar()
         }
+        composerAaButton.accessibilityTitle = "Toggle formatting toolbar"
+        composerAaButton.accessibilityHelp = "Show or hide text formatting buttons"
+        composerAaButton.accessibilityRoleOverride = .button
         chatEntryPanel.addSubview(composerAaButton)
 
         composerRightSeparator.cornerRadius = 0
@@ -382,6 +406,7 @@ extension MainWindow {
         let setupRightIconBtn: (RoundedEdgePanel, String) -> Void = { btn, sym in
             btn.cornerRadius = MMRadius.control
             btn.color = .clear
+            btn.accessibilityRoleOverride = .button
             let icon = NSImageView()
             if let img = NSImage(systemSymbolName: sym, accessibilityDescription: sym) {
                 icon.image = img.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
@@ -399,6 +424,7 @@ extension MainWindow {
         setupRightIconBtn(composerEmojiButton, "face.smiling")
         composerEmojiButton.accessibilityTitle = L10n.string("Emoji")
         composerEmojiButton.accessibilityHelp = L10n.string("Emoji")
+        composerEmojiButton.accessibilityRoleOverride = .button
         composerEmojiButton.onClick = { [weak self] in
             self?.toggleEmojiPanel()
         }
@@ -406,6 +432,9 @@ extension MainWindow {
         // GIF button in composer
         composerGifButton.cornerRadius = MMRadius.control
         composerGifButton.color = .clear
+        composerGifButton.accessibilityTitle = "Add GIF"
+        composerGifButton.accessibilityHelp = "Search and insert animated GIFs"
+        composerGifButton.accessibilityRoleOverride = .button
         let gifLabel = NSTextField(labelWithString: "GIF")
         let gifFont = MMFont.font(ofSize: 11, weight: .bold)
         gifLabel.font = gifFont
@@ -427,12 +456,14 @@ extension MainWindow {
         setupRightIconBtn(composerAttachButton, "paperclip")
         composerAttachButton.accessibilityTitle = L10n.string("Attach files")
         composerAttachButton.accessibilityHelp = L10n.string("Attach files")
+        composerAttachButton.accessibilityRoleOverride = .button
         composerAttachButton.onClick = { [weak self] in
             self?.attachFiles()
         }
 
         composerSendButton.cornerRadius = MMRadius.control
         composerSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
+        composerSendButton.accessibilityRoleOverride = .button
         let sendIcon = NSImageView()
         if let sImg = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send") {
             sendIcon.image = sImg.withSymbolConfiguration(.init(pointSize: 15, weight: .regular))

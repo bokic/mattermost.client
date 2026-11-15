@@ -619,7 +619,9 @@ extension MainWindow {
                 ? ":\(emoji):"
                 : ":\(emoji): " + names.joined(separator: ", ")
             chip.accessibilityTitle = "\(emoji), \(count) reaction\(count == 1 ? "" : "s")"
-            chip.accessibilityHelp = names.isEmpty ? nil : names.joined(separator: ", ")
+            chip.accessibilityHelp = names.isEmpty ? "Toggle reaction" : "Reacted by: \(names.joined(separator: ", "))"
+            chip.accessibilityRoleOverride = .button
+            chip.accessibilityValueString = reacted ? "Reacted" : "Not reacted"
 
             chip.onHoverChanged = { [weak chip] isHovered in
                 guard let chip = chip else { return }
@@ -672,6 +674,8 @@ extension MainWindow {
         addChip.isHidden = true
         addChip.identifier = NSUserInterfaceItemIdentifier("reactionAddChip")
         addChip.accessibilityTitle = "Add reaction"
+        addChip.accessibilityHelp = "Choose an emoji reaction for this message"
+        addChip.accessibilityRoleOverride = .button
         row.addSubview(addChip)
         (row as? TimelineRowView)?.reactionAddChip = addChip
 
@@ -700,6 +704,8 @@ extension MainWindow {
             height: toolbarHeight
         )
         toolbar.isHidden = true
+        toolbar.setAccessibilityRole(.toolbar)
+        toolbar.accessibilityTitle = "Message actions"
 
         let postRef = post
         let entries: [(symbol: String, label: String, action: () -> Void)] = [
@@ -732,6 +738,9 @@ extension MainWindow {
             let iconInset: CGFloat = compact ? 5 : 6
             icon.frame = NSRect(x: iconInset, y: iconInset, width: 16, height: 16)
             button.addSubview(icon)
+            button.accessibilityTitle = entry.label
+            button.accessibilityHelp = "\(entry.label) for this message"
+            button.accessibilityRoleOverride = .button
             button.onHoverChanged = { [weak button, weak icon] isHovered in
                 button?.color = isHovered
                     ? Theme.shared.centerText.withAlphaComponent(0.08)
