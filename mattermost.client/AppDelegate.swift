@@ -45,29 +45,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             action: #selector(AppDelegate.quitApp),
             keyEquivalent: "")
         
+        startAuthentication()
+    }
+    
+    /// Reads credentials off the main thread: Keychain access can block while the
+    /// system shows an authorization prompt, which must not stall app launch.
+    private func startAuthentication() {
         let userSettings = UserDefaults.standard
-        
         let host = userSettings.string(forKey: "host")
         let port = UInt16(userSettings.integer(forKey: "port"))
-        let token = KeychainHelper.get(forKey: "token")
-
-        if let host = host, !host.isEmpty, port > 0, let token = token, !token.isEmpty {
-            NSLog("Calling checkToken webservice: \(host):\(port)")
-            webService = WebService(host: host, port: port)
-            Task { @MainActor in
-                let isValid = await webService.checkToken(token: token)
-                let logger = Logger()
-                logger.info("called checkTokenResult(\(isValid))")
-                if isValid {
-                    NSLog("Token is valid, showing main window")
-                    showMainWindow()
+        
+        Task.detached { [weak self] in
+            let token = KeychainHelper.get(forKey: "token")
+            let password = KeychainHelper.get(forKey: "password")
+            await MainActor.run {
+                guard let self = self else { return }
+                if let host = host, !host.isEmpty, let token = token, !token.isEmpty {
+                    NSLog("Calling checkToken webservice: \(host):\(port)")
+                    self.webService = WebService(host: host, port: port)
+                    Task { @MainActor in
+                        let isValid = await self.webService.checkToken(token: token)
+                        if isValid {
+                            NSLog("Token is valid, showing main window")
+                            self.showMainWindow()
+                        } else {
+                            NSLog("Token is invalid, trying login")
+                            self.loginWithStoredCredentials(host: host, port: port, password: password)
+                        }
+                    }
                 } else {
-                    NSLog("Token is invalid, trying login")
-                    tryLoginWithStoredCredentials()
+                    self.loginWithStoredCredentials(host: host, port: port, password: password)
                 }
             }
-        } else {
-            tryLoginWithStoredCredentials()
         }
     }
     
@@ -119,14 +128,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     
     func tryLoginWithStoredCredentials() {
+        Task.detached { [weak self] in
+            let password = KeychainHelper.get(forKey: "password")
+            await MainActor.run {
+                self?.loginWithStoredCredentials(
+                    host: UserDefaults.standard.string(forKey: "host"),
+                    port: UInt16(UserDefaults.standard.integer(forKey: "port")),
+                    password: password
+                )
+            }
+        }
+    }
+    
+    private func loginWithStoredCredentials(host: String?, port: UInt16, password: String?) {
         let userSettings = UserDefaults.standard
-
-        let host = userSettings.string(forKey: "host")
-        let port = UInt16(userSettings.integer(forKey: "port"))
         let username = userSettings.string(forKey: "username")
-        let password = KeychainHelper.get(forKey: "password")
 
-        if let host = host, !host.isEmpty, port > 0, let username = username, !username.isEmpty, let password = password, !password.isEmpty {
+        if let host = host, !host.isEmpty, let username = username, !username.isEmpty, let password = password, !password.isEmpty {
             NSLog("Calling login webservice: \(username)@\(host):\(port)")
             webService = WebService(host: host, port: port)
             Task { @MainActor in

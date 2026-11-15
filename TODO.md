@@ -208,10 +208,17 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Audited the other required-reason categories (file timestamps, system boot time, disk space,
     active keyboard); none are used.
 
-- [ ] **Raw WebSocket payloads are written to the system log** — `S`
-  - Where: `webservice.swift:730,735` `NSLog`s entire frames; `checkToken` logs response bodies.
-  - Done when: `os.Logger` with `privacy: .private` for message/user data, and raw frames only under
-    a debug flag.
+- [x] **Raw WebSocket payloads are written to the system log** — `S`
+  - Done: removed the raw `NSLog` calls that printed every frame. Payload-bearing logs (WS
+    RECV/SEND frames, dispatch event dumps, HTTP request/response bodies, MainWindow's event mirror)
+    now go through `DebugLog.logSensitive`, which is disabled unless launched with `--debug-ws` or
+    `debugWebSocketLogging = true` in defaults. The autoclosure means the payload isn't even
+    formatted when logging is off.
+  - Remaining diagnostic logs contain only identifiers, state transitions and error descriptions.
+  - Verified with a new `DebugLogTests` case: the marker string is absent when gated and present when
+    enabled (17 tests total).
+  - Related fix: Keychain reads moved off the main thread at launch, so a pending Keychain
+    authorization prompt can no longer stall `applicationDidFinishLaunching`.
 
 ---
 

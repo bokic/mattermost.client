@@ -76,6 +76,12 @@ Launch the built debug application bundle:
 
 On first launch, enter your Mattermost server URL and your user credentials. HTTPS is the default: a bare hostname such as `mattermost.example.com` resolves over `https://` on port 443. Cleartext `http://` must be typed explicitly and is restricted to local-network servers by App Transport Security — for example `http://192.168.1.10` with port `8065`. Credentials are stored in the macOS Keychain for subsequent launches.
 
+### Debugging
+
+Raw WebSocket frames and HTTP bodies are not logged by default. Launch with
+`--debug-ws` (or set the `debugWebSocketLogging` default to `true`) to include them in the
+diagnostic log under the sandbox's temporary directory.
+
 ### Run Unit Tests
 
 Execute the automated test suite covering URL construction, JSON decoding, and WebSocket event payloads:

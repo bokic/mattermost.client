@@ -6367,7 +6367,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         )
         
         ws.onWebSocketEvent = { event in
-            DebugLog.log("ws.onWebSocketEvent: \(event)")
+            DebugLog.logSensitive("ws.onWebSocketEvent: \(event)")
         }
         
         ws.onWebSocketConnected = { [weak self] in

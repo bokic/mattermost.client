@@ -13,6 +13,19 @@ enum DebugLog {
         return (NSTemporaryDirectory() as NSString).appendingPathComponent("mattermost_debug.log")
     }
     
+    /// Raw payload logging is off unless explicitly requested at launch
+    /// (`--debug-ws`) or via the `debugWebSocketLogging` default.
+    static var isSensitiveLoggingEnabled: Bool = {
+        CommandLine.arguments.contains("--debug-ws")
+            || UserDefaults.standard.bool(forKey: "debugWebSocketLogging")
+    }()
+    
+    /// Logs message/user payloads only when frame debugging is enabled.
+    static func logSensitive(_ message: @autoclosure () -> String) {
+        guard isSensitiveLoggingEnabled else { return }
+        log(message())
+    }
+    
     static func log(_ message: String) {
         let ts = ISO8601DateFormatter().string(from: Date())
         let line = "[\(ts)] \(message)\n"
@@ -355,7 +368,7 @@ final class WebService: NSObject {
         }
         
         if path.contains("status") {
-            DebugLog.log("HTTP \(method) \(path) sending body=\(String(describing: body))")
+            DebugLog.logSensitive("HTTP \(method) \(path) sending body=\(String(describing: body))")
         }
         
         let data: Data
@@ -374,7 +387,7 @@ final class WebService: NSObject {
         }
         
         if path.contains("status") {
-            DebugLog.log("HTTP \(method) \(path) status=\(httpResponse.statusCode), body=\(String(decoding: data, as: UTF8.self))")
+            DebugLog.logSensitive("HTTP \(method) \(path) status=\(httpResponse.statusCode), body=\(String(decoding: data, as: UTF8.self))")
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -1028,7 +1041,7 @@ final class WebService: NSObject {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: message)
             if let jsonString = String(data: jsonData, encoding: .utf8) {
-                DebugLog.log("WS SEND [seq=\(currentSeq)]: action=\(action) payload=\(jsonString)")
+                DebugLog.logSensitive("WS SEND [seq=\(currentSeq)]: action=\(action) payload=\(jsonString)")
                 let wsMessage = URLSessionWebSocketTask.Message.string(jsonString)
                 webSocketTask?.send(wsMessage) { [weak self] error in
                     if let error = error {
@@ -1082,13 +1095,11 @@ final class WebService: NSObject {
             case .success(let message):
                 switch message {
                 case .string(let text):
-                    DebugLog.log("WS RECV: \(text)")
-                    NSLog("WebSocket message: \(text)")
+                    DebugLog.logSensitive("WS RECV: \(text)")
                     self.handleIncomingWebSocketMessage(text)
                 case .data(let data):
                     if let text = String(data: data, encoding: .utf8) {
-                        DebugLog.log("WS RECV: \(text)")
-                        NSLog("WebSocket data: \(text)")
+                        DebugLog.logSensitive("WS RECV: \(text)")
                         self.handleIncomingWebSocketMessage(text)
                     }
                 @unknown default:
@@ -1208,7 +1219,7 @@ final class WebService: NSObject {
     private func handleIncomingWebSocketMessage(_ text: String) {
         let (didConnect, parsedEvent) = parseWebSocketMessage(text)
         if let event = parsedEvent {
-            DebugLog.log("WS DISPATCH EVENT: \(event)")
+            DebugLog.logSensitive("WS DISPATCH EVENT: \(event)")
         } else if !didConnect {
             DebugLog.log("WS UNPARSED MSG: \(text)")
         }
