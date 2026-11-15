@@ -182,10 +182,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - The login port field is optional (443/80 defaults), unsupported schemes are rejected, and a
     port embedded in the host wins over the port field. URL tests updated (16 total).
 
-- [ ] **Deployment target contradicts README** — `S`
-  - Where: no `MACOSX_DEPLOYMENT_TARGET` in `project.pbxproj`; the built app advertises
-    `LSMinimumSystemVersion = 27.2` while `README.md` claims macOS 14.0+.
-  - Done when: the target is set to 14.0 for app + tests and verified on an older OS.
+- [x] **Deployment target contradicts README** — `S`
+  - Done: `MACOSX_DEPLOYMENT_TARGET = 14.0` is set at the project level, so both the app and the test
+    target inherit it. The built bundle now reports `LSMinimumSystemVersion = 14.0` and the binary's
+    `LC_BUILD_VERSION.minos` is 14.0.
+  - The full build compiles against the 14.0 target with no availability or deprecation warnings.
+  - Caveat: not yet smoke-tested on an actual macOS 14 machine (only the 27.x host is available).
 
 - [ ] **App icons are the wrong size** — `S`
   - Where: every `Assets.xcassets/AppIcon.appiconset/*.png` is 512×525 instead of the declared
