@@ -32,6 +32,48 @@ jobs:
       - name: Lint migrated files
         run: ./lint.sh
 
+  macos14-verify:
+    # Exercises the documented macOS 14.0 deployment floor on a real runner.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify host and toolchain
+        run: |
+          set -euo pipefail
+          sw_vers
+          VERSION="$(sw_vers -productVersion)"
+          case "$VERSION" in
+            14.*) ;;
+            *) echo "::error::Expected a macOS 14 runner, got $VERSION"; exit 1 ;;
+          esac
+          xcodebuild -version
+          swift --version
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Test
+        run: ./test.sh
+
+      - name: Smoke launch on macOS 14
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Debug/mattermost.client.app/Contents/MacOS/mattermost.client"
+          "$APP" >/tmp/mattermost-macos14-smoke.log 2>&1 &
+          PID=$!
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "::error::App exited during macOS 14 launch"
+              cat /tmp/mattermost-macos14-smoke.log
+              exit 1
+            fi
+            sleep 0.5
+          done
+          kill "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          echo "App stayed alive on macOS $(sw_vers -productVersion) for the smoke window."
+
   release:
     # A universal, checksummed Release DMG is built and smoke-launched for tags
     # and manual runs. Signing/notarization is a protected manual step because
