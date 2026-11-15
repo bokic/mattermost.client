@@ -3,6 +3,8 @@
 set -euo pipefail
 
 LOG_FILE="${TMPDIR:-/tmp}/mattermost-tests.log"
+RESULT_BUNDLE="$(pwd)/build/TestResults.xcresult"
+COVERAGE_MIN_PERCENT="${COVERAGE_MIN_PERCENT:-10}"
 
 write_diagnostics() {
     local status=$1
@@ -57,27 +59,19 @@ run_with_timeout() {
     return "$status"
 }
 
-echo "Building and running mattermost.clientTests..."
+echo "Running mattermost.clientTests (hosted in mattermost.client.app)..."
 set +e
 : > "$LOG_FILE"
-echo "=== xcodebuild ===" >> "$LOG_FILE"
-# Build for the host architecture so the test target matches the app module
-# produced by build.sh (the app scheme uses the active arch only).
-run_with_timeout 600 xcodebuild -project mattermost.client.xcodeproj \
-    -target mattermost.clientTests \
+rm -rf "$RESULT_BUNDLE"
+run_with_timeout 900 xcodebuild -project mattermost.client.xcodeproj \
+    -scheme mattermost.client \
     -configuration Debug \
-    ARCHS="$(uname -m)" \
-    ONLY_ACTIVE_ARCH=YES \
-    SYMROOT="$(pwd)/build/Build/Products" \
-    OBJROOT="$(pwd)/build/Build/Intermediates.noindex" \
-    build >> "$LOG_FILE" 2>&1
+    -derivedDataPath build \
+    -destination "platform=macOS" \
+    -enableCodeCoverage YES \
+    -resultBundlePath "$RESULT_BUNDLE" \
+    test >> "$LOG_FILE" 2>&1
 STATUS=$?
-
-if [ "$STATUS" -eq 0 ]; then
-    echo "=== xctest ===" >> "$LOG_FILE"
-    run_with_timeout 180 xcrun xctest build/Build/Products/Debug/mattermost.clientTests.xctest >> "$LOG_FILE" 2>&1
-    STATUS=$?
-fi
 set -e
 
 if [ "$STATUS" -ne 0 ]; then
@@ -88,4 +82,19 @@ if [ "$STATUS" -ne 0 ]; then
 fi
 
 grep -E "Test Suite 'All tests'|Executed [0-9]+ tests" "$LOG_FILE" | tail -4
-echo "All unit tests passed!"
+
+if [ ! -d "$RESULT_BUNDLE" ]; then
+    echo "Test result bundle not found at $RESULT_BUNDLE"
+    exit 1
+fi
+
+COVERAGE_JSON="$(xcrun xccov view --report --json "$RESULT_BUNDLE")"
+COVERAGE_PERCENT="$(printf '%s' "$COVERAGE_JSON" | python3 -c 'import json,sys; print("%.2f" % (json.load(sys.stdin)["lineCoverage"] * 100))')"
+echo "Line coverage: ${COVERAGE_PERCENT}% (minimum ${COVERAGE_MIN_PERCENT}%)"
+
+if python3 -c "import sys; sys.exit(0 if float('${COVERAGE_PERCENT}') >= float('${COVERAGE_MIN_PERCENT}') else 1)"; then
+    echo "All unit tests passed!"
+else
+    echo "Coverage ${COVERAGE_PERCENT}% is below the ${COVERAGE_MIN_PERCENT}% gate."
+    exit 1
+fi

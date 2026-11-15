@@ -14,6 +14,7 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 |---|---|
 | Clean build (`./build.sh`) | **Succeeds** |
 | Unit tests (`./test.sh`) | **55/55 pass** |
+| Coverage | **11.5% line coverage**, enforced by a 10% gate in `test.sh` |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
 | Deployment target | **macOS 14.0** (app and tests) |
@@ -22,20 +23,16 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Transport security | HTTPS/443 default; explicit `http://` limited to local networks by ATS |
 | Release distribution | Automated hardened-runtime signing/notarization pipeline; ad-hoc DMG for local CI smoke tests |
 
-**Overall assessment:** the app is a usable Mattermost client. The functional and security
-findings from the original audit are resolved. What remains is producing and verifying a real
-notarized artifact, accessibility/localization, test-target and coverage work, and timeline
-performance.
+**Overall assessment:** the app is a usable Mattermost client. All originally reported
+functional, security and test-target findings are resolved. What remains is producing and
+verifying a real notarized artifact, accessibility/localization, deeper test coverage, and
+timeline performance.
 
 ---
 
 ## Open Findings
 
-| # | Severity | Finding | Status |
-|---|---|---|---|
-| 16 | Medium | Duplicate source in the test target; limited coverage | **Partial** — 55 tests cover URL/JSON/WebSocket, model state, pagination, date separators, zoom, logging and errors; the test target still compiles copies of shared sources and has no coverage gate |
-
-Resolved findings and the previously verified feature list are preserved in git history.
+None. Resolved findings and the previously verified feature list are preserved in git history.
 
 ---
 
@@ -58,12 +55,10 @@ Resolved findings and the previously verified feature list are preserved in git 
 
 ### Tests
 
-- The test target still compiles copies of `webservice.swift`, `KeychainHelper.swift`, `Theme.swift`,
-  `ChatViewModel.swift`, `TimelineSupport.swift` and `ZoomManager.swift` instead of linking the app
-  module. Move to a hosted unit-test bundle (`TEST_HOST`/`BUNDLE_LOADER`) and `@testable import`.
-- No coverage for window/layout code, authentication flows, reconnect lifecycle or attachment
-  upload/send integration beyond the pure transport tests.
-- No coverage reporting in CI.
+- The test bundle is now hosted in `mattermost.client.app` (`TEST_HOST`/`BUNDLE_LOADER`,
+  `@testable import`) and `test.sh` produces an `.xcresult` coverage report with a 10% line
+  coverage gate. Raise the gate as window/layout, authentication, reconnect and attachment flows
+  gain coverage.
 
 ### Performance
 
@@ -84,7 +79,7 @@ Resolved findings and the previously verified feature list are preserved in git 
 
 1. Produce, notarize and verify a Release DMG on a clean macOS 14 machine.
 2. Add accessibility labels/help text and run a VoiceOver/keyboard audit.
-3. Move the test target to a hosted bundle and add coverage reporting.
+3. Raise the coverage gate as authentication, reconnect and attachment integration tests are added.
 4. Profile and diff timeline updates for large channels; cap avatar caches.
 
 ---
@@ -93,7 +88,7 @@ Resolved findings and the previously verified feature list are preserved in git 
 
 ```bash
 ./build.sh     # clean build, zero warnings
-./test.sh      # 55 tests
+./test.sh      # 55 tests + coverage gate
 ./lint.sh      # swift-format --strict on migrated files
 ```
 

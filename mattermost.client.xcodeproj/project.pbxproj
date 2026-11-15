@@ -7,22 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		343864C12CD3FE4400725849 /* webservice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864C22CD3FE4400725849 /* webservice.swift */; };
-		343864E02CD3FE4400725849 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864E12CD3FE4400725849 /* ChatViewModel.swift */; };
-		343864E22CD3FE4400725849 /* TimelineSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864E32CD3FE4400725849 /* TimelineSupport.swift */; };
-		343864E42CD3FE4400725849 /* ZoomManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864E52CD3FE4400725849 /* ZoomManager.swift */; };
-		343864D12CD3FE4400725849 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864D22CD3FE4400725849 /* KeychainHelper.swift */; };
-		343864D32CD3FE4400725849 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343864D42CD3FE4400725849 /* Theme.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		343864B12CD3FE4300725849 /* mattermost.client.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mattermost.client.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		343864C22CD3FE4400725849 /* webservice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/webservice/webservice.swift; sourceTree = "<group>"; };
-		343864E12CD3FE4400725849 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/ChatViewModel.swift; sourceTree = "<group>"; };
-		343864E32CD3FE4400725849 /* TimelineSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/TimelineSupport.swift; sourceTree = "<group>"; };
-		343864E52CD3FE4400725849 /* ZoomManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/ZoomManager.swift; sourceTree = "<group>"; };
-		343864D22CD3FE4400725849 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/KeychainHelper.swift; sourceTree = "<group>"; };
-		343864D42CD3FE4400725849 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = mattermost.client/Theme.swift; sourceTree = "<group>"; };
 		343864C32CD3FE4400725849 /* mattermost.clientTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mattermost.clientTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -186,12 +174,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				343864C12CD3FE4400725849 /* webservice.swift in Sources */,
-				343864D12CD3FE4400725849 /* KeychainHelper.swift in Sources */,
-				343864D32CD3FE4400725849 /* Theme.swift in Sources */,
-				343864E02CD3FE4400725849 /* ChatViewModel.swift in Sources */,
-				343864E22CD3FE4400725849 /* TimelineSupport.swift in Sources */,
-				343864E42CD3FE4400725849 /* ZoomManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,9 +331,15 @@
 		343864CA2CD3FE4400725849 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bbarbulovski.mattermost-clientTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -359,21 +347,29 @@
 				SWIFT_VERSION = 6.0;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/mattermost.client.app/Contents/MacOS/mattermost.client";
 			};
 			name = Debug;
 		};
 		343864CB2CD3FE4400725849 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bbarbulovski.mattermost-clientTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/mattermost.client.app/Contents/MacOS/mattermost.client";
 			};
 			name = Release;
 		};
