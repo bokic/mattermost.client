@@ -16,8 +16,8 @@ extension MainWindow {
         container.frame = NSRect(x: 0, y: 0, width: width, height: 34)
         // Web `.NotificationSeparator`: 50% orange rule behind a white pill with
         // 13pt regular orange text and 13pt horizontal padding.
-        let orange = NSColor(red: 1.0, green: 136 / 255, blue: 0, alpha: 1.0)
-        let lineColor = NSColor(red: 1.0, green: 136 / 255, blue: 0, alpha: 0.5)
+        let orange = MMPalette.newMessages
+        let lineColor = MMPalette.newMessagesLine
 
         let line = RoundedEdgePanel()
         line.cornerRadius = 0
@@ -50,7 +50,7 @@ extension MainWindow {
 
     func setupNewMessagesPill() {
         newMessagesPill.color = Theme.shared.buttonBg
-        newMessagesPill.cornerRadius = 4
+        newMessagesPill.cornerRadius = MMRadius.control
         newMessagesPill.isHidden = true
         newMessagesPill.onClick = { [weak self] in
             self?.jumpToNewMessages()
@@ -365,7 +365,7 @@ extension MainWindow {
 
         let displaySize = fitImageSize(natural: naturalSize, maxWidth: maxWidth, maxHeight: maxHeight)
         let container = RoundedEdgePanel()
-        container.cornerRadius = 4
+        container.cornerRadius = MMRadius.control
         container.color = .clear
         container.clipContentToBounds = true
         container.frame = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
@@ -375,7 +375,7 @@ extension MainWindow {
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.imageAlignment = .alignLeft
         imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 4
+        imageView.layer?.cornerRadius = MMRadius.control
         imageView.layer?.masksToBounds = true
         imageView.image = cachedImage
         container.addSubview(imageView)
@@ -513,7 +513,7 @@ extension MainWindow {
             let chipW = max(28, ceil(5 + emojiW + spacing + countW + 5))
 
             let chip = RoundedEdgePanel()
-            chip.cornerRadius = 4
+            chip.cornerRadius = MMRadius.control
             chip.color = reacted
                 ? Theme.shared.buttonBg.withAlphaComponent(0.08)
                 : Theme.shared.centerText.withAlphaComponent(0.08)
@@ -569,7 +569,7 @@ extension MainWindow {
         // The add-reaction chip only exists when a post already has reactions, and
         // is revealed while the row is hovered (`.post:hover .Reaction__add`).
         let addChip = RoundedEdgePanel()
-        addChip.cornerRadius = 4
+        addChip.cornerRadius = MMRadius.control
         addChip.color = Theme.shared.centerText.withAlphaComponent(0.08)
         addChip.borderWidth = 1
         addChip.borderColor = .clear
@@ -601,7 +601,7 @@ extension MainWindow {
 
     func addHoverToolbar(for post: MMPost, to row: NSView, width: CGFloat, compact: Bool = false) -> RoundedEdgePanel {
         let toolbar = RoundedEdgePanel()
-        toolbar.cornerRadius = 4
+        toolbar.cornerRadius = MMRadius.control
         toolbar.color = Theme.shared.centerBg
         toolbar.borderWidth = 1
         toolbar.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
@@ -639,7 +639,7 @@ extension MainWindow {
 
         for (index, entry) in entries.enumerated() {
             let button = RoundedEdgePanel()
-            button.cornerRadius = 4
+            button.cornerRadius = MMRadius.control
             button.color = .clear
             button.frame = NSRect(
                 x: inset + CGFloat(index) * buttonSize,
@@ -736,7 +736,7 @@ extension MainWindow {
 
     func setupPostInteractionPanels() {
         reactionPickerPanel.color = Theme.shared.centerBg
-        reactionPickerPanel.cornerRadius = 6
+        reactionPickerPanel.cornerRadius = MMRadius.menu
         reactionPickerPanel.borderWidth = 1
         reactionPickerPanel.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         reactionPickerPanel.shadowColor = .black
@@ -747,7 +747,7 @@ extension MainWindow {
         chatPanel.addSubview(reactionPickerPanel)
 
         postActionMenu.color = Theme.shared.centerBg
-        postActionMenu.cornerRadius = 6
+        postActionMenu.cornerRadius = MMRadius.menu
         postActionMenu.borderWidth = 1
         postActionMenu.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         postActionMenu.shadowColor = .black
@@ -769,7 +769,7 @@ extension MainWindow {
         lightboxOverlay.addSubview(lightboxHeaderPanel)
 
         lightboxZoomBar.cornerRadius = 0
-        lightboxZoomBar.color = NSColor(red: 61 / 255, green: 60 / 255, blue: 64 / 255, alpha: 0.75)
+        lightboxZoomBar.color = MMPalette.lightboxChrome
         lightboxOverlay.addSubview(lightboxZoomBar)
 
         lightboxContentPanel.cornerRadius = 0
@@ -845,7 +845,7 @@ extension MainWindow {
         lightboxImageView.imageAlignment = .alignCenter
         lightboxImageView.animates = true
         lightboxImageView.wantsLayer = true
-        lightboxImageView.layer?.cornerRadius = 8
+        lightboxImageView.layer?.cornerRadius = MMRadius.panel
         lightboxImageView.layer?.masksToBounds = true
         lightboxContentPanel.addSubview(lightboxImageView)
     }
@@ -857,7 +857,7 @@ extension MainWindow {
         size: CGFloat = 40,
         action: @escaping () -> Void
     ) {
-        button.cornerRadius = 4
+        button.cornerRadius = MMRadius.control
         button.color = .clear
         let icon = NSImageView()
         if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description) {
@@ -1060,7 +1060,7 @@ extension MainWindow {
             let column = index % columns
             let row = index / columns
             let button = RoundedEdgePanel()
-            button.cornerRadius = 4
+            button.cornerRadius = MMRadius.control
             button.color = .clear
             button.frame = NSRect(
                 x: margin + CGFloat(column) * (cell + gap),
@@ -1162,7 +1162,7 @@ extension MainWindow {
         let iconColor = Theme.shared.centerTextMuted
         for (index, item) in rows.enumerated() {
             let row = RoundedEdgePanel()
-            row.cornerRadius = 4
+            row.cornerRadius = MMRadius.control
             row.color = .clear
             row.frame = NSRect(
                 x: 4,
@@ -1325,7 +1325,7 @@ extension MainWindow {
         )
 
         let container = RoundedEdgePanel()
-        container.cornerRadius = 8
+        container.cornerRadius = MMRadius.panel
         container.color = .clear
         container.borderWidth = 1
         container.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
@@ -1342,7 +1342,7 @@ extension MainWindow {
 
         // Download affordance shown on hover (`.image-preview-utility-buttons-container`).
         let download = RoundedEdgePanel()
-        download.cornerRadius = 4
+        download.cornerRadius = MMRadius.control
         download.color = Theme.shared.centerBg
         download.borderWidth = 1
         download.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
@@ -1402,7 +1402,7 @@ extension MainWindow {
         let cardW = min(320, maxWidth)
         let cardH: CGFloat = 64
         let card = FlippedEdgePanel()
-        card.cornerRadius = 4
+        card.cornerRadius = MMRadius.control
         card.color = Theme.shared.centerBg
         card.borderWidth = 1
         card.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
@@ -1452,7 +1452,7 @@ extension MainWindow {
         card.addSubview(sizeLabel)
 
         let downloadButton = RoundedEdgePanel()
-        downloadButton.cornerRadius = 4
+        downloadButton.cornerRadius = MMRadius.control
         downloadButton.color = .clear
         downloadButton.frame = NSRect(x: cardW - 45, y: 16, width: 32, height: 32)
         let downloadIcon = NSImageView()
@@ -1758,14 +1758,7 @@ extension MainWindow {
             sysAvatarIcon.frame = NSRect(x: 3, y: 3, width: avatarSize - 6, height: avatarSize - 6)
             avatarCircle.addSubview(sysAvatarIcon)
         } else {
-            let palette: [NSColor] = [
-                NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0),
-                Theme.shared.buttonBg,
-                NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
-                NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
-                NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
-                NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0)
-            ]
+            let palette = MMPalette.avatarColors
             let hashVal = abs(authorName.hashValue)
             avatarCircle.color = palette[hashVal % palette.count]
 
@@ -1807,7 +1800,7 @@ extension MainWindow {
         // Status prompt pill if current user
         if isCurrentUser && !isSystem {
             let statusPromptPill = RoundedEdgePanel()
-            statusPromptPill.cornerRadius = 4
+            statusPromptPill.cornerRadius = MMRadius.control
             statusPromptPill.color = hoverBg
             let statusPromptIcon = NSImageView()
             if let smileImg = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: "Status") {
@@ -2207,7 +2200,7 @@ extension MainWindow {
 
     func createBotBadge() -> RoundedEdgePanel {
         let badge = RoundedEdgePanel()
-        badge.cornerRadius = 4
+        badge.cornerRadius = MMRadius.control
         badge.color = Theme.shared.centerText.withAlphaComponent(0.12)
         let label = NSTextField(labelWithString: "BOT")
         label.font = MMFont.font(ofSize: 9.5, weight: .bold)
@@ -2323,7 +2316,7 @@ extension MainWindow {
 
         if !didLoadAllHistory && !postsToRender.isEmpty {
             let loadRow = RoundedEdgePanel()
-            loadRow.cornerRadius = 4
+            loadRow.cornerRadius = MMRadius.control
             loadRow.color = .clear
             loadRow.frame = NSRect(x: 0, y: currentY, width: chatW, height: 32)
             let loadLabel = NSTextField(labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")

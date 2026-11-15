@@ -29,7 +29,7 @@ extension MainWindow {
         channelHeaderBorder.color = dividerColor
         chatPanel.addSubview(channelHeaderBorder)
 
-        channelStarButton.cornerRadius = 4
+        channelStarButton.cornerRadius = MMRadius.control
         channelStarButton.color = .clear
         if let starImg = NSImage(systemSymbolName: "star", accessibilityDescription: "Favorite") {
             channelStarIconView.image = starImg.withSymbolConfiguration(.init(pointSize: 12.5, weight: .medium))
@@ -50,7 +50,7 @@ extension MainWindow {
         }
         chatPanel.addSubview(channelStarButton)
 
-        channelTitleButton.cornerRadius = 4
+        channelTitleButton.cornerRadius = MMRadius.control
         channelTitleButton.color = .clear
         channelTitleLabel.font = MMFont.font(ofSize: 14, weight: .semibold)
         channelTitleLabel.textColor = darkText
@@ -58,7 +58,7 @@ extension MainWindow {
         channelTitleLabel.isSelectable = false
         channelTitleButton.addSubview(channelTitleLabel)
 
-        channelHeaderBotBadge.cornerRadius = 4
+        channelHeaderBotBadge.cornerRadius = MMRadius.control
         channelHeaderBotBadge.color = Theme.shared.centerText.withAlphaComponent(0.12)
         channelHeaderBotBadgeLabel.font = MMFont.font(ofSize: 9.5, weight: .bold)
         channelHeaderBotBadgeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
@@ -85,7 +85,7 @@ extension MainWindow {
         }
         chatPanel.addSubview(channelTitleButton)
 
-        channelMembersButton.cornerRadius = 4
+        channelMembersButton.cornerRadius = MMRadius.control
         channelMembersButton.color = .clear
         if let personImg = NSImage(systemSymbolName: "person", accessibilityDescription: "Members") {
             channelMembersIconView.image = personImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
@@ -109,7 +109,7 @@ extension MainWindow {
         }
         chatPanel.addSubview(channelMembersButton)
 
-        channelPinsButton.cornerRadius = 4
+        channelPinsButton.cornerRadius = MMRadius.control
         channelPinsButton.color = .clear
         if let pinImg = NSImage(systemSymbolName: "pin", accessibilityDescription: "Pinned Messages") {
             channelPinsIconView.image = pinImg.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
@@ -127,7 +127,7 @@ extension MainWindow {
         }
         chatPanel.addSubview(channelPinsButton)
 
-        channelFilesButton.cornerRadius = 4
+        channelFilesButton.cornerRadius = MMRadius.control
         channelFilesButton.color = .clear
         if let filesImg = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Channel files") {
             channelFilesIconView.image = filesImg.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
@@ -145,7 +145,7 @@ extension MainWindow {
         }
         chatPanel.addSubview(channelFilesButton)
 
-        channelSidebarButton.cornerRadius = 4
+        channelSidebarButton.cornerRadius = MMRadius.control
         channelSidebarButton.color = .clear
         if let sideImg = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Channel Sidebar") {
             channelSidebarIconView.image = sideImg.withSymbolConfiguration(.init(pointSize: 13.5, weight: .regular))
@@ -163,7 +163,7 @@ extension MainWindow {
         }
         chatPanel.addSubview(channelSidebarButton)
 
-        channelInfoButton.cornerRadius = 4
+        channelInfoButton.cornerRadius = MMRadius.control
         channelInfoButton.color = .clear
         if let infoImg = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "View Info") {
             channelInfoIconView.image = infoImg.withSymbolConfiguration(.init(pointSize: 13.5, weight: .medium))
@@ -190,7 +190,7 @@ extension MainWindow {
         heroBotAvatarView.isHidden = true
         heroIllustrationCircle.addSubview(heroBotAvatarView)
 
-        heroWhiteBubble.cornerRadius = 4
+        heroWhiteBubble.cornerRadius = MMRadius.control
         heroWhiteBubble.borderWidth = 1.5
         heroWhiteBubble.color = Theme.shared.centerTextPlaceholder
         for i in 0..<3 {
@@ -203,7 +203,7 @@ extension MainWindow {
         }
         timelineHeroContainer.addSubview(heroWhiteBubble)
 
-        heroBlueBubble.cornerRadius = 4
+        heroBlueBubble.cornerRadius = MMRadius.control
         heroBlueBubble.color = brandBlue
         for i in 0..<2 {
             let line = RoundedEdgePanel()
@@ -222,7 +222,7 @@ extension MainWindow {
         heroTitleLabel.isSelectable = false
         timelineHeroContainer.addSubview(heroTitleLabel)
 
-        heroBotBadge.cornerRadius = 4
+        heroBotBadge.cornerRadius = MMRadius.control
         heroBotBadge.color = Theme.shared.centerText.withAlphaComponent(0.12)
         heroBotBadgeLabel.font = MMFont.font(ofSize: 10, weight: .bold)
         heroBotBadgeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
@@ -244,7 +244,7 @@ extension MainWindow {
         heroDescriptionLabel.isSelectable = false
         timelineHeroContainer.addSubview(heroDescriptionLabel)
 
-        heroInviteButton.cornerRadius = 4
+        heroInviteButton.cornerRadius = MMRadius.control
         heroInviteButton.color = brandBlue
         if let invImg = NSImage(systemSymbolName: "person.badge.plus", accessibilityDescription: "Invite") {
             heroInviteIconView.image = invImg.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
@@ -315,7 +315,7 @@ extension MainWindow {
         ]
         for sym in leftSymbols {
             let btn = RoundedEdgePanel()
-            btn.cornerRadius = 4
+            btn.cornerRadius = MMRadius.control
             btn.color = .clear
             let icon = NSImageView()
             if let img = NSImage(systemSymbolName: sym, accessibilityDescription: sym) {
@@ -338,7 +338,7 @@ extension MainWindow {
         chatEntryPanel.addSubview(composerLeftSeparator)
 
         // Right composer toolbar controls: "Aa ^" | sep | Emoji | Paperclip | Send
-        composerAaButton.cornerRadius = 4
+        composerAaButton.cornerRadius = MMRadius.control
         composerAaButton.color = .clear
         let aaLabel = NSTextField(labelWithString: "Aa")
         let aaFont = MMFont.font(ofSize: 14, weight: .semibold)
@@ -373,7 +373,7 @@ extension MainWindow {
         chatEntryPanel.addSubview(composerRightSeparator)
 
         let setupRightIconBtn: (RoundedEdgePanel, String) -> Void = { btn, sym in
-            btn.cornerRadius = 4
+            btn.cornerRadius = MMRadius.control
             btn.color = .clear
             let icon = NSImageView()
             if let img = NSImage(systemSymbolName: sym, accessibilityDescription: sym) {
@@ -395,7 +395,7 @@ extension MainWindow {
         }
 
         // GIF button in composer
-        composerGifButton.cornerRadius = 4
+        composerGifButton.cornerRadius = MMRadius.control
         composerGifButton.color = .clear
         let gifLabel = NSTextField(labelWithString: "GIF")
         let gifFont = MMFont.font(ofSize: 11, weight: .bold)
@@ -434,7 +434,7 @@ extension MainWindow {
             self?.attachFiles()
         }
 
-        composerSendButton.cornerRadius = 4
+        composerSendButton.cornerRadius = MMRadius.control
         composerSendButton.color = Theme.shared.centerText.withAlphaComponent(0.08)
         let sendIcon = NSImageView()
         if let sImg = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send") {
@@ -502,7 +502,7 @@ extension MainWindow {
         if isRightPanelVisible {
             let composerArea: CGFloat = 24 + composerTotalHeight + 8
             let maxPanelWidth = max(280, chatW - 360)
-            let panelWidth = min(max(280, rightPanelWidth), maxPanelWidth)
+            let panelWidth = min(max(MMMetric.rightPanelMinWidth, rightPanelWidth), maxPanelWidth)
             let panelHeight = max(0, chatH - headerH - composerArea)
             rightPanel.frame = NSRect(x: chatW - panelWidth, y: composerArea, width: panelWidth, height: panelHeight)
 
@@ -655,17 +655,17 @@ extension MainWindow {
 
     func updateViews() {
         let size = contentView!.bounds.size
-        let topBarHeight: CGFloat = 44
+        let topBarHeight: CGFloat = MMMetric.topBarHeight
         let topBarY = size.height - topBarHeight
 
-        let gutter: CGFloat = 4
+        let gutter: CGFloat = MMMetric.panelGutter
         // Web: sidebar occupies 264pt starting 5pt from the window edge, then the
         // white channel card starts at 269pt; both share a 4pt gutter.
-        let chatPanelX: CGFloat = 269
+        let chatPanelX: CGFloat = MMMetric.chatPanelLeading
         mainPanel.frame = NSRect(x: gutter, y: gutter, width: size.width - gutter * 2, height: topBarY - gutter)
-        mainPanel.cornerRadius = 12
+        mainPanel.cornerRadius = MMRadius.window
         chatPanel.frame = NSRect(x: chatPanelX, y: gutter, width: size.width - chatPanelX - gutter, height: topBarY - gutter)
-        chatPanel.cornerRadius = 12
+        chatPanel.cornerRadius = MMRadius.window
 
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         layoutRightChatPanel()
@@ -708,7 +708,7 @@ extension MainWindow {
         helpIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         helpMenu.frame = NSRect(x: helpPanel.frame.minX, y: topBarY - 178, width: 204, height: 176)
 
-        searchPopoverPanel.frame = NSRect(x: searchX, y: topBarY - 124, width: 400, height: 122)
+        searchPopoverPanel.frame = NSRect(x: searchX, y: topBarY - 124, width: MMMetric.searchPopoverWidth, height: 122)
 
         // Right: Mentions (@), Saved Posts, Settings, User Avatar + Status Dot.
         // Web: 28pt buttons with 8pt gaps ending 4pt from the window edge, 40x32 avatar button.

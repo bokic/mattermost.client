@@ -69,7 +69,7 @@ final class ZoomHUD {
         let fontSize: CGFloat = 15
         let horizontalPadding: CGFloat = 10
         let verticalPadding: CGFloat = 8
-        let cornerRadius: CGFloat = 8
+        let cornerRadius = MMRadius.panel
         let topMargin: CGFloat = 14
 
         let text = "\(Int((factor * 100).rounded()))%"
@@ -131,8 +131,8 @@ final class ZoomHUD {
 
     private func makePanel() -> ZoomHUDPanel {
         let panel = ZoomHUDPanel()
-        panel.color = NSColor(red: 27 / 255, green: 29 / 255, blue: 34 / 255, alpha: 0.88)
-        panel.cornerRadius = 8
+        panel.color = MMPalette.zoomHUDBackground
+        panel.cornerRadius = MMRadius.panel
         panel.shadowColor = .black
         panel.shadowOpacity = 0.25
         panel.shadowRadius = 10

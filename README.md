@@ -120,6 +120,8 @@ Build a Release configuration and create a standalone `.dmg` installer:
 - `MainWindowSupport.swift` holds shared custom views, drag-and-drop helpers and the emoji catalog.
 - `WindowZoomController` owns app-level zoom for every window (bounds scaling, resize/zoom
   observers, shortcuts and HUD), with the coordinate-space model documented in the file.
+- `DesignTokens.swift` centralizes shared radii, layout metrics and native UI accents; server-theme
+  colors remain in `Theme.swift`.
 - `WebService` is `@MainActor`: token, socket task, timers and callbacks are main-actor isolated,
   while URLSession performs network I/O off the main thread and hops back explicitly. `AppDelegate`
   injects the service into `MainWindow` (`start(with:)`) so components never look it up through the

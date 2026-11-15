@@ -31,7 +31,7 @@ extension MainWindow {
         rightPanelSubtitle.isSelectable = false
         rightPanel.addSubview(rightPanelSubtitle)
 
-        rightPanelCloseButton.cornerRadius = 4
+        rightPanelCloseButton.cornerRadius = MMRadius.control
         rightPanelCloseButton.color = .clear
         let closeIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close panel") {
@@ -52,7 +52,7 @@ extension MainWindow {
         rightPanel.addSubview(rightPanelScroll)
 
         threadReplyPanel.color = Theme.shared.centerBg
-        threadReplyPanel.cornerRadius = 4
+        threadReplyPanel.cornerRadius = MMRadius.control
         threadReplyPanel.borderWidth = 1
         threadReplyPanel.borderColor = dividerColor
         threadReplyPanel.isHidden = true
@@ -75,7 +75,7 @@ extension MainWindow {
         threadReplyPanel.addSubview(threadPlaceholderLabel, positioned: .below, relativeTo: threadReplyField)
 
         threadSendButton.color = Theme.shared.buttonBg
-        threadSendButton.cornerRadius = 4
+        threadSendButton.cornerRadius = MMRadius.control
         let sendIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "paperplane.fill", accessibilityDescription: "Send reply") {
             sendIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
@@ -92,7 +92,7 @@ extension MainWindow {
         rightPanelResizeHandle.onDrag = { [weak self] deltaX in
             guard let self = self else { return }
             let maxWidth = max(280, self.chatPanel.bounds.width - 360)
-            self.rightPanelWidth = min(max(280, self.rightPanelWidth - deltaX), maxWidth)
+            self.rightPanelWidth = min(max(MMMetric.rightPanelMinWidth, self.rightPanelWidth - deltaX), maxWidth)
             self.layoutRightChatPanel()
         }
         rightPanelResizeHandle.onEnd = { [weak self] in
@@ -478,7 +478,7 @@ extension MainWindow {
         let rowHeight: CGFloat = 64
         for file in files {
             let card = FlippedEdgePanel()
-            card.cornerRadius = 4
+            card.cornerRadius = MMRadius.control
             card.color = Theme.shared.centerBg
             card.borderWidth = 1
             card.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
@@ -495,7 +495,7 @@ extension MainWindow {
             var thumbImage: NSImage?
             if isImage {
                 let thumb = RoundedEdgePanel()
-                thumb.cornerRadius = 4
+                thumb.cornerRadius = MMRadius.control
                 thumb.color = Theme.shared.centerHover
                 thumb.clipContentToBounds = true
                 thumb.frame = thumbFrame
@@ -789,7 +789,7 @@ extension MainWindow {
 
     func makeRightPanelRow(_ item: RightPanelRow, width: CGFloat) -> RoundedEdgePanel {
         let row = RoundedEdgePanel()
-        row.cornerRadius = 6
+        row.cornerRadius = MMRadius.menu
         row.color = .clear
 
         let title = NSTextField(labelWithString: item.title)

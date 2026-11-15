@@ -111,7 +111,7 @@ extension MainWindow {
         for item in allItems {
             let unread = unreadByChannel[item.id] ?? 0
             let mentions = mentionsByChannel[item.id] ?? 0
-            item.badgePanel.frame = NSRect(x: 264 - 16 - 34, y: 6, width: 34, height: 20)
+            item.badgePanel.frame = NSRect(x: MMMetric.sidebarWidth - 16 - 34, y: 6, width: 34, height: 20)
             item.badgeLabel.frame = NSRect(x: 2, y: 3, width: 30, height: 14)
             if mentions > 0 {
                 item.badgePanel.isHidden = false
@@ -190,7 +190,7 @@ extension MainWindow {
 
         // 1. Team Header Row: "None v" button + "+" button
         teamHeaderButton.color = .clear
-        teamHeaderButton.cornerRadius = 4
+        teamHeaderButton.cornerRadius = MMRadius.control
         teamHeaderLabel.font = MMFont.font(ofSize: 16, weight: .semibold)
         teamHeaderLabel.textColor = Theme.shared.sidebarText
         teamHeaderLabel.isEditable = false
@@ -236,7 +236,7 @@ extension MainWindow {
 
         // 2. Filter & Find Channel Row
         filterChannelButton.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
-        filterChannelButton.cornerRadius = 4
+        filterChannelButton.cornerRadius = MMRadius.control
         if let filterImg = NSImage(systemSymbolName: "line.3.horizontal.decrease", accessibilityDescription: "Filter") {
             filterChannelIconView.image = filterImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
             filterChannelIconView.contentTintColor = mutedTint
@@ -255,7 +255,7 @@ extension MainWindow {
         mainPanel.addSubview(filterChannelButton)
 
         findChannelPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
-        findChannelPanel.cornerRadius = 4
+        findChannelPanel.cornerRadius = MMRadius.control
         if let findImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find channel") {
             findChannelIconView.image = findImg.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
             findChannelIconView.contentTintColor = mutedTint
@@ -581,7 +581,7 @@ extension MainWindow {
         var addBtn: RoundedEdgePanel? = nil
         if showsAddButton {
             let btn = RoundedEdgePanel()
-            btn.cornerRadius = 4
+            btn.cornerRadius = MMRadius.control
             btn.color = .clear
             let addIcon = NSImageView()
             if let plusImg = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Direct Message") {
@@ -671,7 +671,7 @@ extension MainWindow {
         row.addSubview(label)
 
         let badgePanel = RoundedEdgePanel()
-        badgePanel.cornerRadius = 10
+        badgePanel.cornerRadius = MMRadius.card
         badgePanel.color = .clear
         badgePanel.isHidden = true
         row.addSubview(badgePanel)
@@ -831,9 +831,9 @@ extension MainWindow {
 
         teamDropdownMenu.frame = NSRect(x: menuX, y: menuY, width: menuWidth, height: menuHeight)
         teamDropdownMenu.color = Theme.shared.centerBg
-        teamDropdownMenu.cornerRadius = 6
+        teamDropdownMenu.cornerRadius = MMRadius.menu
         teamDropdownMenu.borderWidth = 1
-        teamDropdownMenu.borderColor = NSColor(white: 0.85, alpha: 1.0)
+        teamDropdownMenu.borderColor = MMPalette.popupBorder
         teamDropdownMenu.shadowColor = .black
         teamDropdownMenu.shadowOpacity = 0.18
         teamDropdownMenu.shadowRadius = 12
@@ -842,7 +842,7 @@ extension MainWindow {
         if teamsToDisplay.isEmpty {
             let emptyLabel = NSTextField(labelWithString: "No teams available")
             emptyLabel.font = MMFont.font(ofSize: 13, weight: .regular)
-            emptyLabel.textColor = NSColor(white: 0.5, alpha: 1.0)
+            emptyLabel.textColor = MMPalette.popupSecondaryText
             emptyLabel.frame = NSRect(x: 14, y: 10, width: menuWidth - 28, height: 20)
             teamDropdownMenu.addSubview(emptyLabel)
             return
@@ -852,13 +852,13 @@ extension MainWindow {
         for team in teamsToDisplay {
             let row = RoundedEdgePanel()
             row.frame = NSRect(x: 6, y: yPos, width: menuWidth - 12, height: rowHeight)
-            row.cornerRadius = 4
+            row.cornerRadius = MMRadius.control
             row.color = .clear
 
             let isActive = team.id == activeTeam?.id
             let label = NSTextField(labelWithString: team.display_name.isEmpty ? team.name : team.display_name)
             label.font = MMFont.font(ofSize: 13.5, weight: isActive ? .bold : .medium)
-            label.textColor = NSColor(white: 0.15, alpha: 1.0)
+            label.textColor = MMPalette.popupText
             label.isEditable = false
             label.isSelectable = false
             label.frame = NSRect(x: 10, y: 7, width: menuWidth - 52, height: 20)
@@ -868,14 +868,14 @@ extension MainWindow {
                 let checkView = NSImageView()
                 if let checkImg = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Active") {
                     checkView.image = checkImg.withSymbolConfiguration(.init(pointSize: 11, weight: .bold))
-                    checkView.contentTintColor = NSColor(srgbRed: 0.11, green: 0.35, blue: 0.85, alpha: 1.0)
+                    checkView.contentTintColor = MMPalette.popupCheck
                 }
                 checkView.frame = NSRect(x: menuWidth - 36, y: 9, width: 16, height: 16)
                 row.addSubview(checkView)
             }
 
             row.onHoverChanged = { [weak row] isHovered in
-                row?.color = isHovered ? NSColor(white: 0.94, alpha: 1.0) : .clear
+                row?.color = isHovered ? MMPalette.popupHover : .clear
                 row?.setNeedsAppearanceUpdate()
             }
 
@@ -942,7 +942,7 @@ extension MainWindow {
         // Matches the web client at >=1201px: 264pt sidebar starting 5pt from the
         // window edge, 32pt rows, 19/16pt horizontal padding.
         let sidebarX: CGFloat = 1
-        let sidebarWidth: CGFloat = 264
+        let sidebarWidth: CGFloat = MMMetric.sidebarWidth
 
         // Row 1: Team header button + "+" button
         layoutTeamHeader(topBarY: topBarY)

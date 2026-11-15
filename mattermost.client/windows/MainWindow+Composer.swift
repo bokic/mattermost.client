@@ -13,7 +13,7 @@ extension MainWindow {
 
     func setupEmojiPanel() {
         emojiPanel.color = Theme.shared.centerBg
-        emojiPanel.cornerRadius = 4
+        emojiPanel.cornerRadius = MMRadius.control
         emojiPanel.borderWidth = 1
         emojiPanel.borderColor = Theme.shared.centerText.withAlphaComponent(0.2)
         emojiPanel.shadowColor = .black
@@ -63,7 +63,7 @@ extension MainWindow {
         var x = margin
         for category in titles {
             let button = RoundedEdgePanel()
-            button.cornerRadius = 4
+            button.cornerRadius = MMRadius.control
             button.color = .clear
             button.frame = NSRect(x: x, y: 2, width: buttonSize, height: buttonSize)
             let icon = NSImageView()
@@ -166,7 +166,7 @@ extension MainWindow {
             let column = index % columns
             let row = index / columns
             let button = RoundedEdgePanel()
-            button.cornerRadius = 3
+            button.cornerRadius = MMRadius.tiny
             button.color = .clear
             button.frame = NSRect(
                 x: margin + CGFloat(column) * cell,
@@ -484,7 +484,7 @@ extension MainWindow {
 
         for (index, item) in completionItems.enumerated() {
             let row = RoundedEdgePanel()
-            row.cornerRadius = 4
+            row.cornerRadius = MMRadius.control
             row.color = index == completionSelectedIndex ? selectedBg : .clear
             row.frame = NSRect(
                 x: 4,
@@ -497,7 +497,7 @@ extension MainWindow {
             switch item.kind {
             case .user:
                 let avatar = RoundedEdgePanel()
-                avatar.cornerRadius = 10
+                avatar.cornerRadius = MMRadius.card
                 avatar.clipContentToBounds = true
                 avatar.frame = NSRect(x: 8, y: 8, width: 20, height: 20)
                 let user = usersByUsername[item.title.dropFirst().lowercased()]
@@ -705,7 +705,7 @@ extension MainWindow {
 
         for attachment in pendingAttachments.prefix(maxVisible) {
             let chip = RoundedEdgePanel()
-            chip.cornerRadius = 4
+            chip.cornerRadius = MMRadius.control
             chip.color = Theme.shared.centerHover
             chip.borderWidth = 1
             chip.borderColor = Theme.shared.divider
@@ -729,7 +729,7 @@ extension MainWindow {
             chip.addSubview(name)
 
             let remove = RoundedEdgePanel()
-            remove.cornerRadius = 3
+            remove.cornerRadius = MMRadius.tiny
             remove.color = .clear
             remove.frame = NSRect(x: chipW - 22, y: 4, width: 16, height: 16)
             let xIcon = NSImageView()

@@ -49,7 +49,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let rightPanelResizeHandle = RightPanelResizeHandle()
     var rightPanelWidth: CGFloat = {
         let stored = UserDefaults.standard.double(forKey: "rhsWidth")
-        return stored > 0 ? CGFloat(stored) : 400
+        return stored > 0 ? CGFloat(stored) : MMMetric.rightPanelDefaultWidth
     }()
     static let localizedTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -402,8 +402,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var completionUsers: [LoginWebService] = []
     var completionUsersTeamId: String?
     var completionUsersLoading = false
-    var composerBaseHeight: CGFloat { isComposerToolbarVisible ? 90 : 50 }
-    var composerPendingHeight: CGFloat { pendingAttachments.isEmpty ? 0 : 36 }
+    var composerBaseHeight: CGFloat { isComposerToolbarVisible ? MMMetric.composerToolbarHeight : MMMetric.composerHeight }
+    var composerPendingHeight: CGFloat { pendingAttachments.isEmpty ? 0 : MMMetric.composerAttachmentsHeight }
     var composerTotalHeight: CGFloat { composerBaseHeight + composerPendingHeight }
 
     // Live WebService state (owned by the view model; exposed for the views).
@@ -472,7 +472,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         self.setFrameAutosaveName("MainWindowFrame")
 
         mainPanel.color = Theme.shared.sidebarBg
-        mainPanel.cornerRadius = 8
+        mainPanel.cornerRadius = MMRadius.panel
 
         entryView.backgroundColor = .clear
         entryView.drawsBackground = false
@@ -490,7 +490,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         entryView.placeholderString = "Write to Town Square"
 
         chatEntryPanel.color = Theme.shared.centerText.withAlphaComponent(0.16)
-        chatEntryPanel.cornerRadius = 4
+        chatEntryPanel.cornerRadius = MMRadius.control
         chatEntryPanel.borderWidth = 2
         chatPanel.addSubview(chatEntryPanel)
         chatEntryPanel.addSubview(entryView)
@@ -511,7 +511,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         chatEntryPanel.addSubview(composerAttachmentTray)
 
         completionPanel.color = Theme.shared.centerBg
-        completionPanel.cornerRadius = 6
+        completionPanel.cornerRadius = MMRadius.menu
         completionPanel.borderWidth = 1
         completionPanel.borderColor = Theme.shared.divider
         completionPanel.shadowColor = .black
@@ -525,7 +525,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         contentView?.addSubview(mainPanel)
 
         chatPanel.color = Theme.shared.centerBg
-        chatPanel.cornerRadius = 8
+        chatPanel.cornerRadius = MMRadius.panel
         contentView?.addSubview(chatPanel)
 
         setupLeftChannelSidebar()

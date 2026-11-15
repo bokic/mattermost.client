@@ -462,8 +462,17 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     code. Kept `appendRealtimePost`, which still performs the optimistic realtime insert and user
     hydration on the WebSocket path.
   - Verified the workspace renders unchanged; build is clean and all 27 tests pass.
-- [ ] **Centralize design tokens** (theme colors, radii, metrics currently repeated as literals in
-  dozens of places). — `M`
+- [x] **Centralize design tokens** — `M`
+  - Added `DesignTokens.swift`: `MMRadius` (tiny/control/menu/panel/card/window/large),
+    `MMMetric` (sidebar width/leading, gutter, chat-panel leading, top bar, composer heights,
+    default/min right-panel width, search popover width) and `MMPalette` (avatar palette, new-message
+    accent, zoom HUD, lightbox chrome and the team-switcher popup colors).
+  - Replaced the repeated numeric radii across all views (93 assignments now use
+    `MMRadius.*`) plus the duplicated avatar palette in the menus/timeline and the scattered metric
+    literals in layout/sidebar/header/right-panel/composer code.
+  - Theme-driven colors stay in `Theme.swift`; native accents that are not user-themed now live in
+    one palette.
+  - Verified the workspace renders pixel-identically; build is clean and all 27 tests pass.
 - [ ] **Deduplicate HTTP request building** (`login`, `performAuthenticatedRequest`,
   `fetchUserImage` share status/error handling). — `M`
 

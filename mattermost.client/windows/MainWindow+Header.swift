@@ -19,7 +19,7 @@ extension MainWindow {
 
         // Left: Product switcher container (grid icon + Mattermost logo + TEAM EDITION badge)
         productSwitcherPanel.color = .clear
-        productSwitcherPanel.cornerRadius = 4
+        productSwitcherPanel.cornerRadius = MMRadius.control
 
         boxImage.imageScaling = .scaleProportionallyUpOrDown
         boxImage.alphaValue = 0.72
@@ -27,7 +27,7 @@ extension MainWindow {
         logo.alphaValue = 0.94
 
         editionBadgePanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
-        editionBadgePanel.cornerRadius = 4
+        editionBadgePanel.cornerRadius = MMRadius.control
         editionBadgeLabel.font = MMFont.font(ofSize: 10, weight: .semibold)
         editionBadgeLabel.textColor = Theme.shared.sidebarText.withAlphaComponent(0.75)
         editionBadgeLabel.alignment = .center
@@ -48,7 +48,7 @@ extension MainWindow {
 
         // Center: Search bar (non-editable trigger, no caret) + Help (?) button
         searchPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
-        searchPanel.cornerRadius = 4
+        searchPanel.cornerRadius = MMRadius.control
         if let searchImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search") {
             searchIconView.image = searchImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
             searchIconView.contentTintColor = searchTint
@@ -72,7 +72,7 @@ extension MainWindow {
         contentView?.addSubview(searchPanel)
 
         helpPanel.color = .clear
-        helpPanel.cornerRadius = 4
+        helpPanel.cornerRadius = MMRadius.control
         if let helpImg = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Help") {
             helpIconView.image = helpImg.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
             helpIconView.contentTintColor = topBarTint
@@ -126,7 +126,7 @@ extension MainWindow {
 
         // User avatar circle + online status indicator dot
         avatarButtonPanel.color = .clear
-        avatarButtonPanel.cornerRadius = 4
+        avatarButtonPanel.cornerRadius = MMRadius.control
         // The status badge intentionally overhangs the avatar's bottom-right corner,
         // so let it render outside the rounded hover container.
         avatarButtonPanel.clipContentToBounds = false
@@ -137,8 +137,8 @@ extension MainWindow {
         avatarLabel.textColor = .white
         avatarLabel.alignment = .center
 
-        avatarPanel.color = NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0)
-        avatarPanel.cornerRadius = 12
+        avatarPanel.color = MMPalette.avatarYellow
+        avatarPanel.cornerRadius = MMRadius.window
         avatarPanel.addSubview(avatarLabel)
 
         avatarImageView.imageScaling = .scaleProportionallyUpOrDown
@@ -147,7 +147,7 @@ extension MainWindow {
         avatarPanel.addSubview(avatarImageView)
 
         statusDotPanel.color = statusColor(for: currentUserStatus)
-        statusDotPanel.cornerRadius = 8
+        statusDotPanel.cornerRadius = MMRadius.panel
         statusDotPanel.borderWidth = 1.35
         statusDotPanel.borderColor = Theme.shared.sidebarTeamBarBg
 
@@ -217,7 +217,7 @@ extension MainWindow {
     func setupSearchResultsPanel() {
         let dividerColor = Theme.shared.divider
         searchResultsPanel.color = Theme.shared.centerBg
-        searchResultsPanel.cornerRadius = 10
+        searchResultsPanel.cornerRadius = MMRadius.card
         searchResultsPanel.borderWidth = 1
         searchResultsPanel.borderColor = dividerColor
         searchResultsPanel.shadowColor = .black
@@ -232,7 +232,7 @@ extension MainWindow {
         searchResultsTitle.isSelectable = false
         searchResultsPanel.addSubview(searchResultsTitle)
 
-        searchResultsCloseButton.cornerRadius = 4
+        searchResultsCloseButton.cornerRadius = MMRadius.control
         searchResultsCloseButton.color = .clear
         let closeIcon = NSImageView()
         if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close search") {
@@ -305,7 +305,7 @@ extension MainWindow {
     func makeSearchResultRow(_ post: MMPost, width: CGFloat) -> RoundedEdgePanel {
         let row = RoundedEdgePanel()
         row.color = .clear
-        row.cornerRadius = 6
+        row.cornerRadius = MMRadius.menu
 
         let author = usersById[post.user_id]?.username ?? "Unknown"
         let channelName = channelsById[post.channel_id].map { channelDisplayName(for: $0) } ?? ""
@@ -461,7 +461,7 @@ extension MainWindow {
     }
 
     func setupSearchPopover() {
-        let popoverWidth: CGFloat = 400
+        let popoverWidth: CGFloat = MMMetric.searchPopoverWidth
         let popoverHeight: CGFloat = 122
         let brandBlue = Theme.shared.buttonBg
         let mutedText = Theme.shared.centerTextMuted
@@ -472,7 +472,7 @@ extension MainWindow {
         let pillText = Theme.shared.centerTextMuted
 
         searchPopoverPanel.color = Theme.shared.centerBg
-        searchPopoverPanel.cornerRadius = 8
+        searchPopoverPanel.cornerRadius = MMRadius.panel
         searchPopoverPanel.borderWidth = 1
         searchPopoverPanel.borderColor = dividerColor
         searchPopoverPanel.shadowColor = .black
@@ -490,7 +490,7 @@ extension MainWindow {
         let msgSize = ("Messages" as NSString).size(withAttributes: [.font: tabFont])
         let msgPadH: CGFloat = 8
         let msgW = ceil(msgSize.width) + (msgPadH * 2)
-        messagesTabPanel.cornerRadius = 4
+        messagesTabPanel.cornerRadius = MMRadius.control
         messagesTabPanel.frame = NSRect(x: 16, y: popoverHeight - 31, width: msgW, height: tabH)
         messagesTabLabel.frame = NSRect(x: 0, y: (tabH - 16) / 2, width: msgW, height: 16)
         messagesTabPanel.addSubview(messagesTabLabel)
@@ -508,7 +508,7 @@ extension MainWindow {
         let filesSize = ("Files" as NSString).size(withAttributes: [.font: tabFont])
         let filesPadH: CGFloat = 8
         let filesW = ceil(filesSize.width) + (filesPadH * 2)
-        filesTabPanel.cornerRadius = 4
+        filesTabPanel.cornerRadius = MMRadius.control
         filesTabPanel.frame = NSRect(x: messagesTabPanel.frame.maxX + 4, y: popoverHeight - 31, width: filesW, height: tabH)
         filesTabLabel.frame = NSRect(x: 0, y: (tabH - 16) / 2, width: filesW, height: 16)
         filesTabPanel.addSubview(filesTabLabel)
@@ -522,7 +522,7 @@ extension MainWindow {
         searchPopoverPanel.addSubview(filesTabPanel)
 
         let closeBtn = RoundedEdgePanel()
-        closeBtn.cornerRadius = 4
+        closeBtn.cornerRadius = MMRadius.control
         closeBtn.color = .clear
         closeBtn.frame = NSRect(x: popoverWidth - 36, y: popoverHeight - 32, width: 24, height: 24)
         let closeIcon = NSImageView()
@@ -551,7 +551,7 @@ extension MainWindow {
 
         // Row 2: Bordered input box containing magnifying glass + "Search messages" label (no caret)
         let searchInputBox = OutlinePanel()
-        searchInputBox.cornerRadius = 4
+        searchInputBox.cornerRadius = MMRadius.control
         searchInputBox.borderWidth = 1.5
         searchInputBox.color = brandBlue
         searchInputBox.frame = NSRect(x: 16, y: 42, width: popoverWidth - 32, height: 32)
@@ -605,7 +605,7 @@ extension MainWindow {
         for title in filterTitles {
             let pill = RoundedEdgePanel()
             pill.color = pillBg
-            pill.cornerRadius = 3
+            pill.cornerRadius = MMRadius.tiny
 
             let pillTextSize = (title as NSString).size(withAttributes: [.font: pillFont])
             let pillPadH: CGFloat = 6
@@ -665,7 +665,7 @@ extension MainWindow {
         onClick: (() -> Void)? = nil
     ) {
         panel.color = .clear
-        panel.cornerRadius = 4
+        panel.cornerRadius = MMRadius.control
         if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription) {
             iconView.image = img.withSymbolConfiguration(.init(pointSize: pointSize, weight: .medium))
             iconView.contentTintColor = defaultTint

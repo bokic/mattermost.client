@@ -121,7 +121,7 @@ extension MainWindow {
         let dividerColor = Theme.shared.divider
 
         productSwitcherMenu.color = Theme.shared.centerBg
-        productSwitcherMenu.cornerRadius = 6
+        productSwitcherMenu.cornerRadius = MMRadius.menu
         productSwitcherMenu.borderWidth = 1
         productSwitcherMenu.borderColor = dividerColor
         productSwitcherMenu.shadowColor = .black
@@ -187,7 +187,7 @@ extension MainWindow {
         // Footer: TEAM EDITION badge + description
         let footerBadgePanel = RoundedEdgePanel()
         footerBadgePanel.color = dividerColor
-        footerBadgePanel.cornerRadius = 3
+        footerBadgePanel.cornerRadius = MMRadius.tiny
 
         let footerBadgeLabel = NSTextField(labelWithString: "TEAM EDITION")
         footerBadgeLabel.font = MMFont.font(ofSize: 8, weight: .bold)
@@ -249,7 +249,7 @@ extension MainWindow {
         let dividerColor = Theme.shared.divider
 
         helpMenu.color = Theme.shared.centerBg
-        helpMenu.cornerRadius = 6
+        helpMenu.cornerRadius = MMRadius.menu
         helpMenu.borderWidth = 1
         helpMenu.borderColor = dividerColor
         helpMenu.shadowColor = .black
@@ -294,7 +294,7 @@ extension MainWindow {
         let dividerColor = Theme.shared.divider
 
         statusMenu.color = Theme.shared.centerBg
-        statusMenu.cornerRadius = 6
+        statusMenu.cornerRadius = MMRadius.menu
         statusMenu.borderWidth = 1
         statusMenu.borderColor = dividerColor
         statusMenu.shadowColor = .black
@@ -311,7 +311,7 @@ extension MainWindow {
 
         let headerAvatar = RoundedEdgePanel()
         headerAvatar.frame = NSRect(x: 16, y: 11, width: 28, height: 28)
-        headerAvatar.cornerRadius = 14
+        headerAvatar.cornerRadius = MMRadius.large
         headerAvatar.color = NSColor(red: 156 / 255, green: 171 / 255, blue: 36 / 255, alpha: 1.0)
 
         let rawUsername = UserDefaults.standard.string(forKey: "username") ?? "boris"
@@ -551,7 +551,7 @@ extension MainWindow {
         let dividerColor = Theme.shared.divider
 
         dndSubMenu.color = Theme.shared.centerBg
-        dndSubMenu.cornerRadius = 6
+        dndSubMenu.cornerRadius = MMRadius.menu
         dndSubMenu.borderWidth = 1
         dndSubMenu.borderColor = dividerColor
         dndSubMenu.shadowColor = .black
@@ -704,7 +704,7 @@ extension MainWindow {
         let textColor = Theme.shared.centerText
 
         filterMenu.color = Theme.shared.centerBg
-        filterMenu.cornerRadius = 6
+        filterMenu.cornerRadius = MMRadius.menu
         filterMenu.borderWidth = 1
         filterMenu.borderColor = dividerColor
         filterMenu.shadowColor = .black
@@ -716,7 +716,7 @@ extension MainWindow {
         let makeRow: (String, CGFloat, Bool) -> (RoundedEdgePanel, NSImageView) = { [weak self] title, y, favorites in
             let row = RoundedEdgePanel()
             row.frame = NSRect(x: 6, y: y, width: 168, height: 28)
-            row.cornerRadius = 4
+            row.cornerRadius = MMRadius.control
             row.color = .clear
             let label = NSTextField(labelWithString: title)
             label.font = MMFont.font(ofSize: 13)
@@ -771,7 +771,7 @@ extension MainWindow {
 
     func setupChannelMenu() {
         channelMenu.color = Theme.shared.centerBg
-        channelMenu.cornerRadius = 6
+        channelMenu.cornerRadius = MMRadius.menu
         channelMenu.borderWidth = 1
         channelMenu.borderColor = Theme.shared.divider
         channelMenu.shadowColor = .black
@@ -804,7 +804,7 @@ extension MainWindow {
     func setupDMPicker() {
         let dividerColor = Theme.shared.divider
         dmPickerPanel.color = Theme.shared.centerBg
-        dmPickerPanel.cornerRadius = 8
+        dmPickerPanel.cornerRadius = MMRadius.panel
         dmPickerPanel.borderWidth = 1
         dmPickerPanel.borderColor = dividerColor
         dmPickerPanel.shadowColor = .black
@@ -933,23 +933,16 @@ extension MainWindow {
             return
         }
 
-        let palette: [NSColor] = [
-            NSColor(red: 224 / 255, green: 208 / 255, blue: 71 / 255, alpha: 1.0),
-            Theme.shared.buttonBg,
-            NSColor(red: 139 / 255, green: 92 / 255, blue: 246 / 255, alpha: 1.0),
-            NSColor(red: 236 / 255, green: 72 / 255, blue: 153 / 255, alpha: 1.0),
-            NSColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255, alpha: 1.0),
-            NSColor(red: 245 / 255, green: 158 / 255, blue: 11 / 255, alpha: 1.0)
-        ]
+        let palette = MMPalette.avatarColors
 
         for user in filtered {
             let row = RoundedEdgePanel()
-            row.cornerRadius = 4
+            row.cornerRadius = MMRadius.control
             row.color = .clear
             row.frame = NSRect(x: 6, y: y, width: max(0, width - 12), height: 44)
 
             let avatarPanel = RoundedEdgePanel()
-            avatarPanel.cornerRadius = 14
+            avatarPanel.cornerRadius = MMRadius.large
             avatarPanel.clipContentToBounds = true
             avatarPanel.frame = NSRect(x: 8, y: 8, width: 28, height: 28)
             if let avatar = userAvatarsById[user.id] {
@@ -1077,7 +1070,7 @@ extension MainWindow {
         let iconColor = Theme.shared.centerTextMuted
         for (index, item) in rows.enumerated() {
             let row = RoundedEdgePanel()
-            row.cornerRadius = 4
+            row.cornerRadius = MMRadius.control
             row.color = .clear
             row.frame = NSRect(
                 x: 4,
