@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         DebugLog.log("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
+        KeychainHelper.migrateLegacyCredentials()
         setupMainMenu()
         installZoomGestureMonitor()
         NSWorkspace.shared.notificationCenter.addObserver(

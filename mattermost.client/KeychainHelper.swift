@@ -2,42 +2,110 @@
 //  KeychainHelper.swift
 //  mattermost.client
 //
+//  Stores the bearer token and account password in the macOS Keychain using a
+//  generic-password item scoped to this application. Values written by older
+//  builds to UserDefaults are migrated automatically the first time they are
+//  read, and the plaintext copies are removed.
+//
 
 import Foundation
+import Security
 
-/// Stores persistent credentials and tokens without triggering macOS Keychain system authorization dialogs.
-/// Under App Sandbox, preferences are isolated to the app's private container directory.
 enum KeychainHelper {
-    private static let keyPrefix = "auth_"
+    /// Service name that scopes items to this application.
+    private static let service = "com.bbarbulovski.mattermost-client.credentials"
+
+    /// Legacy plaintext keys written by earlier builds.
+    private static let legacyPrefix = "auth_"
 
     static func set(_ value: String, forKey account: String) {
-        let storageKey = keyPrefix + account
         guard !value.isEmpty else {
             delete(forKey: account)
             return
         }
-        UserDefaults.standard.set(value, forKey: storageKey)
-        // Clean up any legacy un-prefixed key
-        if UserDefaults.standard.object(forKey: account) != nil {
+
+        let data = Data(value.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            status = SecItemAdd(addQuery as CFDictionary, nil)
+        }
+
+        if status == errSecSuccess {
+            // Only drop the plaintext copy once the Keychain write succeeded.
+            UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
             UserDefaults.standard.removeObject(forKey: account)
+        } else {
+            NSLog("KeychainHelper: failed to store \(account) (status \(status))")
         }
     }
 
     static func get(forKey account: String) -> String? {
-        let storageKey = keyPrefix + account
-        if let value = UserDefaults.standard.string(forKey: storageKey), !value.isEmpty {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecSuccess,
+           let data = result as? Data,
+           let value = String(data: data, encoding: .utf8),
+           !value.isEmpty {
             return value
         }
-        // Fallback: check legacy un-prefixed key in UserDefaults
-        if let legacy = UserDefaults.standard.string(forKey: account), !legacy.isEmpty {
-            set(legacy, forKey: account)
-            return legacy
+
+        // Migrate values left by builds that wrote to UserDefaults in plaintext.
+        for legacyKey in [legacyPrefix + account, account] {
+            if let legacy = UserDefaults.standard.string(forKey: legacyKey), !legacy.isEmpty {
+                set(legacy, forKey: account)
+                return legacy
+            }
+        }
+
+        if status != errSecItemNotFound {
+            NSLog("KeychainHelper: failed to read \(account) (status \(status))")
         }
         return nil
     }
 
+    /// Moves any plaintext credentials written by older builds into the Keychain.
+    static func migrateLegacyCredentials() {
+        for account in ["token", "password"] {
+            for legacyKey in [legacyPrefix + account, account] {
+                if let legacy = UserDefaults.standard.string(forKey: legacyKey), !legacy.isEmpty {
+                    set(legacy, forKey: account)
+                    break
+                }
+            }
+        }
+    }
+    
     static func delete(forKey account: String) {
-        UserDefaults.standard.removeObject(forKey: keyPrefix + account)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+
+        UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
         UserDefaults.standard.removeObject(forKey: account)
     }
 }

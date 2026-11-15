@@ -165,11 +165,14 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ## P2 — Security, privacy & packaging
 
-- [ ] **Credentials are stored in plaintext `UserDefaults`** — `M`
-  - Where: `KeychainHelper.swift` is a `UserDefaults` wrapper despite its name; the bearer token and
-    account password are written at `LoginWindow.swift:167` and read at `AppDelegate.swift:33,61`.
-  - Done when: `SecItemAdd`/`SecItemCopyMatching` (`kSecClassGenericPassword`,
-    `kSecAttrAccessibleAfterFirstUnlock`) is used, or the trade-off is documented honestly.
+- [x] **Credentials are stored in plaintext `UserDefaults`** — `M`
+  - Done: `KeychainHelper` now uses `SecItemAdd`/`SecItemUpdate`/`SecItemCopyMatching`/
+    `SecItemDelete` with `kSecClassGenericPassword`, a service scoped to the app and
+    `kSecAttrAccessibleAfterFirstUnlock`.
+  - Legacy `auth_token`/`auth_password` (and un-prefixed) UserDefaults values are migrated on first
+    read and deleted at launch via `migrateLegacyCredentials()`, so no plaintext credential remains.
+  - Verified: after launch the plaintext keys are gone, the item exists in the login keychain, and a
+    relaunch auto-signs in from the Keychain.
 
 - [ ] **Cleartext HTTP by default and no ATS configuration** — `S`
   - Where: `webservice.buildURL` prepends `http://` when no scheme is given (≈254) and always applies
