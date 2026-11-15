@@ -21,7 +21,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Active Channel Highlight**: Blue 4 pt accent pill (`#5D89EA`) at the row's leading edge over an 8% white highlight, matching the web client.
 
 ### 3. Right Chat Panel (`#FFFFFF`)
-- **Channel Header**: Favorite star toggle (`☆`), channel title dropdown, member count badge (opens the Members panel), and pinned posts indicator (opens Pinned Posts).
+- **Channel Header**: Favorite star toggle (`☆`, persisted), channel title dropdown (View Info, Pinned Posts, favorite toggle, Copy Link, Leave Channel), member count badge (opens the Members panel), and pinned posts indicator (opens Pinned Posts).
 - **Right-hand Panel**: Threads, Members and Pinned Posts lists with hover states, empty states and click-to-open, toggled from the sidebar Threads row or the header buttons.
 - **Welcome Hero**: Channel introduction illustration, welcome title, description, and workspace invitation action.
 - **Message Timeline**: White date-separator pills (13 pt bold over a 1 pt rule) for *Today*, *Yesterday*, weekday, or full date, with 32 pt avatars, 14 pt semibold authors, and 12.6 pt timestamps measured from the web DOM.

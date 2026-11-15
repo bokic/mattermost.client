@@ -115,6 +115,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var isRightPanelVisible = false
     private var threadItems: [MMThread] = []
     
+    // Channel header dropdown menu
+    let channelMenu = RoundedEdgePanel()
+    private var isChannelMenuOpen = false
+    
     // Composer emoji picker
     let emojiPanel = RoundedEdgePanel()
     private var isEmojiPanelOpen = false
@@ -1893,6 +1897,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
                 if isTeamMenuOpen && !teamDropdownMenu.frame.contains(point) && !teamHeaderButton.frame.contains(point) {
                     setTeamMenuOpen(false)
                 }
+                if isChannelMenuOpen {
+                    let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
+                    let titleFrame = channelTitleButton.frame
+                    if !channelMenu.frame.contains(chatPoint) && !titleFrame.contains(chatPoint) {
+                        closeChannelMenu()
+                    }
+                }
                 if isEmojiPanelOpen {
                     let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
                     let emojiButtonFrame = chatEntryPanel.convert(composerEmojiButton.frame, to: chatPanel)
@@ -3134,6 +3145,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             self.channelTitleButton.setNeedsAppearanceUpdate()
             self.channelTitleChevron.contentTintColor = isHovered ? darkText : mutedText
         }
+        channelTitleButton.onClick = { [weak self] in
+            self?.toggleChannelMenu()
+        }
         chatPanel.addSubview(channelTitleButton)
         
         channelMembersButton.cornerRadius = 4
@@ -3498,12 +3512,181 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         updateComposerSendState()
         setupRightPanel()
         setupEmojiPanel()
+        setupChannelMenu()
         rebuildTimelineContent(scrollToBottom: true)
     }
     
     // MARK: - Right-hand side panel
     
     // MARK: - Composer actions
+    
+    // MARK: - Channel menu
+    
+    private func setupChannelMenu() {
+        channelMenu.color = .white
+        channelMenu.cornerRadius = 6
+        channelMenu.borderWidth = 1
+        channelMenu.borderColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)
+        channelMenu.shadowColor = .black
+        channelMenu.shadowOpacity = 0.18
+        channelMenu.shadowRadius = 12
+        channelMenu.shadowOffset = CGSize(width: 0, height: -4)
+        channelMenu.isHidden = true
+        chatPanel.addSubview(channelMenu)
+    }
+    
+    private func toggleChannelMenu() {
+        if isChannelMenuOpen {
+            closeChannelMenu()
+        } else {
+            showChannelMenu()
+        }
+    }
+    
+    private func closeChannelMenu() {
+        channelMenu.isHidden = true
+        isChannelMenuOpen = false
+    }
+    
+    private func showChannelMenu() {
+        guard !activeChannelId.isEmpty, let channel = channelsById[activeChannelId] else { return }
+        let channelName = channelDisplayName(for: channel)
+        let favoriteTitle = isChannelFavorited ? "Remove from Favorites" : "Add to Favorites"
+        let rows: [(symbol: String, title: String, action: () -> Void)] = [
+            ("info.circle", "View Info", { [weak self] in
+                self?.closeChannelMenu()
+                self?.showRightPanel(mode: .members)
+            }),
+            ("pin", "Pinned Posts", { [weak self] in
+                self?.closeChannelMenu()
+                self?.showRightPanel(mode: .pinned)
+            }),
+            (isChannelFavorited ? "star.slash" : "star", favoriteTitle, { [weak self] in
+                guard let self = self else { return }
+                self.closeChannelMenu()
+                self.setChannelFavorite(!self.isChannelFavorited, channelId: self.activeChannelId)
+            }),
+            ("link", "Copy Link", { [weak self] in
+                guard let self = self else { return }
+                self.closeChannelMenu()
+                self.copyChannelLink()
+            }),
+            ("rectangle.portrait.and.arrow.right", "Leave Channel", { [weak self] in
+                self?.closeChannelMenu()
+                self?.confirmLeaveChannel()
+            })
+        ]
+        
+        channelMenu.subviews.forEach { $0.removeFromSuperview() }
+        
+        let rowHeight: CGFloat = 32
+        let width: CGFloat = 230
+        let height = CGFloat(rows.count) * rowHeight + 8
+        var x = channelTitleButton.frame.minX
+        x = min(max(8, x), chatPanel.bounds.width - width - 8)
+        var y = channelTitleButton.frame.minY - height - 4
+        if y < 8 { y = channelTitleButton.frame.maxY + 4 }
+        channelMenu.frame = NSRect(x: x, y: y, width: width, height: height)
+        
+        let textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        let iconColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
+        for (index, item) in rows.enumerated() {
+            let row = RoundedEdgePanel()
+            row.cornerRadius = 4
+            row.color = .clear
+            row.frame = NSRect(
+                x: 4,
+                y: height - 4 - CGFloat(index + 1) * rowHeight,
+                width: width - 8,
+                height: rowHeight
+            )
+            let icon = NSImageView()
+            if let image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: item.title) {
+                icon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
+                icon.contentTintColor = iconColor
+            }
+            icon.frame = NSRect(x: 8, y: 8, width: 16, height: 16)
+            row.addSubview(icon)
+            
+            let label = NSTextField(labelWithString: item.title)
+            label.font = MMFont.font(ofSize: 13)
+            label.textColor = textColor
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 32, y: 7, width: width - 48, height: 18)
+            row.addSubview(label)
+            
+            row.onHoverChanged = { [weak row] isHovered in
+                row?.color = isHovered
+                    ? NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
+                    : .clear
+                row?.setNeedsAppearanceUpdate()
+            }
+            row.onClick = item.action
+            channelMenu.addSubview(row)
+        }
+        
+        channelMenu.isHidden = false
+        channelMenu.superview?.addSubview(channelMenu)
+        isChannelMenuOpen = true
+    }
+    
+    private func copyChannelLink() {
+        guard let channel = channelsById[activeChannelId] else { return }
+        var host = UserDefaults.standard.string(forKey: "host") ?? ""
+        let port = UserDefaults.standard.integer(forKey: "port")
+        if port > 0 && !host.hasSuffix(":\(port)") {
+            host += ":\(port)"
+        }
+        let teamName = activeTeam?.name ?? ""
+        let url = "\(host)/\(teamName)/channels/\(channel.name)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+        composerHelpLabel.stringValue = "Link copied"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.composerHelpLabel.stringValue = "Help"
+        }
+    }
+    
+    private func confirmLeaveChannel() {
+        guard let channel = channelsById[activeChannelId] else { return }
+        let alert = NSAlert()
+        alert.messageText = "Leave \(channelDisplayName(for: channel))?"
+        alert.informativeText = "You will stop receiving messages from this channel."
+        alert.addButton(withTitle: "Leave")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            self.leaveChannel(channel)
+        }
+    }
+    
+    private func leaveChannel(_ channel: MMChannel) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService, ws.isLogged(),
+              let team = activeTeam else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.leaveChannel(channelId: channel.id, userId: userId)
+                self.channelsById.removeValue(forKey: channel.id)
+                self.channelsByName.removeValue(forKey: channel.name.lowercased())
+                self.channelsByName.removeValue(forKey: channel.display_name.lowercased())
+                if let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
+                }
+                if self.activeChannelId == channel.id,
+                   let fallback = self.channelsByName["town-square"] ?? self.channelsById.values.first {
+                    self.selectedSidebarItemId = fallback.id
+                    self.updateSidebarSelectionAppearance()
+                    self.loadChannelPosts(forSidebarItemId: fallback.id)
+                }
+            } catch {
+                self.showInfoAlert("Could not leave channel: \(error.localizedDescription)")
+            }
+        }
+    }
     
     private func setupEmojiPanel() {
         let dividerColor = NSColor(red: 229 / 255, green: 231 / 255, blue: 235 / 255, alpha: 1.0)

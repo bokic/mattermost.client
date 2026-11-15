@@ -71,13 +71,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     follow-up.
   - Remaining: render uploaded attachments in the timeline (blocked on the `MMPost` files model).
 
-- [ ] **Channel-header controls are partial** — `M`
-  - Where: favorite star toggles only local `isChannelFavorited` and is not persisted; the pinned
-    icon and channel-title dropdown have no behaviour; member chip does not open the members list.
-  - Progress: favorites now persist through `/users/{id}/preferences` (add/delete) and refresh per channel.
-  - Remaining: pinned posts popover, channel menu, member list.
-  - Done when: favorites go through `POST /users/me/preferences`, pinned posts and the channel menu
-    open real popovers.
+- [x] **Channel-header controls are partial** — `M`
+  - Done: favorites persist via user preferences; the member chip opens the Members panel; the pins
+    icon opens Pinned Posts; the title opens a channel menu with View Info, Pinned Posts,
+    Add/Remove Favorite, Copy Link (verified in the clipboard) and Leave Channel (DELETE member,
+    sidebar refresh and fallback channel).
+  - Remaining: mute/notification preferences and channel-settings editing.
 
 ---
 

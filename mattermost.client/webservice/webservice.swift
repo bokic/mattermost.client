@@ -628,6 +628,19 @@ final class WebService: NSObject {
         )
     }
     
+    func leaveChannel(channelId: String, userId: String) async throws {
+        guard let url = buildURL(path: "/api/v4/channels/\(channelId)/members/\(userId)") else {
+            throw WebServiceError.invalidHostname
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw WebServiceError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, message: nil)
+        }
+    }
+    
     func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMChannelMember] {
         // Decoded loosely because member objects carry many optional fields.
         guard let url = buildURL(path: "/api/v4/channels/\(channelId)/members", queryItems: [
