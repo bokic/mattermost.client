@@ -189,10 +189,12 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - The full build compiles against the 14.0 target with no availability or deprecation warnings.
   - Caveat: not yet smoke-tested on an actual macOS 14 machine (only the 27.x host is available).
 
-- [ ] **App icons are the wrong size** — `S`
-  - Where: every `Assets.xcassets/AppIcon.appiconset/*.png` is 512×525 instead of the declared
-    sizes.
-  - Done when: each slot has a correctly sized, square PNG.
+- [x] **App icons are the wrong size** — `S`
+  - Done: rebuilt the icon set from the largest artwork (trimmed to its 512×512 opaque bounds and
+    upscaled to a 1024 master), then generated every slot from that master.
+  - All ten PNGs are now square and match their declared point/scale (16, 32, 32, 64, 128, 256, 256,
+    512, 512, 1024). `assetutil` shows matching renditions in `Assets.car` and the system icon now
+    resolves up to 1024×1024.
 
 - [ ] **No privacy manifest** — `S`
   - Where: `UserDefaults` is a required-reason API; there is no `PrivacyInfo.xcprivacy`.
