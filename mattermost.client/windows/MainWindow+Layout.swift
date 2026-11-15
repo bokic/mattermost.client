@@ -414,22 +414,8 @@ extension MainWindow {
             self?.composerGifButton.setNeedsAppearanceUpdate()
             gifLabel?.textColor = isHovered ? darkText : mutedText
         }
-        composerGifButton.onClick = { [weak self] in
-            guard let self = self else { return }
-            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-            let newPost = MMPost(
-                id: "giphy_\(nowMs)",
-                create_at: nowMs,
-                update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
-                user_id: self.currentUser?.id ?? "usr",
-                channel_id: self.activeChannelId,
-                root_id: nil, original_id: nil,
-                message: "![waving cat](https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif)",
-                type: nil
-            )
-            self.currentChannelPosts.append(newPost)
-            self.rebuildTimelineContent(scrollToBottom: true)
-        }
+        // GIF search is not available yet; the button is hidden in
+        // applyComposerToolbarVisibility() rather than inserting a fake post.
         chatEntryPanel.addSubview(composerGifButton)
 
         setupRightIconBtn(composerAttachButton, "paperclip")
@@ -659,7 +645,7 @@ extension MainWindow {
     }
 
     func updateViews() {
-        let size = contentView!.bounds.size
+        let size = contentView?.bounds.size ?? NSSize(width: frame.width, height: frame.height)
         let topBarHeight: CGFloat = MMMetric.topBarHeight
         let topBarY = size.height - topBarHeight
 

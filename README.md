@@ -186,6 +186,22 @@ mattermost.client/
 
 ---
 
+## Known limitations
+
+- Desktop notifications honor DND, per-user `notify_props`, mention keys and
+  channel mute, but there is no dedicated notification-preferences UI yet.
+- The search Files tab and result jumps are implemented; search pagination,
+  keyboard navigation and recent searches are still pending.
+- Threads support read state, ordering and per-thread drafts, but the reply
+  composer is still single-line and RHS lists do not paginate on scroll.
+- The sidebar is not scrollable yet, and custom categories cannot be
+  created/renamed/reordered from the client.
+- Accessibility roles/labels and localization are still incomplete.
+- A notarized distribution build requires a Developer ID certificate and
+  notary credentials; see [RELEASE.md](RELEASE.md).
+
+---
+
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

@@ -115,7 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
     
     private func handleZoomGesture(_ event: NSEvent) -> NSEvent? {
-        guard event.window != nil else { return event }
+        guard let eventWindow = event.window,
+              eventWindow === mainWindow || eventWindow === loginWindow else { return event }
         
         if event.type == .magnify {
             switch event.phase {
@@ -185,13 +186,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
-    @objc func websocketConnected(isConnected: NSNumber) {
-        let isConnected = isConnected.boolValue
-        let logger = Logger()
-        
-        logger.info("called websocketConnected(\(isConnected))")
-    }
-    
     // MARK: - Unread badges & notifications
     
     private func configureNotifications() {
@@ -353,9 +347,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if let me = try? await service.fetchCurrentUser(),
                let preferences = try? await service.fetchUserPreferences(userId: me.id) {
                 if let teams = try? await service.fetchTeams() {
-                    teamId = teams.first?.id
+                    let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
+                    teamId = teams.first(where: { $0.id == savedTeamId })?.id ?? teams.first?.id
                 }
                 ThemeManager.shared.apply(preferences: preferences, teamId: teamId)
+                NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
             }
             self.createMainWindow()
         }
@@ -437,6 +433,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
     
     @objc func quitApp() {
+        if let monitor = zoomGestureMonitor {
+            NSEvent.removeMonitor(monitor)
+            zoomGestureMonitor = nil
+        }
         app.terminate(self)
     }
     

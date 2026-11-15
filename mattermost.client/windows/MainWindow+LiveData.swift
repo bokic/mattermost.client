@@ -156,8 +156,25 @@ extension MainWindow {
                     self.applyUpdatedPost(post)
                 case .postDeleted(let postId, let channelId):
                     self.handleRealtimePostDeleted(postId: postId, channelId: channelId)
+                case .postUnread(let channelId):
+                    self.handleRemoteChannelUnread(channelId)
                 case .channelViewed(let channelId):
                     self.handleRemoteChannelViewed(channelId)
+                case .channelMembershipChanged(let channelId, let userId):
+                    let myId = self.currentUser?.id ?? self.webService?.currentUserId ?? ""
+                    if userId == myId {
+                        self.loadUnreadState()
+                        if let team = self.activeTeam, let ws = self.webService,
+                           let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                            self.populateSidebarCategories(
+                                from: categories,
+                                channels: Array(self.channelsById.values)
+                            )
+                        }
+                    } else if self.isRightPanelVisible && self.rightPanelMode == .members
+                        && (channelId.isEmpty || channelId == self.activeChannelId) {
+                        self.loadChannelMembers()
+                    }
                 case .channelUpdated(let channel):
                     self.channelsById[channel.id] = channel
                     self.channelsByName[channel.name.lowercased()] = channel
@@ -171,6 +188,7 @@ extension MainWindow {
                     let myId = self.currentUser?.id ?? self.webService?.currentUserId ?? ""
                     if !myId.isEmpty && userId == myId {
                         self.loadFavoriteChannels()
+                        self.refreshServerTheme(teamId: self.activeTeam?.id)
                         if self.isRightPanelVisible && self.rightPanelMode == .settings {
                             self.loadSettingsPanel()
                         }
@@ -181,6 +199,8 @@ extension MainWindow {
                     } else if self.isRightPanelVisible && self.rightPanelMode == .threads {
                         self.loadThreads()
                     }
+                case .emojiAdded:
+                    self.loadCustomEmojis()
                 default:
                     break
                 }
@@ -614,6 +634,32 @@ extension MainWindow {
         }
     }
 
+    func refreshServerTheme(teamId: String?) {
+        guard let ws = webService, ws.isLogged() else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let me: LoginWebService?
+            if let current = self.currentUser {
+                me = current
+            } else {
+                me = try? await ws.fetchCurrentUser()
+            }
+            guard let userId = me?.id,
+                  let preferences = try? await ws.fetchUserPreferences(userId: userId) else { return }
+            ThemeManager.shared.apply(preferences: preferences, teamId: teamId)
+            NSApp.appearance = NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+            self.backgroundColor = Theme.shared.sidebarTeamBarBg
+            self.mainPanel.color = Theme.shared.sidebarBg
+            self.chatPanel.color = Theme.shared.centerBg
+            self.mainPanel.setNeedsAppearanceUpdate()
+            self.chatPanel.setNeedsAppearanceUpdate()
+            self.updateSidebarSelectionAppearance()
+            self.updateSidebarBadges()
+            self.rebuildTimelineContent(scrollToBottom: false)
+            self.reloadRightPanelIfNeeded()
+        }
+    }
+
     /// Mattermost-compatible mention detection: the user's @username, the
     /// special @here/@channel/@all mentions and any configured mention keys.
     /// Matching is word-bounded so emails and adjacent text do not count.
@@ -649,6 +695,12 @@ extension MainWindow {
         mentionsByChannel[channelId] = 0
         lastViewedAtByChannel[channelId] = Int64(Date().timeIntervalSince1970 * 1000)
         (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
+        updateSidebarBadges()
+    }
+
+    func handleRemoteChannelUnread(_ channelId: String) {
+        guard !channelId.isEmpty, channelId != activeChannelId else { return }
+        unreadByChannel[channelId, default: 0] = max(1, unreadByChannel[channelId] ?? 0)
         updateSidebarBadges()
     }
 

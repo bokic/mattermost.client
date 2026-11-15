@@ -352,6 +352,20 @@ extension MainWindow {
 
     func createInlineImageView(urlString: String, maxWidth: CGFloat, authorId: String? = nil) -> (NSView, CGFloat) {
         let maxHeight: CGFloat = 350
+        guard loadRemoteImagesAutomatically else {
+            let container = RoundedEdgePanel()
+            container.cornerRadius = MMRadius.control
+            container.color = Theme.shared.centerHover
+            container.frame = NSRect(x: 0, y: 0, width: min(maxWidth, 320), height: 32)
+            let label = NSTextField(labelWithString: "Remote image (loading disabled)")
+            label.font = MMFont.font(ofSize: 12)
+            label.textColor = Theme.shared.centerTextMuted
+            label.isEditable = false
+            label.isSelectable = false
+            label.frame = NSRect(x: 10, y: 6, width: container.frame.width - 20, height: 18)
+            container.addSubview(label)
+            return (container, 32)
+        }
         var naturalSize = inlineImageSizeCache[urlString] ?? NSSize(width: 240, height: 160)
 
         // Use a disk-cached frame to establish the natural size before the network fetch.
@@ -360,8 +374,7 @@ extension MainWindow {
             .appendingPathComponent("mattermost.client/giphy", isDirectory: true)
         if let dir = cacheDir {
             let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
-            let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
-            let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+            let filename = TimelineCacheKey.stable(urlString) + ".gif"
             let diskURL = dir.appendingPathComponent(filename)
             let checkURL = (urlString.contains("ICOgUNjpvO0PC") && FileManager.default.fileExists(atPath: sampleFile.path)) ? sampleFile : diskURL
             if let data = try? Data(contentsOf: checkURL), let image = NSImage(data: data) {
@@ -437,8 +450,7 @@ extension MainWindow {
                 completion(img)
                 return
             }
-            let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
-            let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+            let filename = TimelineCacheKey.stable(urlString) + ".gif"
             let diskURL = dir.appendingPathComponent(filename)
             if let data = try? Data(contentsOf: diskURL), let img = NSImage(data: data) {
                 completion(img)
@@ -456,20 +468,40 @@ extension MainWindow {
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
             let responseData = data
-            if let data = responseData, let dir = cacheDir {
-                let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
-                let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
+            let maxBytes = 20 * 1024 * 1024
+            if let data = responseData, let dir = cacheDir, data.count <= maxBytes {
+                let filename = TimelineCacheKey.stable(urlString) + ".gif"
                 let diskURL = dir.appendingPathComponent(filename)
                 try? data.write(to: diskURL)
+                Self.pruneGiphyCache(dir, keeping: 200)
             }
             Task { @MainActor in
-                if let data = responseData, let image = NSImage(data: data) {
+                if let data = responseData, data.count <= maxBytes, let image = NSImage(data: data) {
                     completion(image)
                 } else {
                     completion(self.createFallbackAnimatedGif())
                 }
             }
         }.resume()
+    }
+
+    nonisolated static func pruneGiphyCache(_ directory: URL, keeping limit: Int) {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let gifs = files.filter { $0.pathExtension.lowercased() == "gif" }
+        guard gifs.count > limit else { return }
+        let sorted = gifs.sorted {
+            let lhs = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            let rhs = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            return lhs < rhs
+        }
+        for file in sorted.prefix(gifs.count - limit) {
+            try? fm.removeItem(at: file)
+        }
     }
 
     func appendEditedIndicator(to attributedString: NSMutableAttributedString, font: NSFont, editDate: Date?) {
@@ -1164,6 +1196,11 @@ extension MainWindow {
             ("link", "Copy Link", { [weak self] in
                 self?.closePostActionMenu()
                 self?.copyPostLink(post)
+            }),
+            (self.savedPostIds.contains(post.id) ? "bookmark.slash" : "bookmark",
+             self.savedPostIds.contains(post.id) ? "Unsave" : "Save", { [weak self] in
+                self?.closePostActionMenu()
+                self?.toggleSaved(post)
             })
         ]
         if canEdit {
@@ -1259,6 +1296,38 @@ extension MainWindow {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self = self, self.composerHelpLabel.stringValue == "Link copied" else { return }
             self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+        }
+    }
+
+    func toggleSaved(_ post: MMPost) {
+        guard let ws = webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        let shouldSave = !savedPostIds.contains(post.id)
+        if shouldSave {
+            savedPostIds.insert(post.id)
+        } else {
+            savedPostIds.remove(post.id)
+        }
+        if isRightPanelVisible && rightPanelMode == .saved {
+            loadSavedPosts()
+        }
+        Task { @MainActor [weak self] in
+            do {
+                if shouldSave {
+                    try await ws.savePost(userId: userId, postId: post.id)
+                } else {
+                    try await ws.unsavePost(userId: userId, postId: post.id)
+                }
+            } catch {
+                guard let self = self else { return }
+                if shouldSave {
+                    self.savedPostIds.remove(post.id)
+                } else {
+                    self.savedPostIds.insert(post.id)
+                }
+                self.showInfoAlert("Could not update the saved state: \(error.localizedDescription)")
+            }
         }
     }
 

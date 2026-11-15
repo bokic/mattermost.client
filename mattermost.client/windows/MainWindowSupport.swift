@@ -551,7 +551,7 @@ enum EmojiCatalog {
     }()
 
     static let entriesByName: [String: EmojiEntry] = {
-        Dictionary(uniqueKeysWithValues: entries.map { ($0.name, $0) })
+        Dictionary(entries.map { ($0.name, $0) }, uniquingKeysWith: { _, latest in latest })
     }()
 }
 

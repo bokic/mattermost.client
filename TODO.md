@@ -8,7 +8,7 @@ _Reviewed: 2026-11-15 · Revision: `acc4262` (tag `0.8.0` + 1; TODO-only commit 
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **51/51 pass** |
+| `./test.sh` | **54/54 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the 15-file migrated allowlist) |
 | Deployment target | macOS 14.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -130,7 +130,7 @@ source revision. The long list of previously completed work is preserved in
 
 ### Realtime and read state
 
-- [ ] **Realtime edit/delete/channel/read events are not handled** — `L`
+- [x] **Realtime edit/delete/channel/read events are not handled** — `L`
   - The WebSocket parser only understands `hello`, `posted`, `status_change`, `typing`,
     `update_team`, `added_to_team`, `leave_team`, sidebar category updates and reactions
     (`webservice.swift:327-339,1376-1450`; dispatch `:1470-1497`).
@@ -496,7 +496,7 @@ source revision. The long list of previously completed work is preserved in
     Mattermost deployments require one of these. Add MFA first (simple field), then an
     external-browser SSO flow with a registered URL scheme.
 
-- [ ] **Inline/Giphy images are fetched automatically from arbitrary remote hosts** — `M`
+- [x] **Inline/Giphy images are fetched automatically from arbitrary remote hosts** — `M`
   - Markdown images and Giphy URLs are loaded directly with `URLSession` without auth,
     size limits, or a proxy (`MainWindow+Timeline.swift:420-463`). Any message can therefore
     leak the viewer's IP/User-Agent to a third party and fill memory/disk (caches are
@@ -509,7 +509,7 @@ source revision. The long list of previously completed work is preserved in
     never cleared on logout. A second account on the same Mac inherits the first account's
     status and emoji history. Scope them by user id/server or clear on logout.
 
-- [ ] **Re-verify the privacy manifest against file-metadata usage** — `S`
+- [x] **Re-verify the privacy manifest against file-metadata usage** — `S`
   - `PrivacyInfo.xcprivacy` declares only `UserDefaults` CA92.1. `DebugLog.rotateIfNeeded`
     uses `FileManager.attributesOfItem` (`webservice.swift:127-136`) and the GIF cache uses
     file writes; confirm no required-reason file-timestamp API is in use (or declare it),
@@ -603,7 +603,7 @@ source revision. The long list of previously completed work is preserved in
   - Lightbox zoom has no pan/scroll (`:1004-1023`), so >1× content outside the stage is
     unreachable; the image is also retained after close (`:951-960`).
 
-- [ ] **No Save/Flag post action** — `S`
+- [x] **No Save/Flag post action** — `S`
   - The hover menu has only Reply, Copy Link, Pin/Unpin and Delete
     (`MainWindow+Timeline.swift:1125-1144`), yet a Saved Posts panel exists. Add
     Save/Unsave (Mattermost `POST/DELETE /users/{id}/posts/{post_id}/flag`), plus
@@ -693,7 +693,7 @@ source revision. The long list of previously completed work is preserved in
     Heading/Link/Code/Quote/Lists to wrap the selection in Markdown (and update
     `entryView` styling). This is also a README overclaim.
 
-- [ ] **GIF search is absent while a local fake-post path remains** — `S`
+- [x] **GIF search is absent while a local fake-post path remains** — `S`
   - `applyComposerToolbarVisibility` always hides the GIF button
     (`MainWindow+Composer.swift:803`), but its old handler still fabricates a
     `giphy_*` post locally and appends it to the timeline (`MainWindow+Layout.swift:414-429`).
@@ -798,13 +798,13 @@ source revision. The long list of previously completed work is preserved in
   - Introduce a row diff/update path keyed by post id, cache decoded previews, load disk data
     off-main, and virtualize/lazy-load large channels. This is the main scalability risk.
 
-- [ ] **GIF cache filenames use randomized `hashValue`** — `S`
+- [x] **GIF cache filenames use randomized `hashValue`** — `S`
   - Long URLs are cached as `"\(urlString.hashValue).gif"` (`MainWindow+Timeline.swift:353-356,430-432`).
     Swift hash seeds change per process, so the on-disk cache misses every launch and
     duplicate files accumulate; collisions can serve the wrong image. Use a stable hash
     (SHA-256 or FNV-1a) and add cache eviction.
 
-- [ ] **Timeline pagination can drop edits and refetch the same page** — `S`
+- [x] **Timeline pagination can drop edits and refetch the same page** — `S`
   - `TimelinePager.merge` filters duplicate IDs out of the older page
     (`TimelineSupport.swift:21-30`), so an edited duplicate keeps the stale copy; sorting by
     `create_at` alone is unstable for equal timestamps and can flip grouping. In
@@ -900,14 +900,14 @@ source revision. The long list of previously completed work is preserved in
     `Theme`, `KeychainHelper`, `MMFont` and the project scripts. Reformat the remaining
     files and add them to the allowlist; consider SwiftLint for rules swift-format misses.
 
-- [ ] **Docs are stale/overclaiming** — `S`
+- [x] **Docs are stale/overclaiming** — `S`
   - `AUDIT.md` says 48/48 tests in the verification table but 51 later, and its reported
     14,892 Swift lines is stale (the current app plus test sources total 15,053). `README.md` advertises a Files tab in the search popover that does
     nothing, and the GIF mock cleanup is not actually complete.
   - Update both after each release; add a "Known limitations" section for DND/mute, search
     Files tab, threads and accessibility.
 
-- [ ] **No reproducible Release checklist** — `S`
+- [x] **No reproducible Release checklist** — `S`
   - Document: bump/tag, clean build, test, lint, Release build, universal check, sign,
     notarize, staple, `spctl` verify, DMG checksum, clean-machine launch. Add a
     `Makefile`/script target so the steps cannot drift.
@@ -979,7 +979,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 51 tests today; keep the count rising
+./test.sh       # 54 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

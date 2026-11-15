@@ -18,15 +18,39 @@ struct TimelinePageMerge {
 }
 
 enum TimelinePager {
+    static let pageSize = 60
     static func merge(existing: [MMPost], older: [MMPost], pageSize: Int) -> TimelinePageMerge {
         let existingIds = Set(existing.map { $0.id })
+        var byId: [String: MMPost] = [:]
+        for post in existing { byId[post.id] = post }
+        // Older pages may contain a fresher copy (or an edit) of an existing post;
+        // prefer it instead of dropping it as a duplicate.
+        for post in older { byId[post.id] = post }
         let inserted = older.filter { !existingIds.contains($0.id) }
-        let posts = (existing + inserted).sorted { $0.create_at < $1.create_at }
+        let posts = byId.values.sorted {
+            if $0.create_at == $1.create_at { return $0.id < $1.id }
+            return $0.create_at < $1.create_at
+        }
         return TimelinePageMerge(
             posts: posts,
             inserted: inserted,
-            didReachEnd: older.count < pageSize
+            // A page made entirely of duplicates means the server repeated a page;
+            // stop rather than refetching it forever.
+            didReachEnd: older.count < pageSize || (inserted.isEmpty && !older.isEmpty)
         )
+    }
+}
+
+/// Stable, process-independent key for on-disk image caches. Swift's
+/// `hashValue` is seeded per launch and must not be used for cache names.
+enum TimelineCacheKey {
+    static func stable(_ value: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
     }
 }
 

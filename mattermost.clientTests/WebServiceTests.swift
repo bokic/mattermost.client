@@ -26,6 +26,12 @@ final class WebServiceTests: XCTestCase {
         XCTAssertEqual(url?.absoluteString, "https://chat.example.com/api/v4/users/me")
     }
 
+    func testBuildURLPreservesReverseProxySubpath() {
+        let ws = WebService(host: "https://chat.example.com/mattermost", port: 0)
+        let url = ws.buildURL(path: "/api/v4/users/me")
+        XCTAssertEqual(url?.absoluteString, "https://chat.example.com/mattermost/api/v4/users/me")
+    }
+
     func testBuildURLRejectsUnsupportedScheme() {
         let ws = WebService(host: "ftp://chat.example.com", port: 0)
         XCTAssertNil(ws.buildURL(path: "/api/v4/users/me"))

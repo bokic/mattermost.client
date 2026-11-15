@@ -42,6 +42,14 @@ final class TimelineSupportTests: XCTestCase {
         XCTAssertEqual(page.inserted.count, 1)
     }
 
+    func testFullPageOfDuplicatesMarksEndOfHistory() {
+        let existing = [makePost(id: "a", createAt: 100), makePost(id: "b", createAt: 200)]
+        let page = TimelinePager.merge(existing: existing, older: existing, pageSize: 2)
+
+        XCTAssertTrue(page.inserted.isEmpty)
+        XCTAssertTrue(page.didReachEnd)
+    }
+
     func testEmptyOlderPageLeavesTimelineUnchanged() {
         let existing = [makePost(id: "a", createAt: 100)]
         let page = TimelinePager.merge(existing: existing, older: [], pageSize: 60)
@@ -49,6 +57,17 @@ final class TimelineSupportTests: XCTestCase {
         XCTAssertEqual(page.posts.map { $0.id }, ["a"])
         XCTAssertTrue(page.inserted.isEmpty)
         XCTAssertTrue(page.didReachEnd)
+    }
+
+    func testStableCacheKeyIsDeterministicAndDistinct() {
+        XCTAssertEqual(
+            TimelineCacheKey.stable("https://example.com/a.gif"),
+            TimelineCacheKey.stable("https://example.com/a.gif")
+        )
+        XCTAssertNotEqual(
+            TimelineCacheKey.stable("https://example.com/a.gif"),
+            TimelineCacheKey.stable("https://example.com/b.gif")
+        )
     }
 
     // MARK: - Date separators

@@ -7,7 +7,6 @@
 //
 
 import Cocoa
-import UniformTypeIdentifiers
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -20,8 +19,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let chatEntryPanel = OutlinePanel()
     let entryView = ComposerTextView()
 
-    let boxImage = NSImageView(image: NSImage(named: NSImage.Name("E82F"))!)
-    let logo = NSImageView(image: NSImage(named: NSImage.Name("Mattermost Logo"))!)
+    let boxImage = NSImageView(image: NSImage(named: NSImage.Name("E82F")) ?? NSImage())
+    let logo = NSImageView(image: NSImage(named: NSImage.Name("Mattermost Logo")) ?? NSImage())
 
     // Top Global Bar views
     let productSwitcherPanel = RoundedEdgePanel()
@@ -212,6 +211,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
         return timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : nil
     }()
+    var loadRemoteImagesAutomatically: Bool = {
+        UserDefaults.standard.object(forKey: "loadRemoteImagesAutomatically") as? Bool ?? true
+    }()
     var statusCheckViews: [NSImageView] = []
 
     // Left Channel Sidebar views
@@ -307,7 +309,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         get { viewModel.didLoadAllHistory }
         set { viewModel.didLoadAllHistory = newValue }
     }
-    let postsPerPage = 60
+    let postsPerPage = TimelinePager.pageSize
     let channelTitleButton = RoundedEdgePanel()
     let channelTitleLabel = NSTextField(labelWithString: "Town Square")
     let channelHeaderBotBadge = RoundedEdgePanel()
@@ -351,9 +353,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let heroInviteButton = RoundedEdgePanel()
     let heroInviteIconView = NSImageView()
     let heroInviteLabel = NSTextField(labelWithString: "Invite others to the workspace")
-
-
-    let statusPromptPill = RoundedEdgePanel()
 
     // 3. Message Composer & Formatting Toolbar
     let composerPlaceholderLabel = NSTextField(labelWithString: "Write to Town Square")
@@ -403,6 +402,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
 
     var pendingOutgoingPosts: [PendingOutgoingPost] = []
+    var savedPostIds: Set<String> = []
     var composerDraftsByChannelId: [String: ComposerDraft] = [:]
     var threadDraftsByRootId: [String: String] = [:]
     var teamSwitchToken = 0

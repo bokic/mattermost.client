@@ -654,6 +654,7 @@ extension MainWindow {
                 return
             }
             let posts = list.order.compactMap { list.posts[$0] }
+            self.savedPostIds = Set(posts.map { $0.id })
             self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
                 guard let self = self else { return }
                 let dateFormatter = Self.localizedDateTimeFormatter
@@ -711,6 +712,21 @@ extension MainWindow {
                 subtitle: username,
                 meta: server,
                 action: nil
+            ),
+            RightPanelRow(
+                title: loadRemoteImagesAutomatically ? "Disable automatic remote images" : "Enable automatic remote images",
+                subtitle: "When off, inline/Giphy images are not fetched from third-party hosts",
+                meta: "Privacy",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.loadRemoteImagesAutomatically.toggle()
+                    UserDefaults.standard.set(
+                        self.loadRemoteImagesAutomatically,
+                        forKey: "loadRemoteImagesAutomatically"
+                    )
+                    self.rebuildTimelineContent(scrollToBottom: false)
+                    self.loadSettingsPanel()
+                }
             ),
             RightPanelRow(
                 title: "Export diagnostics",

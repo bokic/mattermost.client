@@ -95,7 +95,7 @@ extension MainWindow {
             guard let self = self else { return }
             guard let memberships = try? await ws.fetchChannelMemberships(userId: userId, teamId: team.id) else { return }
             guard self.activeTeam?.id == team.id else { return }
-            self.membershipsByChannel = Dictionary(uniqueKeysWithValues: memberships.map { ($0.channel_id, $0) })
+            self.membershipsByChannel = Dictionary(memberships.map { ($0.channel_id, $0) }, uniquingKeysWith: { _, latest in latest })
             var unread: [String: Int] = [:]
             var mentions: [String: Int] = [:]
             var viewed: [String: Int64] = [:]
@@ -190,8 +190,10 @@ extension MainWindow {
         category.headerRow.onClick = { [weak self] in
             guard let self = self else { return }
             self.isFavoritesCollapsed.toggle()
+            self.setSidebarCollapsedState(self.isFavoritesCollapsed, categoryId: "favorites")
             self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
         }
+        isFavoritesCollapsed = category.isCollapsed
         favoritesCategory = category
         updateSidebarSelectionAppearance()
         updateSidebarBadges()
@@ -426,7 +428,7 @@ extension MainWindow {
 
         let orderedCategories: [MMSidebarCategory]
         if !response.order.isEmpty {
-            let catMap = Dictionary(uniqueKeysWithValues: response.categories.map { ($0.id, $0) })
+            let catMap = Dictionary(response.categories.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
             orderedCategories = response.order.compactMap { catMap[$0] }
         } else {
             orderedCategories = response.categories
@@ -597,6 +599,21 @@ extension MainWindow {
         fetchAvatarForUsernameIfNeeded("system-bot")
     }
 
+    func sidebarCollapseStorageKey() -> String {
+        "sidebarCollapsed:\(activeTeam?.id ?? "global")"
+    }
+
+    func savedSidebarCollapsedState(_ categoryId: String) -> Bool? {
+        let states = UserDefaults.standard.dictionary(forKey: sidebarCollapseStorageKey()) as? [String: Bool]
+        return states?[categoryId]
+    }
+
+    func setSidebarCollapsedState(_ collapsed: Bool, categoryId: String) {
+        var states = UserDefaults.standard.dictionary(forKey: sidebarCollapseStorageKey()) as? [String: Bool] ?? [:]
+        states[categoryId] = collapsed
+        UserDefaults.standard.set(states, forKey: sidebarCollapseStorageKey())
+    }
+
     func createSidebarCategory(
         id: String,
         title: String,
@@ -604,13 +621,14 @@ extension MainWindow {
         items: [SidebarItemView],
         isCollapsed: Bool = false
     ) -> SidebarCategoryView {
+        let initiallyCollapsed = savedSidebarCollapsedState(id) ?? isCollapsed
         let mutedTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
         let headerRow = RoundedEdgePanel()
         headerRow.cornerRadius = 0
         headerRow.color = .clear
 
         let chevronView = NSImageView()
-        let chevSymbol = isCollapsed ? "chevron.right" : "chevron.down"
+        let chevSymbol = initiallyCollapsed ? "chevron.right" : "chevron.down"
         if let chevImg = NSImage(systemSymbolName: chevSymbol, accessibilityDescription: title) {
             chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
             chevronView.contentTintColor = mutedTint
@@ -664,7 +682,7 @@ extension MainWindow {
             chevronView: chevronView,
             titleLabel: titleLabel,
             addButton: addBtn,
-            isCollapsed: isCollapsed,
+            isCollapsed: initiallyCollapsed,
             items: items
         )
     }
@@ -791,6 +809,7 @@ extension MainWindow {
         guard let idx = sidebarCategories.firstIndex(where: { $0.id == categoryId }) else { return }
         sidebarCategories[idx].isCollapsed.toggle()
         let collapsed = sidebarCategories[idx].isCollapsed
+        setSidebarCollapsedState(collapsed, categoryId: categoryId)
         let symbolName = collapsed ? "chevron.right" : "chevron.down"
         if let chevImg = NSImage(systemSymbolName: symbolName, accessibilityDescription: sidebarCategories[idx].titleLabel.stringValue) {
             sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
@@ -869,7 +888,7 @@ extension MainWindow {
         teamDropdownMenu.subviews.forEach { $0.removeFromSuperview() }
 
         let rowHeight: CGFloat = 34
-        let teamsToDisplay = userTeams.isEmpty ? (activeTeam != nil ? [activeTeam!] : []) : userTeams
+        let teamsToDisplay = userTeams.isEmpty ? (activeTeam.map { [$0] } ?? []) : userTeams
         let menuHeight: CGFloat = max(42, CGFloat(teamsToDisplay.count) * rowHeight + 12)
         let menuWidth: CGFloat = 220
         let menuX: CGFloat = 8
@@ -982,6 +1001,7 @@ extension MainWindow {
                 }
                 guard token == self.teamSwitchToken else { return }
                 UserDefaults.standard.set(team.id, forKey: "lastTeamId")
+                self.refreshServerTheme(teamId: team.id)
                 let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
                 let savedChannel = savedChannelId.flatMap { self.channelsById[$0] }
                 let botCh = self.channelsByName["system-bot"]

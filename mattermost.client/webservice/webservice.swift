@@ -343,10 +343,13 @@ enum MMWebSocketEvent {
     case posted(post: MMPost, senderName: String?, channelDisplayName: String?, channelName: String?, teamId: String?)
     case postEdited(post: MMPost)
     case postDeleted(postId: String, channelId: String)
+    case postUnread(channelId: String)
     case channelViewed(channelId: String)
     case channelUpdated(channel: MMChannel)
+    case channelMembershipChanged(channelId: String, userId: String)
     case preferencesChanged(userId: String)
     case threadUpdated(rootId: String)
+    case emojiAdded
     case statusChange(userId: String, status: String)
     case userStatuses(statuses: [String: String])
     case typing(userId: String, channelId: String, parentId: String?)
@@ -1061,7 +1064,7 @@ final class WebService: NSObject {
         )
     }
     
-    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = 60, before: String? = nil) async throws -> MMPostList {
+    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize, before: String? = nil) async throws -> MMPostList {
         var queryItems = [
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "per_page", value: String(perPage))
@@ -1204,6 +1207,22 @@ final class WebService: NSObject {
         let _: StatusResponse = try await performAuthenticatedRequest(
             path: "/api/v4/posts/\(postId)/unpin",
             method: "POST"
+        )
+    }
+
+    func savePost(userId: String, postId: String) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/posts/\(postId)/flag",
+            method: "POST",
+            accept: nil
+        )
+    }
+
+    func unsavePost(userId: String, postId: String) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/posts/\(postId)/flag",
+            method: "DELETE",
+            accept: nil
         )
     }
 
@@ -1515,6 +1534,25 @@ final class WebService: NSObject {
                     if !postId.isEmpty {
                         parsedEvent = .postDeleted(postId: postId, channelId: channelId)
                     }
+                case "post_unread":
+                    let channelId = (eventData["channel_id"] as? String)
+                        ?? (broadcast["channel_id"] as? String)
+                        ?? ""
+                    if !channelId.isEmpty {
+                        parsedEvent = .postUnread(channelId: channelId)
+                    }
+                case "user_added", "user_removed":
+                    let userId = (eventData["user_id"] as? String)
+                        ?? (broadcast["user_id"] as? String)
+                        ?? ""
+                    let channelId = (broadcast["channel_id"] as? String)
+                        ?? (eventData["channel_id"] as? String)
+                        ?? ""
+                    if !userId.isEmpty {
+                        parsedEvent = .channelMembershipChanged(channelId: channelId, userId: userId)
+                    }
+                case "emoji_added":
+                    parsedEvent = .emojiAdded
                 case "channel_viewed":
                     let channelId = (eventData["channel_id"] as? String)
                         ?? (broadcast["channel_id"] as? String)
@@ -1654,7 +1692,8 @@ final class WebService: NSObject {
                 onSidebarCategoriesUpdated?()
             case .reactionChanged(let postId):
                 onReactionChanged?(postId)
-            case .postEdited, .postDeleted, .channelViewed, .channelUpdated, .preferencesChanged, .threadUpdated:
+            case .postEdited, .postDeleted, .postUnread, .channelViewed, .channelUpdated,
+                 .channelMembershipChanged, .preferencesChanged, .threadUpdated, .emojiAdded:
                 break
             case .other:
                 break

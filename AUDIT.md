@@ -1,7 +1,7 @@
 # Project Audit — `mattermost.client`
 
 **Date:** 2026-11-15
-**Scope:** 14,892 lines of Swift across 26 application files and 8 test files, Xcode project
+**Scope:** 15,617 lines of Swift across 26 application files and 8 test files (1,049 lines), Xcode project
 settings, build/release scripts, tests, and README.
 **Method:** Source review, clean `xcodebuild`, `./test.sh`, `./lint.sh`, Info.plist/entitlements
 inspection, asset inspection and a live run against Mattermost v12.1.0.
@@ -13,14 +13,14 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Check | Result |
 |---|---|
 | Clean build (`./build.sh`) | **Succeeds** |
-| Unit tests (`./test.sh`) | **48/48 pass** |
+| Unit tests (`./test.sh`) | **54/54 pass** |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
 | Deployment target | **macOS 14.0** (app and tests) |
 | App icon set | Correct 16/32/64/128/256/512/1024 px PNGs |
 | Privacy manifest | Present (`PrivacyInfo.xcprivacy`, UserDefaults CA92.1) |
 | Transport security | HTTPS/443 default; explicit `http://` limited to local networks by ATS |
-| Release distribution | **Unsigned/un-notarized DMG** (see remaining work) |
+| Release distribution | Automated hardened-runtime signing/notarization pipeline; ad-hoc DMG for local CI smoke tests |
 
 **Overall assessment:** the prototype has become a usable chat client. The previously reported
 blocking functional and security findings are resolved; what remains is distribution hardening,
@@ -47,7 +47,7 @@ accessibility/localization, and some test-target and performance cleanup.
 | 13 | Medium | 3,464-line `MainWindow` god class | **Fixed** — 746-line window shell plus focused extensions and `ChatViewModel` |
 | 14 | Medium | Unsynchronized mutable state in `WebService` | **Fixed** — `@MainActor` isolation, explicit callback hops, task-identity stale guards, Swift 6 |
 | 15 | Medium | No accessibility/dark-mode support | **Partial** — server themes (including dark palettes) are applied app-wide; VoiceOver labels/roles are still missing |
-| 16 | Medium | Duplicate source in the test target; only 12 tests | **Partial** — 51 tests now cover URL/JSON/WebSocket, model state, pagination, date separators, zoom and errors; the test target still compiles a copy of shared sources |
+| 16 | Medium | Duplicate source in the test target; only 12 tests | **Partial** — 54 tests now cover URL/JSON/WebSocket, model state, pagination, date separators, zoom and errors; the test target still compiles a copy of shared sources |
 
 Other fixed items from the original audit: README capability claims, dead prototype views,
 unused label references, the headermap build warning, missing CI/lint, magic radii/metrics,
@@ -123,7 +123,7 @@ duplicated HTTP request building, and duplicated zoom plumbing.
 
 ```bash
 ./build.sh     # clean build, zero warnings
-./test.sh      # 51 tests
+./test.sh      # 54 tests
 ./lint.sh      # swift-format --strict on migrated files
 ```
 
