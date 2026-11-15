@@ -34,22 +34,44 @@ write_diagnostics() {
     fi
 }
 
+run_with_timeout() {
+    local limit=$1
+    shift
+    "$@" &
+    local pid=$!
+    (
+        sleep "$limit"
+        kill -TERM "$pid" 2>/dev/null
+        sleep 5
+        kill -KILL "$pid" 2>/dev/null
+        pkill -KILL -P "$pid" 2>/dev/null
+    ) &
+    local watchdog=$!
+    wait "$pid"
+    local status=$?
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+    return "$status"
+}
+
 echo "Building and running mattermost.clientTests..."
 set +e
+echo "=== xcodebuild ===" | tee "$LOG_FILE"
 # Build for the host architecture so the test target matches the app module
 # produced by build.sh (the app scheme uses the active arch only).
-xcodebuild -project mattermost.client.xcodeproj \
+run_with_timeout 600 xcodebuild -project mattermost.client.xcodeproj \
     -target mattermost.clientTests \
     -configuration Debug \
     ARCHS="$(uname -m)" \
     ONLY_ACTIVE_ARCH=YES \
     SYMROOT="$(pwd)/build/Build/Products" \
     OBJROOT="$(pwd)/build/Build/Intermediates.noindex" \
-    build 2>&1 | tee "$LOG_FILE"
+    build 2>&1 | tee -a "$LOG_FILE"
 STATUS=${PIPESTATUS[0]}
 
 if [ "$STATUS" -eq 0 ]; then
-    xcrun xctest build/Build/Products/Debug/mattermost.clientTests.xctest 2>&1 | tee -a "$LOG_FILE"
+    echo "=== xctest ===" | tee -a "$LOG_FILE"
+    run_with_timeout 180 xcrun xctest build/Build/Products/Debug/mattermost.clientTests.xctest 2>&1 | tee -a "$LOG_FILE"
     STATUS=${PIPESTATUS[0]}
 fi
 set -e
