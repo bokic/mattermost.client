@@ -182,7 +182,7 @@ extension MainWindow {
 
         let category = createSidebarCategory(
             id: "favorites",
-            title: "FAVORITES",
+            title: L10n.string("FAVORITES"),
             showsAddButton: false,
             items: items,
             isCollapsed: isFavoritesCollapsed
@@ -302,7 +302,7 @@ extension MainWindow {
         let threadsItem = createSidebarItem(
             id: "threads",
             symbolName: "text.bubble",
-            title: "Threads",
+            title: L10n.string("Threads"),
             isSelectable: true,
             isBotBadge: false,
             showsCloseOnHover: false
@@ -341,9 +341,9 @@ extension MainWindow {
                 )
             }
         channelsItems.append(
-            createSidebarItem(id: "add-channels", symbolName: "plus", title: "Add Channels", isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
+            createSidebarItem(id: "add-channels", symbolName: "plus", title: L10n.string("Add Channels"), isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
         )
-        let channelsCat = createSidebarCategory(id: "channels", title: "CHANNELS", showsAddButton: false, items: channelsItems)
+        let channelsCat = createSidebarCategory(id: "channels", title: L10n.string("CHANNELS"), showsAddButton: false, items: channelsItems)
         sidebarCategories.append(channelsCat)
 
         var dmItems: [SidebarItemView] = channels
@@ -359,9 +359,9 @@ extension MainWindow {
                 )
             }
         dmItems.append(
-            createSidebarItem(id: "invite-members", symbolName: "plus", title: "Invite Members", isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
+            createSidebarItem(id: "invite-members", symbolName: "plus", title: L10n.string("Invite Members"), isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
         )
-        let dmCat = createSidebarCategory(id: "direct_messages", title: "DIRECT MESSAGES", showsAddButton: true, items: dmItems)
+        let dmCat = createSidebarCategory(id: "direct_messages", title: L10n.string("DIRECT MESSAGES"), showsAddButton: true, items: dmItems)
         wireDMCategoryAddButton(dmCat)
         sidebarCategories.append(dmCat)
 
@@ -516,7 +516,7 @@ extension MainWindow {
                 let addChannelsItem = createSidebarItem(
                     id: "add-channels",
                     symbolName: "plus",
-                    title: "Add Channels",
+                    title: L10n.string("Add Channels"),
                     isSelectable: false,
                     isBotBadge: false,
                     showsCloseOnHover: false
@@ -526,7 +526,7 @@ extension MainWindow {
                 let inviteMembersItem = createSidebarItem(
                     id: "invite-members",
                     symbolName: "plus",
-                    title: "Invite Members",
+                    title: L10n.string("Invite Members"),
                     isSelectable: false,
                     isBotBadge: false,
                     showsCloseOnHover: false
@@ -765,6 +765,8 @@ extension MainWindow {
         label.font = MMFont.font(ofSize: 14, weight: .regular)
         label.frame = NSRect(x: 49, y: 6, width: 140, height: 20)
         row.addSubview(label)
+        row.accessibilityTitle = title
+        row.accessibilityHelp = isSelectable ? "Open \(title)" : title
 
         let badgePanel = RoundedEdgePanel()
         badgePanel.cornerRadius = MMRadius.card

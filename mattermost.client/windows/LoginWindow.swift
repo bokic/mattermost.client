@@ -68,11 +68,11 @@ class LoginWindow: NSWindow {
         super.init(contentRect: rect, styleMask: style, backing: backingStoreType, defer: flag)
         
         self.isReleasedWhenClosed = false
-        self.title = "Login"
+        self.title = L10n.string("Login")
 
         hostLabel = NSTextField()
         hostLabel.frame = .init(x: 20, y: 20, width: 300, height: 30)
-        hostLabel.placeholderString = "https://mattermost.example.com (http:// only for local servers)"
+        hostLabel.placeholderString = L10n.string("Server URL")
 
         portLabel = NSTextField()
         portLabel.frame = .init(x: 20, y: 50, width: 300, height: 30)
@@ -81,11 +81,11 @@ class LoginWindow: NSWindow {
 
         usernameLabel = NSTextField()
         usernameLabel.frame = .init(x: 20, y: 80, width: 300, height: 30)
-        usernameLabel.placeholderString = "{username}"
+        usernameLabel.placeholderString = L10n.string("Username")
 
         passwordLabel = NSSecureTextField()
         passwordLabel.frame = .init(x: 20, y: 110, width: 300, height: 30)
-        passwordLabel.placeholderString = "{password}"
+        passwordLabel.placeholderString = L10n.string("Password")
         
         errorLabel = NSTextField(labelWithString: "")
         errorLabel.frame = .init(x: 20, y: 150, width: 580, height: 40)
@@ -94,13 +94,13 @@ class LoginWindow: NSWindow {
         errorLabel.lineBreakMode = .byWordWrapping
 
         connectButton = NSButton()
-        connectButton.title = "Connect"
+        connectButton.title = L10n.string("Connect")
         connectButton.frame = .init(x: 20, y: 200, width: 80, height: 30)
         connectButton.target = self
         connectButton.action = #selector(connectButtonPressed)
         connectButton.keyEquivalent = "\r"
 
-        rememberPasswordButton = NSButton(checkboxWithTitle: "Keep me signed in", target: nil, action: nil)
+        rememberPasswordButton = NSButton(checkboxWithTitle: L10n.string("Keep me signed in"), target: nil, action: nil)
         rememberPasswordButton.frame = .init(x: 112, y: 204, width: 190, height: 24)
         rememberPasswordButton.state = .off
 
@@ -154,7 +154,7 @@ class LoginWindow: NSWindow {
 
         guard !host.isEmpty, !username.isEmpty, !password.isEmpty else {
             setInputsEnabled(true)
-            errorLabel.stringValue = "Please enter host, username, and password."
+            errorLabel.stringValue = L10n.string("Please enter host, username, and password.")
             return
         }
 
@@ -169,7 +169,7 @@ class LoginWindow: NSWindow {
                 _ = try await service.login(username: username, password: password)
                 guard let token = service.token(), !token.isEmpty else {
                     self.setInputsEnabled(true)
-                    self.errorLabel.stringValue = "The server did not return a session token. Check the server URL and try again."
+                    self.errorLabel.stringValue = L10n.string("The server did not return a session token. Check the server URL and try again.")
                     return
                 }
                 // Persist only validated credentials, so a typo cannot replace

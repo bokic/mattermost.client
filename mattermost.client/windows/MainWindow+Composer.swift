@@ -1091,7 +1091,7 @@ extension MainWindow {
                     self.pendingOutgoingPosts[failedIndex].status = .failed(error.localizedDescription)
                 }
                 if self.activeChannelId == pending.channelId {
-                    self.composerHelpLabel.stringValue = "Message failed to send"
+                    self.composerHelpLabel.stringValue = L10n.string("Message failed to send")
                     self.rebuildTimelineContent(scrollToBottom: false)
                 }
                 NSLog("Failed to send post: \(error.localizedDescription)")

@@ -439,7 +439,7 @@ extension MainWindow {
             rightPanelSubtitle.stringValue = resolvedTitle
         }
         heroTitleLabel.stringValue = resolvedTitle
-        composerPlaceholderLabel.stringValue = "Write to \(resolvedTitle)"
+        composerPlaceholderLabel.stringValue = L10n.format("Write to %@", resolvedTitle)
         entryView.placeholderString = composerPlaceholderLabel.stringValue
         if ch.type == "D" {
             heroDescriptionLabel.stringValue = "This is the start of your direct message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."

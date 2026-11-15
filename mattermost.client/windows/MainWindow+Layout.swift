@@ -397,6 +397,8 @@ extension MainWindow {
             self.chatEntryPanel.addSubview(btn)
         }
         setupRightIconBtn(composerEmojiButton, "face.smiling")
+        composerEmojiButton.accessibilityTitle = L10n.string("Emoji")
+        composerEmojiButton.accessibilityHelp = L10n.string("Emoji")
         composerEmojiButton.onClick = { [weak self] in
             self?.toggleEmojiPanel()
         }
@@ -423,6 +425,8 @@ extension MainWindow {
         chatEntryPanel.addSubview(composerGifButton)
 
         setupRightIconBtn(composerAttachButton, "paperclip")
+        composerAttachButton.accessibilityTitle = L10n.string("Attach files")
+        composerAttachButton.accessibilityHelp = L10n.string("Attach files")
         composerAttachButton.onClick = { [weak self] in
             self?.attachFiles()
         }
@@ -436,6 +440,8 @@ extension MainWindow {
         }
         sendIcon.frame = NSRect(x: 15, y: 7, width: 18, height: 18)
         composerSendButton.addSubview(sendIcon)
+        composerSendButton.accessibilityTitle = L10n.string("Send")
+        composerSendButton.accessibilityHelp = L10n.string("Send")
         composerSendIconView = sendIcon
         composerSendButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }

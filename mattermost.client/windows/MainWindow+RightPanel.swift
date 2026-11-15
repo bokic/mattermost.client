@@ -121,35 +121,35 @@ extension MainWindow {
 
         switch mode {
         case .threads:
-            rightPanelTitle.stringValue = "Threads"
+            rightPanelTitle.stringValue = L10n.string("Threads")
             loadThreads()
         case .members:
-            rightPanelTitle.stringValue = "Members"
+            rightPanelTitle.stringValue = L10n.string("Members")
             loadChannelMembers()
         case .pinned:
-            rightPanelTitle.stringValue = "Pinned Posts"
+            rightPanelTitle.stringValue = L10n.string("Pinned Posts")
             loadPinnedPosts()
         case .mentions:
-            rightPanelTitle.stringValue = "Recent Mentions"
+            rightPanelTitle.stringValue = L10n.string("Recent Mentions")
             loadMentions()
         case .saved:
-            rightPanelTitle.stringValue = "Saved Posts"
+            rightPanelTitle.stringValue = L10n.string("Saved Posts")
             loadSavedPosts()
         case .settings:
-            rightPanelTitle.stringValue = "Settings"
+            rightPanelTitle.stringValue = L10n.string("Settings")
             loadSettingsPanel()
         case .browse:
-            rightPanelTitle.stringValue = "Browse Channels"
+            rightPanelTitle.stringValue = L10n.string("Browse Channels")
             loadBrowseChannels()
         case .thread:
             rightPanelTitle.stringValue = "Thread"
             restoreThreadDraft()
             loadThread()
         case .files:
-            rightPanelTitle.stringValue = "Files"
+            rightPanelTitle.stringValue = L10n.string("Files")
             loadChannelFiles()
         case .channelInfo:
-            rightPanelTitle.stringValue = "Channel Info"
+            rightPanelTitle.stringValue = L10n.string("Channel Info")
             loadChannelInfo()
         }
         layoutRightChatPanel()
@@ -231,7 +231,7 @@ extension MainWindow {
                         }
                     )
                 }
-                self.renderRightPanel(empty: "No threads yet", rows: rows)
+                self.renderRightPanel(empty: L10n.string("No threads yet"), rows: rows)
             }
         }
     }
@@ -386,7 +386,7 @@ extension MainWindow {
     func loadChannelMembers() {
         guard let ws = webService, ws.isLogged(),
               !activeChannelId.isEmpty else {
-            renderRightPanel(empty: "No channel selected", rows: [])
+            renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
         let channelId = activeChannelId
@@ -412,7 +412,7 @@ extension MainWindow {
                         action: nil
                     )
                 }
-                self.renderRightPanel(empty: "No members", rows: rows)
+                self.renderRightPanel(empty: L10n.string("No members"), rows: rows)
             }
         }
     }
@@ -420,7 +420,7 @@ extension MainWindow {
     func loadPinnedPosts() {
         guard let ws = webService, ws.isLogged(),
               !activeChannelId.isEmpty else {
-            renderRightPanel(empty: "No channel selected", rows: [])
+            renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
         let channelId = activeChannelId
@@ -468,7 +468,7 @@ extension MainWindow {
                 return
             }
             self.hydrateUsers(files.compactMap { $0.user_id }) {
-                self.renderFilesPanel(files, empty: "No files yet")
+                self.renderFilesPanel(files, empty: L10n.string("No files yet"))
             }
         }
     }
@@ -798,7 +798,7 @@ extension MainWindow {
     func loadChannelInfo() {
         guard let ws = webService, ws.isLogged(),
               let channel = channelsById[activeChannelId] else {
-            renderRightPanel(empty: "No channel selected", rows: [])
+            renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
         let channelId = channel.id

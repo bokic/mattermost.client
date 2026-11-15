@@ -465,25 +465,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
-        appMenu.addItem(withTitle: "About Mattermost", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.string("About Mattermost"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        let preferencesItem = NSMenuItem(title: "Settings…", action: #selector(AppDelegate.showPreferences), keyEquivalent: ",")
+        let preferencesItem = NSMenuItem(title: L10n.string("Settings…"), action: #selector(AppDelegate.showPreferences), keyEquivalent: ",")
         preferencesItem.target = self
         appMenu.addItem(preferencesItem)
         appMenu.addItem(NSMenuItem.separator())
-        let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesItem = NSMenuItem(title: L10n.string("Services"), action: nil, keyEquivalent: "")
         let servicesMenu = NSMenu(title: "Services")
         servicesItem.submenu = servicesMenu
         appMenu.addItem(servicesItem)
         NSApp.servicesMenu = servicesMenu
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Hide Mattermost", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        let hideOthers = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: L10n.string("Hide Mattermost"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = NSMenuItem(title: L10n.string("Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthers)
-        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.string("Show All"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Quit Mattermost", action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L10n.string("Quit Mattermost"), action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
         
         // Edit Menu (Standard text editing shortcuts)
         let editMenuItem = NSMenuItem()
@@ -556,7 +556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         mainMenu.addItem(helpMenuItem)
         let helpMenu = NSMenu(title: "Help")
         helpMenuItem.submenu = helpMenu
-        let docsItem = NSMenuItem(title: "Mattermost Help", action: #selector(AppDelegate.openHelp), keyEquivalent: "?")
+        let docsItem = NSMenuItem(title: L10n.string("Mattermost Help"), action: #selector(AppDelegate.openHelp), keyEquivalent: "?")
         docsItem.target = self
         helpMenu.addItem(docsItem)
 

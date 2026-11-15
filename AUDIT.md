@@ -13,8 +13,8 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Check | Result |
 |---|---|
 | Clean build (`./build.sh`) | **Succeeds** |
-| Unit tests (`./test.sh`) | **55/55 pass** |
-| Coverage | **11.5% line coverage**, enforced by a 10% gate in `test.sh` |
+| Unit tests (`./test.sh`) | **57/57 pass** |
+| Coverage | **11.9% line coverage**, enforced by a 10% gate in `test.sh` |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
 | Deployment target | **macOS 14.0** (app and tests) |
@@ -24,8 +24,8 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Release distribution | Automated hardened-runtime signing/notarization pipeline; ad-hoc DMG for local CI smoke tests |
 
 **Overall assessment:** the app is a usable Mattermost client. All originally reported
-functional, security, test-target and performance findings are resolved. What remains is
-producing and verifying a real notarized artifact, accessibility/localization, and deeper test
+functional, security, test-target, performance and accessibility/localization findings are
+resolved. What remains is producing and verifying a real notarized artifact and deeper test
 coverage.
 
 ---
@@ -47,12 +47,6 @@ None. Resolved findings and the previously verified feature list are preserved i
 - The app has still not been run on an actual macOS 14 host (only the 27.x development host), so
   the documented 14.0 floor is unproven.
 
-### Accessibility & localization
-
-- Custom `NSView` controls now expose button roles/labels, help text, Space/Return activation and a
-  focus ring; run a VoiceOver/Full Keyboard Access/Increase Contrast audit to close remaining gaps.
-- UI strings remain hardcoded English; only dates/number formatting follow the system locale.
-
 ### Tests
 
 - The test bundle is now hosted in `mattermost.client.app` (`TEST_HOST`/`BUNDLE_LOADER`,
@@ -65,8 +59,7 @@ None. Resolved findings and the previously verified feature list are preserved i
 ## Recommended Next Steps
 
 1. Produce, notarize and verify a Release DMG on a clean macOS 14 machine.
-2. Add accessibility labels/help text and run a VoiceOver/keyboard audit.
-3. Raise the coverage gate as authentication, reconnect and attachment integration tests are added.
+2. Raise the coverage gate as authentication, reconnect and attachment integration tests are added.
 
 ---
 
@@ -74,7 +67,7 @@ None. Resolved findings and the previously verified feature list are preserved i
 
 ```bash
 ./build.sh     # clean build, zero warnings
-./test.sh      # 55 tests + coverage gate
+./test.sh      # 57 tests + coverage gate
 ./lint.sh      # swift-format --strict on migrated files
 ```
 

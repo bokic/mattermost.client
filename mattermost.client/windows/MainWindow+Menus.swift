@@ -1091,15 +1091,15 @@ extension MainWindow {
                 self?.showRightPanel(mode: .files)
             }),
             hasUnread
-                ? ("checkmark.circle", "Mark as Read", { [weak self] in
+                ? ("checkmark.circle", L10n.string("Mark as Read"), { [weak self] in
                     self?.closeChannelMenu()
                     self?.markActiveChannelRead()
                 })
-                : ("envelope.badge", "Mark as Unread", { [weak self] in
+                : ("envelope.badge", L10n.string("Mark as Unread"), { [weak self] in
                     self?.closeChannelMenu()
                     self?.markActiveChannelUnread()
                 }),
-            ("checkmark.circle.fill", "Mark All as Read", { [weak self] in
+            ("checkmark.circle.fill", L10n.string("Mark All as Read"), { [weak self] in
                 self?.closeChannelMenu()
                 self?.markAllChannelsRead()
             }),

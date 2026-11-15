@@ -1761,10 +1761,10 @@ extension MainWindow {
         let statusColor: NSColor
         switch pending.status {
         case .sending:
-            statusText = "Sending…"
+            statusText = L10n.string("Sending…")
             statusColor = Theme.shared.centerTextMuted
         case .failed:
-            statusText = "Failed to send"
+            statusText = L10n.string("Failed to send")
             statusColor = .systemRed
         }
         let status = NSTextField(labelWithString: statusText)
@@ -1789,7 +1789,7 @@ extension MainWindow {
             deleteButton.cornerRadius = MMRadius.control
             deleteButton.color = .clear
             deleteButton.frame = NSRect(x: width - 64, y: 8, width: 56, height: 20)
-            let deleteLabel = NSTextField(labelWithString: "Delete")
+            let deleteLabel = NSTextField(labelWithString: L10n.string("Delete"))
             deleteLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
             deleteLabel.textColor = Theme.shared.centerTextMuted
             deleteLabel.alignment = .center
@@ -1806,7 +1806,7 @@ extension MainWindow {
             retryButton.cornerRadius = MMRadius.control
             retryButton.color = .clear
             retryButton.frame = NSRect(x: width - 118, y: 8, width: 48, height: 20)
-            let retryLabel = NSTextField(labelWithString: "Retry")
+            let retryLabel = NSTextField(labelWithString: L10n.string("Retry"))
             retryLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
             retryLabel.textColor = Theme.shared.buttonBg
             retryLabel.alignment = .center
