@@ -523,7 +523,16 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     not navigate to external/admin pages, and the `Aa` formatting toolbar is visual parity rather
     than applying markdown. Everything else in the feature list matches the current behaviour.
   - Updated the test-suite and project-structure sections for the new files and tooling.
-- [ ] **Refresh or archive `AUDIT.md`** (dated 2026-11-01, some findings fixed). — `S`
+- [x] **Refresh `AUDIT.md`** — `S`
+  - Rewrote the 2026-11-01 audit against the current tree (14,892 Swift lines, 48 tests, Swift 6
+    complete concurrency, clean build/lint) with a finding-by-finding status table.
+  - Marked the deployment target, Keychain, HTTPS, logout, logging, composer/send, reconnect,
+    pagination, channel race, realtime insert, sidebar struct-copy, god class and concurrency
+    findings as fixed; zoom is now documented as intentional bounds scaling.
+  - While re-auditing, fixed the remaining sidebar struct-copy bug in `onAvatarLoaded` and
+    `refreshSidebarDMTitles`, so `isBotBadge`/avatar state now persists in the model.
+  - Documented the genuinely remaining work: release signing/notarization, accessibility and
+    localization, test-target hosting/coverage, and timeline/avatar performance.
 - [ ] **Commit the DOM-inspection tooling** used for parity work (AppleScript/Chrome driver +
   measurement scripts) under `tools/`, so metrics can be re-verified. — `S`
 - [ ] **Logging strategy**: keep `DebugLog` for development, add levels and rotation, and stop

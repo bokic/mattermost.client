@@ -318,8 +318,9 @@ extension MainWindow {
         }
 
         // 2. Sidebar items representing this user
-        for cat in sidebarCategories {
-            for var item in cat.items {
+        for catIndex in sidebarCategories.indices {
+            for itemIndex in sidebarCategories[catIndex].items.indices {
+                var item = sidebarCategories[catIndex].items[itemIndex]
                 var matches = (item.id == userId)
                 if !matches, let ch = channelsById[item.id], ch.type == "D", resolveDMTargetUserId(for: ch) == userId {
                     matches = true
@@ -330,6 +331,7 @@ extension MainWindow {
                     item.iconView.imageScaling = .scaleProportionallyUpOrDown
                     item.iconView.contentTintColor = nil
                     item.iconView.frame = NSRect(x: 16, y: 5, width: 18, height: 18)
+                    sidebarCategories[catIndex].items[itemIndex] = item
                 }
             }
         }
@@ -431,8 +433,9 @@ extension MainWindow {
     }
 
     func refreshSidebarDMTitles() {
-        for cat in sidebarCategories {
-            for var item in cat.items {
+        for catIndex in sidebarCategories.indices {
+            for itemIndex in sidebarCategories[catIndex].items.indices {
+                var item = sidebarCategories[catIndex].items[itemIndex]
                 guard let ch = channelsById[item.id], ch.type == "D" else { continue }
                 let newTitle = channelDisplayName(for: ch)
                 item.label.stringValue = newTitle
@@ -446,6 +449,7 @@ extension MainWindow {
                         item.iconView.frame = NSRect(x: 16, y: 5, width: 18, height: 18)
                     }
                 }
+                sidebarCategories[catIndex].items[itemIndex] = item
                 if item.id == selectedSidebarItemId {
                     channelTitleLabel.stringValue = newTitle
                     heroTitleLabel.stringValue = newTitle
