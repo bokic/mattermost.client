@@ -499,6 +499,52 @@ final class WebServiceTests: XCTestCase {
         XCTAssertEqual(status.last_activity_at, 1_765_415_300_000)
     }
 
+    func testAuthenticationFailureClassification() {
+        XCTAssertTrue(
+            WebService.isAuthenticationFailure(
+                WebServiceError.httpStatus(code: 401, message: nil)
+            )
+        )
+        XCTAssertTrue(
+            WebService.isAuthenticationFailure(
+                WebServiceError.httpStatus(code: 403, message: nil)
+            )
+        )
+        XCTAssertFalse(
+            WebService.isAuthenticationFailure(
+                WebServiceError.httpStatus(code: 500, message: nil)
+            )
+        )
+        XCTAssertFalse(
+            WebService.isAuthenticationFailure(
+                WebServiceError.networkError(URLError(.notConnectedToInternet))
+            )
+        )
+    }
+
+    func testReconnectBackoffIsExponentialAndCapped() {
+        XCTAssertEqual(WebService.reconnectDelay(attempt: 0), 1)
+        XCTAssertEqual(WebService.reconnectDelay(attempt: 1), 2)
+        XCTAssertEqual(WebService.reconnectDelay(attempt: 3), 8)
+        XCTAssertEqual(WebService.reconnectDelay(attempt: 10), 30)
+        XCTAssertEqual(WebService.reconnectDelay(attempt: 10, jitter: 0.5), 30.5)
+    }
+
+    func testMultipartBodySanitizesFilenamesAndMimeTypes() {
+        let body = WebService.multipartBody(
+            boundary: "Boundary-test",
+            filename: "../../evil\r\nX-Injected: yes\".png",
+            mimeType: "image/png\r\nX-Injected: yes",
+            data: Data([0x01, 0x02, 0x03])
+        )
+        let text = String(decoding: body, as: UTF8.self)
+        XCTAssertTrue(text.contains("filename=\"evil__X-Injected: yes_.png\""))
+        XCTAssertFalse(text.contains("\r\nX-Injected: yes\r\n"))
+        XCTAssertTrue(text.contains("Content-Type: image/png  X-Injected: yes"))
+        XCTAssertTrue(text.hasSuffix("\r\n--Boundary-test--\r\n"))
+        XCTAssertTrue(body.contains(Data([0x01, 0x02, 0x03])))
+    }
+
     func testUserStatusUpdateURL() {
         let ws = WebService(host: "chat.example.com", port: 8065)
         let url = ws.buildURL(path: "/api/v4/users/u12345/status")

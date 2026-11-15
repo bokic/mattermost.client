@@ -547,6 +547,43 @@ final class WebService: NSObject {
     }
 
     /// Runs a request and applies the shared network/status/error handling.
+    static func isAuthenticationFailure(_ error: Error) -> Bool {
+        guard let wsError = error as? WebServiceError,
+              case .httpStatus(let code, _) = wsError else { return false }
+        return code == 401 || code == 403
+    }
+
+    static func reconnectDelay(attempt: Int, jitter: Double = 0) -> TimeInterval {
+        min(30.0, pow(2.0, Double(max(0, attempt)))) + jitter
+    }
+
+    static func multipartBody(
+        boundary: String,
+        filename: String,
+        mimeType: String,
+        data: Data
+    ) -> Data {
+        let safeFilename = (filename as NSString).lastPathComponent
+            .components(separatedBy: CharacterSet(charactersIn: "\r\n\"\\"))
+            .joined(separator: "_")
+        let safeMimeType = mimeType
+            .components(separatedBy: CharacterSet(charactersIn: "\r\n"))
+            .joined(separator: " ")
+        var body = Data()
+        func append(_ text: String) { body.append(Data(text.utf8)) }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(safeFilename)\"\r\n")
+        append("Content-Type: \(safeMimeType)\r\n\r\n")
+        body.append(data)
+        append("\r\n--\(boundary)--\r\n")
+        return body
+    }
+
+    @discardableResult
+    static func decodeLogin(_ data: Data) -> MMUser? {
+        try? JSONDecoder().decode(MMUser.self, from: data)
+    }
+
     private func performRequest(
         path: String,
         method: String = "GET",
@@ -672,9 +709,7 @@ final class WebService: NSObject {
             return true
         } catch {
             logger.error("checkToken failed: \(error.localizedDescription)")
-            if let wsError = error as? WebServiceError,
-               case .httpStatus(let code, _) = wsError,
-               code == 401 || code == 403 {
+            if Self.isAuthenticationFailure(error) {
                 return false
             }
             // Offline/DNS/timeout/5xx must not destroy the session. Keep the
@@ -1005,20 +1040,12 @@ final class WebService: NSObject {
     
     func uploadFile(channelId: String, data: Data, filename: String, mimeType: String) async throws -> String {
         let boundary = "Boundary-\(UUID().uuidString)"
-        // Multipart headers cannot contain quotes/CR/LF; sanitize server-visible
-        // filenames so they cannot break out of the header.
-        let safeFilename = (filename as NSString).lastPathComponent
-            .components(separatedBy: CharacterSet(charactersIn: "\r\n\"\\"))
-            .joined(separator: "_")
-        let safeMimeType = mimeType.components(separatedBy: CharacterSet(charactersIn: "\r\n"))
-            .joined(separator: " ")
-        var body = Data()
-        func append(_ text: String) { body.append(Data(text.utf8)) }
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(safeFilename)\"\r\n")
-        append("Content-Type: \(safeMimeType)\r\n\r\n")
-        body.append(data)
-        append("\r\n--\(boundary)--\r\n")
+        let body = Self.multipartBody(
+            boundary: boundary,
+            filename: filename,
+            mimeType: mimeType,
+            data: data
+        )
         
         struct UploadResponse: Decodable {
             struct FileInfo: Decodable { let id: String }
@@ -1336,7 +1363,10 @@ final class WebService: NSObject {
         webSocketTask = nil
         
         // Exponential backoff with jitter: 1s, 2s, 4s … capped at 30s.
-        let delay = min(30.0, pow(2.0, Double(reconnectAttempts))) + Double.random(in: 0...1)
+        let delay = Self.reconnectDelay(
+            attempt: reconnectAttempts,
+            jitter: Double.random(in: 0...1)
+        )
         reconnectAttempts += 1
         DebugLog.warning("WS RECONNECT in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempts))")
         

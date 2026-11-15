@@ -4,7 +4,7 @@ set -euo pipefail
 
 LOG_FILE="${TMPDIR:-/tmp}/mattermost-tests.log"
 RESULT_BUNDLE="$(pwd)/build/TestResults.xcresult"
-COVERAGE_MIN_PERCENT="${COVERAGE_MIN_PERCENT:-10}"
+COVERAGE_MIN_PERCENT="${COVERAGE_MIN_PERCENT:-30}"
 
 write_diagnostics() {
     local status=$1
