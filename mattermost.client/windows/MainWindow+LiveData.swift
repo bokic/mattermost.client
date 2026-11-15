@@ -62,7 +62,7 @@ extension MainWindow {
         ws.onReactionChanged = { [weak self] postId in
             Task { @MainActor [weak self] in
                 guard let self = self,
-                      let ws = webService else { return }
+                      let ws = self.webService else { return }
                 if let updated = try? await ws.fetchPost(postId: postId) {
                     self.applyUpdatedPost(updated)
                 }

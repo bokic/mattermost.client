@@ -880,7 +880,7 @@ extension MainWindow {
         composerHelpLabel.stringValue = editingId != nil ? "Saving edit…" : "Sending…"
 
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = webService else { return }
+            guard let self = self, let ws = self.webService else { return }
             do {
                 if let editingId = editingId {
                     let updated = try await ws.patchPost(postId: editingId, message: message)
@@ -924,7 +924,7 @@ extension MainWindow {
         guard !trimmed.isEmpty, !activeChannelId.isEmpty else { return }
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = webService else { return }
+            guard let self = self, let ws = self.webService else { return }
             do {
                 let post = try await ws.createPost(channelId: channelId, message: trimmed)
                 if self.activeChannelId == channelId {

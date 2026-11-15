@@ -1184,7 +1184,7 @@ extension MainWindow {
                 self.showInfoAlert("Enter a valid email address.")
                 return
             }
-            guard let ws = webService else { return }
+            guard let ws = self.webService else { return }
             Task { @MainActor in
                 do {
                     try await ws.sendTeamInvite(teamId: team.id, email: email)
@@ -1226,7 +1226,7 @@ extension MainWindow {
                 self.showInfoAlert("Enter a team name.")
                 return
             }
-            guard let ws = webService else { return }
+            guard let ws = self.webService else { return }
             Task { @MainActor in
                 do {
                     let team = try await ws.createTeam(name: name, displayName: displayName)

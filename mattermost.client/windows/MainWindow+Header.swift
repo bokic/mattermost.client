@@ -265,7 +265,7 @@ extension MainWindow {
         searchResultsPanel.isHidden = false
 
         Task { @MainActor [weak self] in
-            guard let self = self, let ws = webService else { return }
+            guard let self = self, let ws = self.webService else { return }
             do {
                 let list = try await ws.searchPosts(teamId: team.id, terms: terms)
                 let posts = list.order.compactMap { list.posts[$0] }
