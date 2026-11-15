@@ -1027,6 +1027,96 @@ final class WebService: NSObject {
         )
     }
     
+    // MARK: - Sidebar categories
+
+    func createSidebarCategory(
+        teamId: String,
+        displayName: String,
+        userId: String
+    ) async throws -> MMSidebarCategory {
+        try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories",
+            method: "POST",
+            body: [
+                "display_name": displayName,
+                "user_id": userId,
+                "team_id": teamId,
+                "type": "custom",
+            ]
+        )
+    }
+
+    func updateSidebarCategory(
+        teamId: String,
+        userId: String,
+        categoryId: String,
+        displayName: String? = nil,
+        collapsed: Bool? = nil,
+        muted: Bool? = nil
+    ) async throws -> MMSidebarCategory {
+        var body: [String: Any] = [:]
+        if let displayName = displayName { body["display_name"] = displayName }
+        if let collapsed = collapsed { body["collapsed"] = collapsed }
+        if let muted = muted { body["muted"] = muted }
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)",
+            method: "PUT",
+            body: body
+        )
+    }
+
+    func deleteSidebarCategory(
+        teamId: String,
+        userId: String,
+        categoryId: String
+    ) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)",
+            method: "DELETE"
+        )
+    }
+
+    func updateSidebarCategoryOrder(
+        teamId: String,
+        userId: String,
+        categoryIds: [String]
+    ) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/order",
+            method: "PUT",
+            jsonBody: categoryIds,
+            accept: nil
+        )
+    }
+
+    func addChannelToSidebarCategory(
+        teamId: String,
+        userId: String,
+        categoryId: String,
+        channelId: String
+    ) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)/channels",
+            method: "POST",
+            jsonBody: ["channel_id": channelId],
+            accept: nil
+        )
+    }
+
+    func removeChannelFromSidebarCategory(
+        teamId: String,
+        userId: String,
+        categoryId: String,
+        channelId: String
+    ) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)/channels/\(channelId)",
+            method: "DELETE",
+            accept: nil
+        )
+    }
+
     func fetchUserPreferences(userId: String) async throws -> [[String: String]] {
         return try await performAuthenticatedRequest(path: "/api/v4/users/\(userId)/preferences")
     }

@@ -48,6 +48,8 @@ class RoundedEdgePanel: NSView {
         }
     }
 
+    var onRightClick: (() -> Void)?
+
     /// Optional VoiceOver label; when nil the panel derives one from its first
     /// text label or image description.
     var accessibilityTitle: String?
@@ -114,6 +116,14 @@ class RoundedEdgePanel: NSView {
             onClick()
         } else {
             super.mouseDown(with: event)
+        }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        if let onRightClick = onRightClick {
+            onRightClick()
+        } else {
+            super.rightMouseDown(with: event)
         }
     }
 

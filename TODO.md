@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **120/120 pass** |
+| `./test.sh` | **122/122 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -31,14 +31,6 @@ completed baseline remains at the end.
 ### Message rendering
 
 ### Navigation and sidebar
-
-- [ ] **Sidebar category state is not persisted and categories cannot be managed** — `M`
-  - Toggling a category only flips the in-memory `isCollapsed`
-    (`MainWindow+Sidebar.swift:744-755`); it is lost on relaunch. `isFavoritesCollapsed` is
-    also memory-only. There is no create/rename/delete/reorder API use, no channel
-    drag-and-drop, and custom categories have no add button (`:492-503`).
-  - Done when collapsed state and order persist via the categories API/`UserDefaults`, and
-    categories are manageable from the UI.
 
 - [ ] **No channel context menu or unread/mute filtering** — `M`
   - Channel rows only left-click (`MainWindow+Sidebar.swift:702-728`); there is no
@@ -309,9 +301,11 @@ history is in git; the original long-form checklist lives in prior commits of th
 - **Realtime:** WebSocket posts, presence, typing, reaction refresh, exponential-backoff
   reconnect, wake/network reconnect, connection banner, 15 s status backstop.
 - **Sidebar/teams:** scrollable channel sidebar with pinned team/filter header, server
-  categories, favorites persisted as user preferences, unread/mention state from paged
-  memberships, live Find channel filter, add/browse/join channels, invite email, create
-  team + switch, DM creation, channel menu (info/pins/files/favorite/copy/leave).
+  categories, persisted collapse state and category order, create/rename/delete/move
+  category menus, custom-category channel adding, favorites persisted as user preferences,
+  unread/mention state from paged memberships, live Find channel filter, add/browse/join
+  channels, invite email, create team + switch, DM creation, channel menu
+  (info/pins/files/favorite/copy/leave).
 - **Status:** custom status with duration, DND expiry normalization, status menu/checkmarks,
   server-backed presence, correct `dnd_end_time` units and custom-status durations.
 - **Themes:** Denim/Sapphire/Quartz/Indigo/Onyx + custom palettes, dark detection, app-wide
@@ -332,7 +326,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 120 tests today; keep the count rising
+./test.sh       # 122 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

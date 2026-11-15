@@ -203,6 +203,7 @@ extension MainWindow {
             guard let self = self else { return }
             self.isFavoritesCollapsed.toggle()
             self.setSidebarCollapsedState(self.isFavoritesCollapsed, categoryId: "favorites")
+            self.persistSidebarCategoryCollapsed(self.isFavoritesCollapsed, categoryId: "favorites")
             self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
         }
         isFavoritesCollapsed = category.isCollapsed
@@ -472,6 +473,9 @@ extension MainWindow {
         }
         sidebarCategories.removeAll()
 
+        sidebarCategoryOrderIds = response.order.isEmpty
+            ? response.categories.map(\.id)
+            : response.order
         let orderedCategories: [MMSidebarCategory]
         if !response.order.isEmpty {
             let catMap = Dictionary(response.categories.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
@@ -562,12 +566,14 @@ extension MainWindow {
             let categoryView = createSidebarCategory(
                 id: cat.id,
                 title: cat.display_name.uppercased(),
-                showsAddButton: (cat.type == "direct_messages"),
+                showsAddButton: (cat.type == "direct_messages" || cat.type == "custom"),
                 items: items,
                 isCollapsed: isCollapsed
             )
             if cat.type == "direct_messages" {
                 wireDMCategoryAddButton(categoryView)
+            } else if cat.type == "custom" {
+                wireCategoryAddChannelButton(categoryView)
             }
             sidebarCategories.append(categoryView)
         }
@@ -721,6 +727,9 @@ extension MainWindow {
         headerRow.onClick = { [weak self] in
             self?.toggleSidebarCategory(id)
         }
+        headerRow.onRightClick = { [weak self] in
+            self?.showSidebarCategoryMenu(id)
+        }
 
         sidebarDoc.addSubview(headerRow)
         for item in items {
@@ -863,6 +872,7 @@ extension MainWindow {
         sidebarCategories[idx].isCollapsed.toggle()
         let collapsed = sidebarCategories[idx].isCollapsed
         setSidebarCollapsedState(collapsed, categoryId: categoryId)
+        persistSidebarCategoryCollapsed(collapsed, categoryId: categoryId)
         let symbolName = collapsed ? "chevron.right" : "chevron.down"
         if let chevImg = NSImage(systemSymbolName: symbolName, accessibilityDescription: sidebarCategories[idx].titleLabel.stringValue) {
             sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))

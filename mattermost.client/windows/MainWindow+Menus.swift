@@ -799,12 +799,34 @@ extension MainWindow {
             return (row, check)
         }
 
-        let all = makeRow("All channels", 36, false)
+        let all = makeRow("All channels", 70, false)
         filterMenu.addSubview(all.0)
         filterAllCheck = all.1
-        let favorites = makeRow("Favorites", 6, true)
+        let favorites = makeRow("Favorites", 38, true)
         filterMenu.addSubview(favorites.0)
         filterFavoritesCheck = favorites.1
+
+        let newCategory = RoundedEdgePanel()
+        newCategory.frame = NSRect(x: 6, y: 6, width: 168, height: 28)
+        newCategory.cornerRadius = MMRadius.control
+        newCategory.color = .clear
+        let newLabel = NSTextField(labelWithString: "New category…")
+        newLabel.font = MMFont.font(ofSize: 13)
+        newLabel.textColor = textColor
+        newLabel.isEditable = false
+        newLabel.isSelectable = false
+        newLabel.frame = NSRect(x: 10, y: 5, width: 150, height: 18)
+        newCategory.addSubview(newLabel)
+        newCategory.onHoverChanged = { [weak newCategory] isHovered in
+            newCategory?.color = isHovered ? Theme.shared.centerHover : .clear
+            newCategory?.setNeedsAppearanceUpdate()
+        }
+        newCategory.onClick = { [weak self] in
+            guard let self = self else { return }
+            self.setFilterMenuOpen(false)
+            self.createSidebarCategoryInteractive()
+        }
+        filterMenu.addSubview(newCategory)
 
         mainPanel.addSubview(filterMenu)
         updateFilterMenuAppearance()

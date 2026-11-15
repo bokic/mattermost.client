@@ -331,6 +331,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var sidebarCategories: [SidebarCategoryView] = []
     var selectedSidebarItemId: String = "town-square"
     var lastSidebarScrollSelection = ""
+    var sidebarCategoryOrderIds: [String] = []
 
     // Right Chat Panel views
     // 1. Channel Header Bar
