@@ -216,6 +216,17 @@ struct MMTeamUnread: Codable {
     let mention_count: Int
 }
 
+struct MMTeamMember: Codable {
+    let team_id: String
+    let user_id: String
+    let roles: String?
+    let delete_at: Int64?
+    let scheme_guest: Bool?
+    let scheme_user: Bool?
+    let scheme_admin: Bool?
+    let explicit_roles: String?
+}
+
 struct MMChannel: Codable {
     let id: String
     let create_at: Int64?
@@ -1396,6 +1407,70 @@ final class WebService: NSObject {
             path: "/api/v4/teams/\(teamId)/members",
             method: "POST",
             jsonBody: ["team_id": teamId, "user_id": userId]
+        )
+    }
+
+    func removeUserFromTeam(teamId: String, userId: String) async throws {
+        try await leaveTeam(teamId: teamId, userId: userId)
+    }
+
+    func fetchTeamMembers(
+        teamId: String,
+        page: Int = 0,
+        perPage: Int = 60
+    ) async throws -> [MMTeamMember] {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/members",
+            queryItems: [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "per_page", value: String(perPage)),
+            ]
+        )
+    }
+
+    func fetchTeamMember(teamId: String, userId: String) async throws -> MMTeamMember {
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/members/\(userId)"
+        )
+    }
+
+    func updateTeamMemberRoles(teamId: String, userId: String, roles: String) async throws {
+        struct StatusResponse: Decodable { let status: String? }
+        let _: StatusResponse = try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)/members/\(userId)/roles",
+            method: "PUT",
+            body: ["roles": roles]
+        )
+    }
+
+    func updateTeam(
+        teamId: String,
+        displayName: String,
+        description: String? = nil,
+        companyName: String? = nil,
+        allowedDomains: String? = nil,
+        allowOpenInvite: Bool? = nil
+    ) async throws -> MMTeam {
+        var body: [String: Any] = [
+            "id": teamId,
+            "display_name": displayName,
+        ]
+        if let description = description { body["description"] = description }
+        if let companyName = companyName { body["company_name"] = companyName }
+        if let allowedDomains = allowedDomains { body["allowed_domains"] = allowedDomains }
+        if let allowOpenInvite = allowOpenInvite { body["allow_open_invite"] = allowOpenInvite }
+        return try await performAuthenticatedRequest(
+            path: "/api/v4/teams/\(teamId)",
+            method: "PUT",
+            body: body
+        )
+    }
+
+    func teamInviteURL(team: MMTeam) -> URL? {
+        guard let inviteId = team.invite_id, !inviteId.isEmpty else { return nil }
+        return buildURL(
+            path: "/signup_user_complete/",
+            queryItems: [URLQueryItem(name: "id", value: inviteId)]
         )
     }
     

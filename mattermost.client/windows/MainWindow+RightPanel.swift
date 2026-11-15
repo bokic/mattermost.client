@@ -238,6 +238,11 @@ extension MainWindow {
         case .channelInfo:
             rightPanelTitle.stringValue = L10n.string("Channel Info")
             loadChannelInfo()
+        case .teamMembers:
+            rightPanelTitle.stringValue = L10n.string("Team Members")
+            memberSearchQuery = ""
+            memberSearchField.stringValue = ""
+            loadTeamMembers()
         }
         layoutRightChatPanel()
     }
@@ -277,6 +282,8 @@ extension MainWindow {
             return channelName
         case .members, .pinned, .files, .channelInfo:
             return channelName
+        case .teamMembers:
+            return teamName
         }
     }
 
@@ -316,6 +323,7 @@ extension MainWindow {
         case .thread: loadThread()
         case .files: loadChannelFiles()
         case .channelInfo: loadChannelInfo()
+        case .teamMembers: loadTeamMembers()
         }
     }
 
@@ -419,6 +427,8 @@ extension MainWindow {
             loadMoreSavedPosts()
         case .pinned:
             loadMorePinnedPosts()
+        case .teamMembers:
+            loadMoreTeamMembers()
         default:
             break
         }
@@ -427,6 +437,7 @@ extension MainWindow {
     func rhsKey(for mode: RightPanelMode) -> String? {
         switch mode {
         case .members: return "members"
+        case .teamMembers: return "team_members"
         case .files: return "files"
         case .mentions: return "mentions"
         case .saved: return "saved"
@@ -448,6 +459,7 @@ extension MainWindow {
     func loadMoreForMode(_ mode: RightPanelMode) {
         switch mode {
         case .members: loadMoreMembers()
+        case .teamMembers: loadMoreTeamMembers()
         case .files: loadMoreChannelFiles()
         case .mentions: loadMoreMentions()
         case .saved: loadMoreSavedPosts()
@@ -1080,6 +1092,266 @@ extension MainWindow {
             }
         }
         renderRightPanel(empty: L10n.string("No members"), rows: rows)
+    }
+
+    func loadTeamMembers(reset: Bool = true) {
+        guard let ws = webService, ws.isLogged(),
+              let team = activeTeam else {
+            renderRightPanel(empty: "Sign in to see team members", rows: [])
+            return
+        }
+        let key = "team_members"
+        if reset {
+            rhsRequestTokenByMode[key, default: 0] += 1
+            rhsPageByMode[key] = 0
+            rhsHasMoreByMode[key] = false
+            rhsLoadingByMode[key] = true
+            teamMembers = []
+            renderRightPanel(empty: "Loading team members…", rows: [])
+        } else {
+            guard rhsHasMoreByMode[key] == true, rhsLoadingByMode[key] != true else { return }
+            rhsLoadingByMode[key] = true
+            renderTeamMembersPanel()
+        }
+
+        let token = rhsRequestTokenByMode[key] ?? 0
+        let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
+        let pageSize = 60
+        let teamId = team.id
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let members = try await ws.fetchTeamMembers(
+                    teamId: teamId,
+                    page: page,
+                    perPage: pageSize
+                )
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.activeTeam?.id == teamId,
+                      self.rightPanelMode == .teamMembers
+                else { return }
+                let existing = Set(reset ? [] : self.teamMembers.map(\.user_id))
+                let newMembers = members.filter { !existing.contains($0.user_id) }
+                self.teamMembers = reset ? members : self.teamMembers + newMembers
+                self.rhsPageByMode[key] = page
+                self.rhsHasMoreByMode[key] = members.count == pageSize
+                self.rhsLoadingByMode[key] = false
+                self.hydrateUsers(members.map { $0.user_id }) { [weak self] in
+                    guard let self = self, token == self.rhsRequestTokenByMode[key] else { return }
+                    self.renderTeamMembersPanel()
+                }
+            } catch {
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .teamMembers
+                else { return }
+                self.rhsLoadingByMode[key] = false
+                if reset {
+                    self.renderRightPanel(empty: "Could not load team members", rows: [])
+                } else {
+                    self.renderTeamMembersPanel()
+                }
+            }
+        }
+    }
+
+    func loadMoreTeamMembers() {
+        loadTeamMembers(reset: false)
+    }
+
+    func renderTeamMembersPanel() {
+        guard let team = activeTeam else {
+            renderRightPanel(empty: "No team selected", rows: [])
+            return
+        }
+        var rows: [RightPanelRow] = []
+
+        rows.append(RightPanelRow(
+            title: "Add Members",
+            subtitle: "Invite or add a user to this team",
+            meta: "+ Add",
+            action: { [weak self] in
+                self?.showAddTeamMemberDialog()
+            }
+        ))
+
+        let query = memberSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = teamMembers.filter { member in
+            guard !query.isEmpty else { return true }
+            let user = usersById[member.user_id]
+            let name = user?.username.lowercased() ?? member.user_id.lowercased()
+            let full = [user?.first_name, user?.last_name]
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .lowercased()
+            return name.contains(query) || full.contains(query)
+        }
+
+        var groups: [(String, [MMTeamMember])] = []
+        if !query.isEmpty {
+            groups = [("Search Results", filtered)]
+        } else {
+            let admins = filtered.filter { member in
+                let roles = member.roles ?? ""
+                return roles.contains("team_admin") || member.scheme_admin == true
+                    || roles.contains("system_admin")
+            }
+            let adminIds = Set(admins.map(\.user_id))
+            let regular = filtered.filter { !adminIds.contains($0.user_id) }
+            groups = [
+                ("Team Admins", admins),
+                ("Members", regular),
+            ]
+        }
+
+        for (title, members) in groups where !members.isEmpty {
+            rows.append(RightPanelRow(
+                title: title,
+                subtitle: "",
+                meta: "\(members.count)",
+                action: nil,
+                isSectionHeader: true
+            ))
+            for member in members {
+                let user = usersById[member.user_id]
+                let name = user?.username ?? "Unknown user"
+                let roles = member.roles ?? ""
+                let isAdmin = roles.contains("team_admin") || member.scheme_admin == true
+                    || roles.contains("system_admin")
+                let role = isAdmin ? "Team Admin" : "Member"
+                let status = userStatusById[member.user_id] ?? "offline"
+                let fullName = [user?.first_name, user?.last_name]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+
+                rows.append(RightPanelRow(
+                    title: name,
+                    subtitle: fullName,
+                    meta: "\(role) · \(status.capitalized)",
+                    action: { [weak self] in
+                        self?.showTeamMemberActionsAlert(member: member)
+                    },
+                    secondaryActionTitle: "Manage",
+                    secondaryAction: { [weak self] in
+                        self?.showTeamMemberActionsAlert(member: member)
+                    }
+                ))
+            }
+        }
+
+        renderRightPanel(empty: "No team members", rows: rows)
+    }
+
+    func showTeamMemberActionsAlert(member: MMTeamMember) {
+        guard let team = activeTeam, let ws = webService else { return }
+        let user = usersById[member.user_id]
+        let name = user?.username ?? member.user_id
+        let roles = member.roles ?? ""
+        let isAdmin = roles.contains("team_admin") || member.scheme_admin == true
+
+        let alert = NSAlert()
+        alert.messageText = "Manage @\(name)"
+        alert.informativeText = "Team: \(team.display_name)\nCurrent role: \(isAdmin ? "Team Admin" : "Member")"
+
+        let roleToggleTitle = isAdmin ? "Make Member" : "Make Team Admin"
+        alert.addButton(withTitle: roleToggleTitle)
+        alert.addButton(withTitle: "Remove from Team")
+        alert.addButton(withTitle: "View Profile")
+        alert.addButton(withTitle: "Cancel")
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self else { return }
+            switch response {
+            case .alertFirstButtonReturn:
+                let newRoles = isAdmin ? "team_user" : "team_user team_admin"
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        try await ws.updateTeamMemberRoles(
+                            teamId: team.id,
+                            userId: member.user_id,
+                            roles: newRoles
+                        )
+                        self.loadTeamMembers(reset: true)
+                    } catch {
+                        self.showInfoAlert("Could not update role: \(error.localizedDescription)")
+                    }
+                }
+            case .alertSecondButtonReturn:
+                self.confirmRemoveTeamMember(member: member, username: name)
+            case .alertThirdButtonReturn:
+                if let u = user {
+                    self.showUserProfile(user: u)
+                } else {
+                    self.showUserProfile(userId: member.user_id)
+                }
+            default:
+                break
+            }
+        }
+    }
+
+    func confirmRemoveTeamMember(member: MMTeamMember, username: String) {
+        guard let team = activeTeam, let ws = webService else { return }
+        let alert = NSAlert()
+        alert.messageText = "Remove @\(username) from \(team.display_name)?"
+        alert.informativeText = "The user will be removed from this team and all its channels."
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                do {
+                    try await ws.removeUserFromTeam(teamId: team.id, userId: member.user_id)
+                    self.loadTeamMembers(reset: true)
+                    self.showInfoAlert("Removed @\(username) from team.")
+                } catch {
+                    self.showInfoAlert("Could not remove member: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func showAddTeamMemberDialog() {
+        guard let team = activeTeam, let ws = webService else { return }
+        let alert = NSAlert()
+        alert.messageText = "Add Member to \(team.display_name)"
+        alert.informativeText = "Enter the username or email of the person you want to add to this team."
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "username or name@example.com"
+        alert.accessoryView = field
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            let input = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !input.isEmpty else { return }
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                do {
+                    let user: MMUser
+                    if input.contains("@") && input.contains(".") {
+                        let users = try await ws.searchUsers(term: input)
+                        guard let found = users.first else {
+                            try await ws.sendTeamInvite(teamId: team.id, email: input)
+                            self.showInfoAlert("Invite sent to \(input).")
+                            return
+                        }
+                        user = found
+                    } else {
+                        let cleanName = input.hasPrefix("@") ? String(input.dropFirst()) : input
+                        user = try await ws.fetchUserByUsername(cleanName)
+                    }
+                    try await ws.addUserToTeam(teamId: team.id, userId: user.id)
+                    self.loadTeamMembers(reset: true)
+                    self.showInfoAlert("Added @\(user.username) to \(team.display_name).")
+                } catch {
+                    self.showInfoAlert("Could not add user: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     func loadPinnedPosts() {

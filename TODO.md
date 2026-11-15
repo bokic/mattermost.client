@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **170/170 pass** |
+| `./test.sh` | **175/175 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -33,11 +33,6 @@ completed baseline remains at the end.
 ### Navigation and sidebar
 
 ### Composer and account
-
-- [ ] **No team administration** — `M`
-  - Only create/switch team exist (`MainWindow+Menus.swift:1199-1242`). There is no leave
-    team, team settings/edit, member management (add/remove/role), or invite-link option.
-    Add at least Leave Team and team member management.
 
 ### Platform and accessibility
 

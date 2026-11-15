@@ -574,4 +574,67 @@ final class WebServiceTests: XCTestCase {
             "https://chat.example.com:8065/api/v4/channels/ch123/join_request"
         )
     }
+
+    func testTeamAdministrationURLsAndModels() throws {
+        let ws = WebService(host: "chat.example.com", port: 8065)
+
+        let membersUrl = ws.buildURL(path: "/api/v4/teams/team123/members")
+        XCTAssertEqual(
+            membersUrl?.absoluteString,
+            "https://chat.example.com:8065/api/v4/teams/team123/members"
+        )
+
+        let memberRoleUrl = ws.buildURL(
+            path: "/api/v4/teams/team123/members/user456/roles"
+        )
+        XCTAssertEqual(
+            memberRoleUrl?.absoluteString,
+            "https://chat.example.com:8065/api/v4/teams/team123/members/user456/roles"
+        )
+
+        let updateTeamUrl = ws.buildURL(path: "/api/v4/teams/team123")
+        XCTAssertEqual(
+            updateTeamUrl?.absoluteString,
+            "https://chat.example.com:8065/api/v4/teams/team123"
+        )
+
+        let team = MMTeam(
+            id: "team123",
+            create_at: 1000,
+            update_at: 2000,
+            delete_at: 0,
+            display_name: "Engineering",
+            name: "engineering",
+            description: "Dev team",
+            email: "eng@example.com",
+            type: "O",
+            company_name: "Acme",
+            allowed_domains: "example.com",
+            invite_id: "inv123456",
+            allow_open_invite: true
+        )
+        let inviteUrl = ws.teamInviteURL(team: team)
+        XCTAssertEqual(
+            inviteUrl?.absoluteString,
+            "https://chat.example.com:8065/signup_user_complete/?id=inv123456"
+        )
+
+        let memberJson = """
+            {
+                "team_id": "team123",
+                "user_id": "user456",
+                "roles": "team_user team_admin",
+                "delete_at": 0,
+                "scheme_guest": false,
+                "scheme_user": true,
+                "scheme_admin": true,
+                "explicit_roles": "team_admin"
+            }
+            """.data(using: .utf8)!
+        let member = try JSONDecoder().decode(MMTeamMember.self, from: memberJson)
+        XCTAssertEqual(member.team_id, "team123")
+        XCTAssertEqual(member.user_id, "user456")
+        XCTAssertEqual(member.roles, "team_user team_admin")
+        XCTAssertEqual(member.scheme_admin, true)
+    }
 }

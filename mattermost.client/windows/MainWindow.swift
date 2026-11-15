@@ -75,7 +75,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let connectionLabel = NSTextField(labelWithString: "")
     let rightPanelScroll = NSScrollView()
     let rightPanelDoc = TimelineFlippedView()
-    enum RightPanelMode { case threads, members, pinned, mentions, saved, settings, browse, thread, files, channelInfo }
+    enum RightPanelMode {
+        case threads, members, pinned, mentions, saved, settings, browse, thread, files, channelInfo, teamMembers
+    }
     var rightPanelMode: RightPanelMode = .threads
     var isRightPanelVisible = false
     var pendingJoinRequestChannelIds: Set<String> = []
@@ -359,6 +361,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let memberSearchField = NSSearchField()
     var memberSearchQuery = ""
     var channelMembers: [MMChannelMember] = []
+    var teamMembers: [MMTeamMember] = []
     var channelFiles: [MMFileInfo] = []
     var savedPosts: [MMPost] = []
     var mentionPosts: [MMPost] = []

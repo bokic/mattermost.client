@@ -1148,7 +1148,7 @@ extension MainWindow {
         let visibleCount = min(teamsCount, maxVisibleTeamRows)
         let teamsListHeight: CGFloat = CGFloat(visibleCount) * rowHeight
         let actionRowHeight: CGFloat = 30
-        let actionsCount: CGFloat = 3
+        let actionsCount: CGFloat = 6
         let separatorHeight: CGFloat = 1
         let menuWidth: CGFloat = 230
         let menuHeight: CGFloat = max(42, teamsListHeight + separatorHeight + 8 + (actionsCount * actionRowHeight) + 12)
@@ -1262,11 +1262,14 @@ extension MainWindow {
         separator.frame = NSRect(x: 10, y: menuHeight - 6 - teamsListHeight - 4, width: menuWidth - 20, height: 1)
         teamDropdownMenu.addSubview(separator)
 
-        // Action entries: Join another team, Leave Team, Team Settings
+        // Action entries: Invite People, Team Members, Team Settings, Create Team, Join Team, Leave Team
         let actionEntries: [(title: String, symbol: String, action: @MainActor (MainWindow) -> Void)] = [
+            ("Invite People", "person.badge.plus", { $0.showTeamInviteDialog() }),
+            ("Team Members", "person.2", { $0.showRightPanel(mode: .teamMembers) }),
+            ("Team Settings", "gearshape", { $0.showTeamSettingsDialog() }),
+            ("Create New Team", "plus.rectangle.on.rectangle", { $0.showCreateTeamDialog() }),
             ("Join another team", "plus.circle", { $0.showJoinTeamDialog() }),
             ("Leave Team", "rectangle.portrait.and.arrow.right", { $0.confirmLeaveTeam() }),
-            ("Team Settings", "gearshape", { $0.showTeamSettingsDialog() })
         ]
 
         var actionY = separator.frame.minY - 4 - actionRowHeight
@@ -1366,6 +1369,15 @@ extension MainWindow {
                     if let nextTeam = teams.first(where: { $0.id != team.id }) ?? teams.first {
                         self.switchActiveTeam(to: nextTeam)
                     } else {
+                        self.activeTeam = nil
+                        self.channelsById.removeAll()
+                        self.channelsByName.removeAll()
+                        self.populateSidebarCategories(
+                            from: MMSidebarCategoriesResponse(categories: [], order: []),
+                            channels: []
+                        )
+                        self.teamHeaderLabel.stringValue = "No Team"
+                        self.rebuildTeamMenu()
                         self.showInfoAlert("You have left the team.")
                     }
                 } catch {
@@ -1376,25 +1388,131 @@ extension MainWindow {
     }
 
     func showTeamSettingsDialog() {
-        guard let team = activeTeam else { return }
+        guard let team = activeTeam, let ws = webService else { return }
         let alert = NSAlert()
         alert.messageText = "\(team.display_name.isEmpty ? team.name : team.display_name) Settings"
-        var info = "URL: /\(team.name)\n"
-        if let desc = team.description, !desc.isEmpty {
-            info += "Description: \(desc)\n"
+        alert.informativeText = "View and edit team details."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 110))
+
+        let nameLabel = NSTextField(labelWithString: "Team Name:")
+        nameLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+        nameLabel.textColor = Theme.shared.centerTextMuted
+        nameLabel.frame = NSRect(x: 0, y: 90, width: 320, height: 16)
+        container.addSubview(nameLabel)
+
+        let nameField = NSTextField(frame: NSRect(x: 0, y: 66, width: 320, height: 22))
+        nameField.stringValue = team.display_name
+        nameField.font = MMFont.font(ofSize: 13)
+        container.addSubview(nameField)
+
+        let descLabel = NSTextField(labelWithString: "Team Description:")
+        descLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+        descLabel.textColor = Theme.shared.centerTextMuted
+        descLabel.frame = NSRect(x: 0, y: 44, width: 320, height: 16)
+        container.addSubview(descLabel)
+
+        let descField = NSTextField(frame: NSRect(x: 0, y: 20, width: 320, height: 22))
+        descField.stringValue = team.description ?? ""
+        descField.font = MMFont.font(ofSize: 13)
+        container.addSubview(descField)
+
+        let urlLabel = NSTextField(labelWithString: "URL: /\(team.name)")
+        urlLabel.font = MMFont.font(ofSize: 11)
+        urlLabel.textColor = Theme.shared.centerTextMuted
+        urlLabel.frame = NSRect(x: 0, y: 0, width: 320, height: 16)
+        container.addSubview(urlLabel)
+
+        alert.accessoryView = container
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            let newDisplayName = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newDescription = descField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !newDisplayName.isEmpty else { return }
+
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                do {
+                    let updated = try await ws.updateTeam(
+                        teamId: team.id,
+                        displayName: newDisplayName,
+                        description: newDescription
+                    )
+                    self.activeTeam = updated
+                    if let idx = self.userTeams.firstIndex(where: { $0.id == updated.id }) {
+                        self.userTeams[idx] = updated
+                    }
+                    self.updateTeamHeader(with: updated)
+                    self.rebuildTeamMenu()
+                    self.showInfoAlert("Team settings saved.")
+                } catch {
+                    self.showInfoAlert("Could not update team: \(error.localizedDescription)")
+                }
+            }
         }
-        if let company = team.company_name, !company.isEmpty {
-            info += "Company: \(company)\n"
+    }
+
+    func showTeamInviteDialog() {
+        guard let team = activeTeam, let ws = webService else { return }
+        let inviteUrlString = ws.teamInviteURL(team: team)?.absoluteString ?? ""
+
+        let alert = NSAlert()
+        alert.messageText = "Invite people to \(team.display_name)"
+        alert.informativeText = "Share the invite link or send an email invitation."
+        alert.addButton(withTitle: "Send Invite")
+        alert.addButton(withTitle: "Copy Invite Link")
+        alert.addButton(withTitle: "Cancel")
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 80))
+
+        let linkLabel = NSTextField(labelWithString: "Team Invite Link:")
+        linkLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+        linkLabel.textColor = Theme.shared.centerTextMuted
+        linkLabel.frame = NSRect(x: 0, y: 62, width: 320, height: 16)
+        container.addSubview(linkLabel)
+
+        let linkField = NSTextField(frame: NSRect(x: 0, y: 38, width: 320, height: 22))
+        linkField.isEditable = false
+        linkField.stringValue = inviteUrlString.isEmpty ? "No invite ID configured" : inviteUrlString
+        linkField.font = MMFont.font(ofSize: 11)
+        container.addSubview(linkField)
+
+        let emailField = NSTextField(frame: NSRect(x: 0, y: 4, width: 320, height: 24))
+        emailField.placeholderString = "Invite by email: name@example.com"
+        container.addSubview(emailField)
+
+        alert.accessoryView = container
+
+        alert.beginSheetModal(for: self) { [weak self] response in
+            guard let self = self else { return }
+            if response == .alertFirstButtonReturn {
+                let email = emailField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard email.contains("@"), email.contains(".") else {
+                    self.showInfoAlert("Please enter a valid email address.")
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        try await ws.sendTeamInvite(teamId: team.id, email: email)
+                        self.showInfoAlert("Invitation sent to \(email).")
+                    } catch {
+                        self.showInfoAlert("Could not send invite: \(error.localizedDescription)")
+                    }
+                }
+            } else if response == .alertSecondButtonReturn {
+                if !inviteUrlString.isEmpty {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(inviteUrlString, forType: .string)
+                    self.showInfoAlert("Invite link copied to clipboard.")
+                } else {
+                    self.showInfoAlert("No invite link available for this team.")
+                }
+            }
         }
-        if let domains = team.allowed_domains, !domains.isEmpty {
-            info += "Allowed domains: \(domains)\n"
-        }
-        if let allowOpen = team.allow_open_invite {
-            info += "Open invite: \(allowOpen ? "Enabled" : "Disabled")\n"
-        }
-        alert.informativeText = info
-        alert.addButton(withTitle: "OK")
-        alert.beginSheetModal(for: self)
     }
 
     func updateTeamHeader(with team: MMTeam) {
