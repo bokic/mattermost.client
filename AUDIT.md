@@ -24,9 +24,9 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 | Release distribution | Automated hardened-runtime signing/notarization pipeline; ad-hoc DMG for local CI smoke tests |
 
 **Overall assessment:** the app is a usable Mattermost client. All originally reported
-functional, security and test-target findings are resolved. What remains is producing and
-verifying a real notarized artifact, accessibility/localization, deeper test coverage, and
-timeline performance.
+functional, security, test-target and performance findings are resolved. What remains is
+producing and verifying a real notarized artifact, accessibility/localization, and deeper test
+coverage.
 
 ---
 
@@ -60,12 +60,6 @@ None. Resolved findings and the previously verified feature list are preserved i
   coverage gate. Raise the gate as window/layout, authentication, reconnect and attachment flows
   gain coverage.
 
-### Performance
-
-- The timeline is still fully rebuilt when a post arrives or an avatar finishes loading. Consider
-  diffing rows for large channels.
-- Avatar caches are unbounded; consider an LRU cap or `NSCache`.
-
 ---
 
 ## Recommended Next Steps
@@ -73,7 +67,6 @@ None. Resolved findings and the previously verified feature list are preserved i
 1. Produce, notarize and verify a Release DMG on a clean macOS 14 machine.
 2. Add accessibility labels/help text and run a VoiceOver/keyboard audit.
 3. Raise the coverage gate as authentication, reconnect and attachment integration tests are added.
-4. Profile and diff timeline updates for large channels; cap avatar caches.
 
 ---
 

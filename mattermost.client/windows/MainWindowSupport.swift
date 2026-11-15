@@ -24,6 +24,51 @@ class TimelineFlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
+/// Bounded, evicting image cache for avatars and custom emoji.
+@MainActor
+final class BoundedImageCache {
+    private let cache = NSCache<NSString, NSImage>()
+
+    init(countLimit: Int = 300, totalCostLimit: Int = 64 * 1024 * 1024) {
+        cache.countLimit = countLimit
+        cache.totalCostLimit = totalCostLimit
+    }
+
+    subscript(_ key: String) -> NSImage? {
+        get { cache.object(forKey: key as NSString) }
+        set {
+            guard let newValue = newValue else {
+                cache.removeObject(forKey: key as NSString)
+                return
+            }
+            let size = newValue.size
+            let cost = max(1, Int(size.width * size.height * 4))
+            cache.setObject(newValue, forKey: key as NSString, cost: cost)
+        }
+    }
+}
+
+/// Bounded cache for natural image/attachment sizes.
+@MainActor
+final class BoundedSizeCache {
+    private let cache = NSCache<NSString, NSValue>()
+
+    init(countLimit: Int = 500) {
+        cache.countLimit = countLimit
+    }
+
+    subscript(_ key: String) -> NSSize? {
+        get { cache.object(forKey: key as NSString)?.sizeValue }
+        set {
+            guard let newValue = newValue else {
+                cache.removeObject(forKey: key as NSString)
+                return
+            }
+            cache.setObject(NSValue(size: newValue), forKey: key as NSString)
+        }
+    }
+}
+
 class TimelineRowView: RoundedEdgePanel {
     override var isFlipped: Bool { true }
     /// Add-reaction chip revealed while the row is hovered.

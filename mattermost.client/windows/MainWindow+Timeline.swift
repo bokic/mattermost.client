@@ -1823,6 +1823,91 @@ extension MainWindow {
         return (row, 58)
     }
 
+    @discardableResult
+    func appendRenderedPostRow(_ post: MMPost, wasNearBottom: Bool) -> Bool {
+        guard pendingOutgoingPosts.allSatisfy({ $0.channelId != activeChannelId }) else { return false }
+        guard currentChannelPosts.last?.id == post.id,
+              let previousPost = currentChannelPosts.dropLast().last else { return false }
+        let chatW = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
+        let chatH = chatPanel.bounds.height
+        let composerTop = 24 + composerTotalHeight
+        let scrollH = max(0, chatH - 56 - (connectionBanner.isHidden ? 0 : 26) - composerTop)
+        let previousHeight = timelineDocView.frame.height
+        var insertionY = max(16, previousHeight - 16)
+        let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
+        let previousDate = Date(timeIntervalSince1970: TimeInterval(previousPost.create_at) / 1000.0)
+        let calendar = Calendar.current
+
+        if calendar.startOfDay(for: postDate) != calendar.startOfDay(for: previousDate) {
+            let separator = createDateSeparator(
+                dateStr: TimelineDateSeparator.string(for: postDate),
+                width: chatW
+            )
+            separator.frame.origin.y = insertionY
+            timelineDocView.addSubview(separator)
+            insertionY += 34
+        }
+
+        if !wasNearBottom, newMessagesDividerPostId == post.id {
+            let divider = createNewMessagesDivider(width: chatW)
+            divider.frame.origin.y = insertionY
+            timelineDocView.addSubview(divider)
+            newMessagesDividerView = divider
+            insertionY += 40
+        }
+
+        let isSystem = (post.type?.hasPrefix("system_") ?? false)
+            || (usersById[post.user_id]?.username == "System")
+        let previousWasSystem = (previousPost.type?.hasPrefix("system_") ?? false)
+            || (usersById[previousPost.user_id]?.username == "System")
+        let withinGroupingWindow = (post.create_at - previousPost.create_at) <= 5 * 60 * 1000
+        let isConsecutive = !isSystem && !previousWasSystem
+            && post.user_id == previousPost.user_id
+            && !post.user_id.isEmpty && withinGroupingWindow
+        let (row, rowHeight) = createPostRow(
+            post: post,
+            width: chatW,
+            timeStr: Self.localizedTimeFormatter.string(from: postDate),
+            isConsecutive: isConsecutive
+        )
+        row.frame.origin = NSPoint(x: 0, y: insertionY)
+        timelineDocView.addSubview(row)
+        let newHeight = max(scrollH, insertionY + rowHeight + (isConsecutive ? 2 : 4) + 16)
+        timelineDocView.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: chatW,
+            height: max(previousHeight, newHeight)
+        )
+
+        updateTimelineHoverState()
+        updateNewMessagesDividerState()
+        if wasNearBottom {
+            scrollTimelineToBottom()
+        }
+        return true
+    }
+
+    func updateTimelineAvatar(userId: String, image: NSImage) {
+        guard !userId.isEmpty else { return }
+        let identifier = "avatar_\(userId)"
+        func update(_ view: NSView) {
+            if view.identifier?.rawValue == identifier,
+               let panel = view as? RoundedEdgePanel {
+                panel.color = .clear
+                panel.subviews.forEach { $0.removeFromSuperview() }
+                let imageView = NSImageView(frame: NSRect(origin: .zero, size: panel.frame.size))
+                imageView.image = image
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                panel.addSubview(imageView)
+                panel.setNeedsAppearanceUpdate()
+                return
+            }
+            view.subviews.forEach(update)
+        }
+        update(timelineDocView)
+    }
+
     func createPostRow(post: MMPost, width: CGFloat, timeStr: String, isConsecutive: Bool = false) -> (NSView, CGFloat) {
         let row = TimelineRowView()
         row.identifier = NSUserInterfaceItemIdentifier("postRow_\(post.id)")
@@ -2011,6 +2096,7 @@ extension MainWindow {
 
         // Avatar circle
         let avatarCircle = RoundedEdgePanel()
+        avatarCircle.identifier = NSUserInterfaceItemIdentifier("avatar_\(post.user_id)")
         avatarCircle.cornerRadius = avatarSize / 2
         avatarCircle.frame = NSRect(x: 37, y: topPad, width: avatarSize, height: avatarSize)
 

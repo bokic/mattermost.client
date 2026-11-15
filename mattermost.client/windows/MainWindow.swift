@@ -129,8 +129,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var lightboxLoadToken = UUID()
 
     // Natural sizes cached after an inline image loads so the timeline can reflow once.
-    var inlineImageSizeCache: [String: NSSize] = [:]
-    var attachmentSizeCache: [String: NSSize] = [:]
+    var inlineImageSizeCache = BoundedSizeCache()
+    var attachmentSizeCache = BoundedSizeCache()
     var isRelayoutScheduled = false
 
     // Channel header dropdown menu
@@ -145,7 +145,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let emojiDoc = TimelineFlippedView()
     let emojiCategoryBar = NSView()
     var customEmojiEntries: [EmojiEntry] = []
-    var customEmojiImages: [String: NSImage] = [:]
+    var customEmojiImages = BoundedImageCache(countLimit: 500)
     var recentEmojiNames: [String] = []
     var emojiSelectedCategory = "Recent"
     var isCustomEmojiLoaded = false
@@ -467,7 +467,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         get { viewModel.currentUserStatus }
         set { viewModel.currentUserStatus = newValue }
     }
-    var userAvatarsById: [String: NSImage] = [:]
+    var userAvatarsById = BoundedImageCache()
     var userAvatarFetchTasks: [String: Task<Void, Never>] = [:]
     var composerSendIconView: NSImageView?
     var composerSendEnabled = false

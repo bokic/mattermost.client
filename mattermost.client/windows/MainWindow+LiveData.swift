@@ -611,7 +611,13 @@ extension MainWindow {
             newMessagesDividerPostId = nil
             newMessagesDividerView = nil
         }
-        rebuildTimelineContent(scrollToBottom: !isReply && wasNearBottom)
+        if !isReply {
+            if !appendRenderedPostRow(post, wasNearBottom: wasNearBottom) {
+                rebuildTimelineContent(scrollToBottom: wasNearBottom)
+            }
+        } else if isRightPanelVisible && rightPanelMode == .thread {
+            loadThread()
+        }
 
         guard usersById[post.user_id] == nil,
               let ws = webService else { return }
@@ -622,6 +628,8 @@ extension MainWindow {
             self.usersById[user.id] = user
             self.usersByUsername[user.username.lowercased()] = user
             self.fetchAvatarIfNeeded(for: user.id)
+            // The new user's display name was unknown when the row was built;
+            // refresh once now that it is available.
             self.rebuildTimelineContent(scrollToBottom: false)
         }
     }

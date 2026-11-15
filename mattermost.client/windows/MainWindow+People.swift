@@ -473,11 +473,9 @@ extension MainWindow {
             heroBotAvatarView.frame = NSRect(x: 0, y: 0, width: 76, height: 76)
         }
 
-        // 4. Message rows
-        let affectsTimeline = currentChannelPosts.contains { $0.user_id == userId }
-        if affectsTimeline {
-            rebuildTimelineContent(scrollToBottom: false)
-        }
+        // 4. Message rows: update the existing avatar views in place instead of
+        // rebuilding the whole timeline for every avatar completion.
+        updateTimelineAvatar(userId: userId, image: image)
     }
 
     func refreshUserStatuses() {

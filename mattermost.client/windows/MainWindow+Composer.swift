@@ -263,7 +263,7 @@ extension MainWindow {
                 self.buildEmojiCategoryBar()
                 self.renderEmojiGrid()
             }
-            if !self.customEmojiImages.isEmpty {
+            if !self.customEmojiEntries.isEmpty {
                 if self.isRightPanelVisible && self.rightPanelMode == .thread {
                     self.renderThreadPanel()
                 }
