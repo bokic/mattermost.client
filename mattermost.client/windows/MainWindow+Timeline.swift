@@ -2239,17 +2239,6 @@ extension MainWindow {
         currentY += heroH + 16
 
         // 2. Posts and Date Separators (localized)
-        let calendar = Calendar.current
-        func separatorString(for date: Date) -> String {
-            if calendar.isDateInToday(date) || calendar.isDateInYesterday(date) {
-                return Self.localizedRelativeDateFormatter.string(from: date)
-            }
-            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: Date())).day ?? 99
-            if days < 6 {
-                return Self.localizedWeekdayFormatter.string(from: date)
-            }
-            return Self.localizedDateFormatter.string(from: date)
-        }
 
         var postsToRender = currentChannelPosts
         if postsToRender.isEmpty && !(webService?.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
@@ -2346,7 +2335,7 @@ extension MainWindow {
         var lastPostTimestamp: Int64 = 0
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
-            let dateStr = separatorString(for: postDate)
+            let dateStr = TimelineDateSeparator.string(for: postDate)
             let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
             if dateStr != lastDateStr {
                 lastDateStr = dateStr

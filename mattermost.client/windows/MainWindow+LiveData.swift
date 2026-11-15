@@ -482,12 +482,15 @@ extension MainWindow {
             guard let list = try? await ws.fetchChannelPosts(channelId: channelId, before: before) else { return }
             let older = list.order.compactMap { list.posts[$0] }
             guard self.activeChannelId == channelId else { return }
-            if older.count < self.postsPerPage {
+            let page = TimelinePager.merge(
+                existing: self.currentChannelPosts,
+                older: older,
+                pageSize: self.postsPerPage
+            )
+            if page.didReachEnd {
                 self.didLoadAllHistory = true
             }
-            let existingIds = Set(self.currentChannelPosts.map { $0.id })
-            let newPosts = older.filter { !existingIds.contains($0.id) }
-            guard !newPosts.isEmpty else {
+            guard !page.inserted.isEmpty else {
                 self.rebuildTimelineContent(scrollToBottom: false)
                 return
             }
@@ -495,9 +498,8 @@ extension MainWindow {
             let anchorHeight = self.timelineDocView.frame.height
             let anchorOffset = self.timelineScrollView.contentView.bounds.origin.y
 
-            self.currentChannelPosts.append(contentsOf: newPosts)
-            self.currentChannelPosts.sort { $0.create_at < $1.create_at }
-            let missingUserIds = Array(Set(newPosts.map { $0.user_id }).subtracting(self.usersById.keys))
+            self.currentChannelPosts = page.posts
+            let missingUserIds = Array(Set(page.inserted.map { $0.user_id }).subtracting(self.usersById.keys))
             if !missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(missingUserIds) {
                 for user in users {
                     self.usersById[user.id] = user

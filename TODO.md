@@ -491,8 +491,19 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ## P5 — Quality & tooling
 
-- [ ] **Expand tests**: view-model state, sidebar selection/collapse, date separators, zoom math and
-  HUD sizing, error paths and pagination. Currently only URL/JSON/WebSocket decoding. — `M`
+- [x] **Expand tests** — `M`
+  - Added `ChatViewModelTests` (workspace defaults, read/mention/membership state, pagination flags,
+    thread storage), `TimelineSupportTests` (older-page merge, dedupe, end-of-history and the
+    relative/weekday/absolute date-separator styles) and `ZoomTests` (preset stepping, clamping,
+    reset, sorted levels and HUD percentage labels).
+  - Added `WebServiceErrorTests` covering HTTP status/server-message formatting, MIME/error
+    descriptions and wrapped decoding/network errors.
+  - Extracted `TimelinePager`/`TimelineDateSeparator` and moved the zoom percentage helper to
+    `ZoomManager` so the logic is pure and testable without a window.
+  - Added `ChatViewModel.swift`, `TimelineSupport.swift` and `ZoomManager.swift` to the test target,
+    and made `test.sh` build for the host architecture so it matches the app module built by
+    `build.sh`.
+  - Suite grew from 27 to 48 tests; all pass and the workspace still renders correctly.
 - [ ] **Add CI** (GitHub Actions): `./build.sh`, `./test.sh`, plus lint. — `S`
 - [ ] **Add SwiftLint/`swift-format` config** and fix the project headermap warning. — `S`
 - [ ] **Align README with reality** — it currently advertises working composer, search, threads,
@@ -509,7 +520,7 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
 
 ```bash
 ./build.sh                 # must succeed with no new warnings
-./test.sh                  # 14 tests today; grow this number
+./test.sh                  # 48 tests: URL/JSON/WebSocket, model, timeline, zoom, errors
 ./run.sh                   # manual smoke test
 ```
 

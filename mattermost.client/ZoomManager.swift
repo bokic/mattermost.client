@@ -75,6 +75,11 @@ final class ZoomManager {
             currentZoomFactor = clamped
         }
     }
+
+    /// Percentage label used by the zoom HUD (e.g. 1.25 → "125%").
+    static func percentageText(for factor: CGFloat) -> String {
+        "\(Int((factor * 100).rounded()))%"
+    }
 }
 
 extension Notification.Name {

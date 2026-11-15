@@ -94,7 +94,8 @@ diagnostic log under the sandbox's temporary directory.
 
 ### Run Unit Tests
 
-Execute the automated test suite covering URL construction, JSON decoding, and WebSocket event payloads:
+Execute the automated test suite covering URL construction, JSON decoding, WebSocket event payloads,
+view-model state, timeline pagination/date separators, zoom math and error descriptions:
 
 ```bash
 ./test.sh

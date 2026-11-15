@@ -72,7 +72,7 @@ final class ZoomHUD {
         let cornerRadius = MMRadius.panel
         let topMargin: CGFloat = 14
 
-        let text = "\(Int((factor * 100).rounded()))%"
+        let text = ZoomManager.percentageText(for: factor)
         let font = MMFont.font(ofSize: fontSize * counterScale, weight: .semibold)
         let ink = inkBounds(for: text, font: font)
 

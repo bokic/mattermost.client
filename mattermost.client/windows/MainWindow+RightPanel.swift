@@ -444,7 +444,7 @@ extension MainWindow {
         if calendar.isDateInYesterday(date) {
             return "Yesterday at \(time)"
         }
-        return "\(Self.localizedDateFormatter.string(from: date)) at \(time)"
+        return "\(TimelineDateFormatter.date.string(from: date)) at \(time)"
     }
 
     func renderFilesPanel(_ files: [MMFileInfo], empty: String) {
