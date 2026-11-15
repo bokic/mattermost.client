@@ -399,12 +399,8 @@ extension MainWindow {
             if user.is_bot == true { return true }
             let roles = user.roles?.lowercased() ?? ""
             if roles.contains("bot") { return true }
-            if user.username.lowercased().contains("bot") { return true }
         }
-        let title = channelDisplayName(for: channel).lowercased()
-        if title.contains("bot") { return true }
-        if channel.name.lowercased().contains("bot") { return true }
-        return false
+        return channelDisplayName(for: channel).lowercased() == "system-bot"
     }
 
     func isCurrentChannelBot() -> Bool {

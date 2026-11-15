@@ -714,6 +714,18 @@ extension MainWindow {
                 action: nil
             ),
             RightPanelRow(
+                title: "Desktop notifications",
+                subtitle: desktopNotificationModeLabel(),
+                meta: "Change",
+                action: { [weak self] in self?.cycleDesktopNotificationMode() }
+            ),
+            RightPanelRow(
+                title: "Notification sound",
+                subtitle: desktopSoundsEnabled() ? "On" : "Off",
+                meta: "Toggle",
+                action: { [weak self] in self?.toggleDesktopNotificationSound() }
+            ),
+            RightPanelRow(
                 title: loadRemoteImagesAutomatically ? "Disable automatic remote images" : "Enable automatic remote images",
                 subtitle: "When off, inline/Giphy images are not fetched from third-party hosts",
                 meta: "Privacy",

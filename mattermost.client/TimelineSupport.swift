@@ -101,7 +101,7 @@ enum TimelineDateSeparator {
         if days == 0 || days == 1 {
             return .relative
         }
-        if days < 6 {
+        if days >= 2 && days < 6 {
             return .weekday
         }
         return .absolute

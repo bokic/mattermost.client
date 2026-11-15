@@ -701,6 +701,15 @@ final class WebService: NSObject {
             body: userIds
         )
     }
+
+    func updateUserNotifyProps(userId: String, props: [String: String]) async throws {
+        _ = try await performRequest(
+            path: "/api/v4/users/\(userId)/notify_props",
+            method: "PUT",
+            jsonBody: props,
+            accept: "application/json"
+        )
+    }
     
     private func encodedPathComponent(_ value: String) -> String {
         var allowed = CharacterSet.urlPathAllowed

@@ -37,7 +37,19 @@ class RoundedEdgePanel: NSView {
         }
     }
 
-    var onClick: (() -> Void)?
+    var onClick: (() -> Void)? {
+        didSet {
+            setAccessibilityElement(onClick != nil)
+            if onClick != nil {
+                setAccessibilityRole(.button)
+            }
+            needsLayout = true
+        }
+    }
+
+    /// Optional VoiceOver label; when nil the panel derives one from its first
+    /// text label or image description.
+    var accessibilityTitle: String?
 
     private(set) var isHovered: Bool = false
 
@@ -101,6 +113,67 @@ class RoundedEdgePanel: NSView {
         }
     }
 
+    override var acceptsFirstResponder: Bool { onClick != nil }
+
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard onClick != nil else {
+            super.keyDown(with: event)
+            return
+        }
+        switch event.keyCode {
+        case 36, 49, 76: // Return, Space, Enter
+            onClick?()
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard let onClick = onClick else { return false }
+        onClick()
+        return true
+    }
+
+    override var focusRingMaskBounds: NSRect { bounds }
+
+    override func drawFocusRingMask() {
+        NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+    }
+
+    private func updateAccessibility() {
+        guard onClick != nil else {
+            setAccessibilityElement(false)
+            return
+        }
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        if let accessibilityTitle = accessibilityTitle, !accessibilityTitle.isEmpty {
+            setAccessibilityLabel(accessibilityTitle)
+            return
+        }
+        for subview in subviews {
+            if let label = subview as? NSTextField, !label.stringValue.isEmpty {
+                setAccessibilityLabel(label.stringValue)
+                return
+            }
+            if let imageView = subview as? NSImageView,
+               let description = imageView.accessibilityLabel(), !description.isEmpty {
+                setAccessibilityLabel(description)
+                return
+            }
+        }
+    }
+
     /// Clickable panels are usually filled with `NSImageView`/label children. AppKit's
     /// `NSImageView` consumes `mouseDown` without forwarding it to its superview, which
     /// turned the icon itself into a dead zone. Keep genuinely interactive descendants
@@ -156,6 +229,7 @@ class RoundedEdgePanel: NSView {
     override func layout() {
         super.layout()
         updateLayerAppearance()
+        updateAccessibility()
     }
 
     private func updateLayerAppearance() {

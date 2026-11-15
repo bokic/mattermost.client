@@ -1967,7 +1967,6 @@ extension MainWindow {
 
         let userObj = usersById[post.user_id]
         let isBotUser = (authorName.lowercased() == "system-bot" ||
-                         authorName.lowercased().contains("bot") ||
                          (userObj?.roles?.lowercased().contains("bot") ?? false) ||
                          (userObj?.is_bot ?? false))
 
@@ -2186,7 +2185,7 @@ extension MainWindow {
                 usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_\(post.user_id)")
             }
             let dotSize: CGFloat = 12
-            let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "online")
+            let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "offline")
             usrDot.frame = NSRect(x: 57, y: topPad + avatarSize - dotSize, width: dotSize, height: dotSize)
             usrDot.cornerRadius = dotSize / 2
             usrDot.color = statusColor(for: stat)
@@ -2509,14 +2508,20 @@ extension MainWindow {
 
         var currentY: CGFloat = 16
 
-        // 1. Welcome Hero
+        // 1. Welcome Hero — only for an empty channel, not above every feed.
         let heroW: CGFloat = min(chatW - 40, 480)
         let heroH: CGFloat = 216
-        timelineHeroContainer.frame = NSRect(x: (chatW - heroW) / 2, y: currentY, width: heroW, height: heroH)
-        timelineHeroContainer.isHidden = false
-        layoutHeroSubviews(heroW: heroW)
-        timelineDocView.addSubview(timelineHeroContainer)
-        currentY += heroH + 16
+        let showHero = currentChannelPosts.isEmpty && !CommandLine.arguments.contains("--demo")
+        if showHero {
+            timelineHeroContainer.frame = NSRect(x: (chatW - heroW) / 2, y: currentY, width: heroW, height: heroH)
+            timelineHeroContainer.isHidden = false
+            layoutHeroSubviews(heroW: heroW)
+            timelineDocView.addSubview(timelineHeroContainer)
+            currentY += heroH + 16
+        } else {
+            timelineHeroContainer.isHidden = true
+            timelineHeroContainer.removeFromSuperview()
+        }
 
         // 2. Posts and Date Separators (localized)
 
@@ -2609,16 +2614,17 @@ extension MainWindow {
             currentY += 40
         }
 
-        var lastDateStr: String? = nil
+        var lastDateKey: Date? = nil
         var lastUserId: String? = nil
         var lastWasSystem = false
         var lastPostTimestamp: Int64 = 0
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
             let dateStr = TimelineDateSeparator.string(for: postDate)
+            let dateKey = Calendar.current.startOfDay(for: postDate)
             let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
-            if dateStr != lastDateStr {
-                lastDateStr = dateStr
+            if lastDateKey != dateKey {
+                lastDateKey = dateKey
                 lastUserId = nil
                 lastWasSystem = false
                 let sepView = createDateSeparator(dateStr: dateStr, width: chatW)

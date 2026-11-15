@@ -128,6 +128,52 @@ extension MainWindow {
         }
     }
 
+    func desktopNotificationMode() -> String {
+        currentUser?.notify_props?.desktop?.lowercased() ?? "all"
+    }
+
+    func desktopNotificationModeLabel() -> String {
+        switch desktopNotificationMode() {
+        case "none": return "Off"
+        case "mention": return "Only mentions"
+        default: return "All messages"
+        }
+    }
+
+    func desktopSoundsEnabled() -> Bool {
+        currentUser?.notify_props?.desktop_sound?.lowercased() != "false"
+    }
+
+    func updateDesktopNotificationPreferences(_ props: [String: String]) {
+        guard let ws = webService, ws.isLogged() else { return }
+        let userId = currentUser?.id ?? ws.currentUserId
+        guard !userId.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                try await ws.updateUserNotifyProps(userId: userId, props: props)
+                self.currentUser = try? await ws.fetchCurrentUser()
+                self.loadSettingsPanel()
+            } catch {
+                self.showInfoAlert("Could not update notification settings: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func cycleDesktopNotificationMode() {
+        let next: String
+        switch desktopNotificationMode() {
+        case "all": next = "mention"
+        case "mention": next = "none"
+        default: next = "all"
+        }
+        updateDesktopNotificationPreferences(["desktop": next])
+    }
+
+    func toggleDesktopNotificationSound() {
+        updateDesktopNotificationPreferences(["desktop_sound": desktopSoundsEnabled() ? "false" : "true"])
+    }
+
     func updateCustomStatusUI() {
         guard let row = customStatusMenuRow else { return }
         let label = row.subviews.compactMap { $0 as? NSTextField }.first

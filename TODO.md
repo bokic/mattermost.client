@@ -549,7 +549,7 @@ source revision. The long list of previously completed work is preserved in
     tell a root has a thread without opening the hover menu. Add the reply footer from the
     web client and refresh it on `thread_updated`/reply.
 
-- [ ] **The 216pt welcome hero is rendered above every channel** — `S`
+- [x] **The 216pt welcome hero is rendered above every channel** — `S`
   - `rebuildTimelineContent` always adds `timelineHeroContainer` and advances by 216 + 16pt
     before the first post (`MainWindow+Timeline.swift:2230-2239`). Every channel therefore
     starts with a large intro illustration even when it has history, pushing messages down
@@ -769,7 +769,7 @@ source revision. The long list of previously completed work is preserved in
   - Move strings into a String Catalog, use `NSLocalizedString`/`String(localized:)`, and
     add at least one additional locale. Dates already follow `Locale.current`.
 
-- [ ] **No standard app menus / Preferences / reopen behavior** — `S`
+- [x] **No standard app menus / Preferences / reopen behavior** — `S`
   - `setupMainMenu` (`AppDelegate.swift:372-454`) omits Services, Hide, Preferences (⌘,),
     a Help menu and standard About metadata. Add a Settings scene/window (or ⌘, sheet) and
     `applicationShouldHandleReopen`.

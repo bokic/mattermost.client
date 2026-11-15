@@ -452,6 +452,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         appMenuItem.submenu = appMenu
         appMenu.addItem(withTitle: "About Mattermost", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
+        let preferencesItem = NSMenuItem(title: "Settings…", action: #selector(AppDelegate.showPreferences), keyEquivalent: ",")
+        preferencesItem.target = self
+        appMenu.addItem(preferencesItem)
+        appMenu.addItem(NSMenuItem.separator())
+        let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: "Services")
+        servicesItem.submenu = servicesMenu
+        appMenu.addItem(servicesItem)
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Hide Mattermost", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthers)
+        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Quit Mattermost", action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
         
         // Edit Menu (Standard text editing shortcuts)
@@ -519,9 +535,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         windowMenu.addItem(NSMenuItem.separator())
         windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        
+
+        // Help Menu
+        let helpMenuItem = NSMenuItem()
+        mainMenu.addItem(helpMenuItem)
+        let helpMenu = NSMenu(title: "Help")
+        helpMenuItem.submenu = helpMenu
+        let docsItem = NSMenuItem(title: "Mattermost Help", action: #selector(AppDelegate.openHelp), keyEquivalent: "?")
+        docsItem.target = self
+        helpMenu.addItem(docsItem)
+
         NSApp.mainMenu = mainMenu
         NSApp.windowsMenu = windowMenu
+        NSApp.helpMenu = helpMenu
         
         NotificationCenter.default.addObserver(self, selector: #selector(zoomFactorChangedNotification(_:)), name: .zoomFactorDidChange, object: nil)
     }
@@ -532,6 +558,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     
     @objc func focusGlobalSearch() {
         mainWindow?.focusGlobalSearch()
+    }
+
+    @objc func showPreferences() {
+        if let mainWindow = mainWindow {
+            NSApp.activate(ignoringOtherApps: true)
+            mainWindow.makeKeyAndOrderFront(nil)
+            mainWindow.showRightPanel(mode: .settings)
+        } else if let loginWindow = loginWindow {
+            NSApp.activate(ignoringOtherApps: true)
+            loginWindow.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    @objc func openHelp() {
+        if let url = URL(string: "https://docs.mattermost.com/") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @objc func focusChannelSearch() {
