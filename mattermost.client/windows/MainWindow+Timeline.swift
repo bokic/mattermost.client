@@ -2150,8 +2150,17 @@ extension MainWindow {
         authorLabel.textColor = darkText
         authorLabel.isEditable = false
         authorLabel.isSelectable = false
+        authorLabel.lineBreakMode = .byTruncatingTail
+        authorLabel.maximumNumberOfLines = 1
+        authorLabel.toolTip = authorName
         let authorSize = (authorName as NSString).size(withAttributes: [.font: authorFont])
-        let authorW = ceil(authorSize.width) + 4
+        let timeFont = MMFont.font(ofSize: 12.6)
+        let timeSize = (timeStr as NSString).size(withAttributes: [.font: timeFont])
+        let reservedTrailing = ceil(timeSize.width) + 8 + (isBotUser ? 40 : 0) + 12
+        let authorW = min(
+            ceil(authorSize.width) + 4,
+            max(60, width - contentX - 8 - reservedTrailing)
+        )
         let authorH = max(20, ceil(authorSize.height))
         authorLabel.frame = NSRect(x: contentX, y: headerTopY + (headerH - authorH) / 2, width: authorW, height: authorH)
         row.addSubview(authorLabel)
@@ -2164,7 +2173,28 @@ extension MainWindow {
             headerRightX = botBadge.frame.maxX + 8
         }
 
-        // Status prompt pill if current user
+        // Timestamp label
+        let timeLabel = NSTextField(labelWithString: timeStr)
+        timeLabel.font = timeFont
+        timeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
+        timeLabel.isEditable = false
+        timeLabel.isSelectable = false
+        let timeW = ceil(timeSize.width) + 4
+        let timeH = max(17, ceil(timeSize.height))
+        timeLabel.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - timeH) / 2, width: timeW, height: timeH)
+        row.addSubview(timeLabel)
+
+        if post.is_pinned == true {
+            let pinView = NSImageView()
+            if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned") {
+                pinView.image = pinImage.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+                pinView.contentTintColor = Theme.shared.awayIndicator
+            }
+            pinView.frame = NSRect(x: timeLabel.frame.maxX + 6, y: headerTopY + 5, width: 13, height: 13)
+            row.addSubview(pinView)
+        }
+
+        // Status prompt follows the timestamp so long usernames never hide the time.
         if isCurrentUser && !isSystem {
             let statusPromptPill = RoundedEdgePanel()
             statusPromptPill.cornerRadius = MMRadius.control
@@ -2187,43 +2217,32 @@ extension MainWindow {
             let iconSpacing: CGFloat = 4
             let pillW = pillPadH + iconSize + iconSpacing + promptTextW + pillPadH
             let pillH = max(18, promptTextH + 4)
-            statusPromptPill.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - pillH) / 2, width: pillW, height: pillH)
-            statusPromptIcon.frame = NSRect(x: pillPadH, y: (pillH - iconSize) / 2, width: iconSize, height: iconSize)
-            statusPromptLabel.frame = NSRect(x: pillPadH + iconSize + iconSpacing, y: (pillH - promptTextH) / 2, width: promptTextW, height: promptTextH)
-            statusPromptPill.addSubview(statusPromptIcon)
-            statusPromptPill.addSubview(statusPromptLabel)
-            statusPromptPill.onHoverChanged = { [weak statusPromptPill] isHovered in
-                statusPromptPill?.color = isHovered ? dividerColor : hoverBg
-                statusPromptPill?.setNeedsAppearanceUpdate()
+            let pillX = timeLabel.frame.maxX + 8
+            if pillX + pillW <= width - 12 {
+                statusPromptPill.frame = NSRect(
+                    x: pillX,
+                    y: headerTopY + (headerH - pillH) / 2,
+                    width: pillW,
+                    height: pillH
+                )
+                statusPromptIcon.frame = NSRect(x: pillPadH, y: (pillH - iconSize) / 2, width: iconSize, height: iconSize)
+                statusPromptLabel.frame = NSRect(
+                    x: pillPadH + iconSize + iconSpacing,
+                    y: (pillH - promptTextH) / 2,
+                    width: promptTextW,
+                    height: promptTextH
+                )
+                statusPromptPill.addSubview(statusPromptIcon)
+                statusPromptPill.addSubview(statusPromptLabel)
+                statusPromptPill.onHoverChanged = { [weak statusPromptPill] isHovered in
+                    statusPromptPill?.color = isHovered ? dividerColor : hoverBg
+                    statusPromptPill?.setNeedsAppearanceUpdate()
+                }
+                statusPromptPill.onClick = { [weak self] in
+                    self?.setStatusMenuOpen(true)
+                }
+                row.addSubview(statusPromptPill)
             }
-            statusPromptPill.onClick = { [weak self] in
-                self?.setStatusMenuOpen(true)
-            }
-            row.addSubview(statusPromptPill)
-            headerRightX = statusPromptPill.frame.maxX + 8
-        }
-
-        // Timestamp label
-        let timeLabel = NSTextField(labelWithString: timeStr)
-        let timeFont = MMFont.font(ofSize: 12.6)
-        timeLabel.font = timeFont
-        timeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
-        timeLabel.isEditable = false
-        timeLabel.isSelectable = false
-        let timeSize = (timeStr as NSString).size(withAttributes: [.font: timeFont])
-        let timeW = ceil(timeSize.width) + 4
-        let timeH = max(17, ceil(timeSize.height))
-        timeLabel.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - timeH) / 2, width: timeW, height: timeH)
-        row.addSubview(timeLabel)
-
-        if post.is_pinned == true {
-            let pinView = NSImageView()
-            if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned") {
-                pinView.image = pinImage.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-                pinView.contentTintColor = Theme.shared.awayIndicator
-            }
-            pinView.frame = NSRect(x: timeLabel.frame.maxX + 6, y: headerTopY + 5, width: 13, height: 13)
-            row.addSubview(pinView)
         }
 
         // Body + GIFs stacked below the header.
@@ -2305,6 +2324,15 @@ extension MainWindow {
             }
             return true
         }
+        if let url = link as? URL, url.scheme == "mattermost-copy-code" {
+            let id = (url.host ?? "").lowercased()
+            if let code = markdownCodeBlockBuffers[id] {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(code, forType: .string)
+            }
+            return true
+        }
         let rawURL: URL?
         if let url = link as? URL {
             rawURL = url
@@ -2374,74 +2402,293 @@ extension MainWindow {
         return lines.map { preprocessMarkdownLine($0) }.joined(separator: "\n")
     }
 
-    func formattedMessage(_ message: String, font: NSFont, color: NSColor) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        var codeRanges: [NSRange] = []
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineBreakMode = .byWordWrapping
-        let codeColor = Theme.shared.centerText.withAlphaComponent(0.08)
+    private static let markdownCodeAttribute = NSAttributedString.Key("mattermostMarkdownCode")
 
-        // Render fenced code blocks verbatim; everything else goes through the
-        // inline Markdown pipeline.
-        for segment in splitCodeBlocks(message) {
-            if segment.isCode {
-                let start = result.length
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.monospacedSystemFont(ofSize: max(11, font.pointSize - 0.5), weight: .regular),
-                    .foregroundColor: color,
-                    .backgroundColor: codeColor,
-                    .paragraphStyle: paragraphStyle
-                ]
-                result.append(NSAttributedString(string: segment.text, attributes: attrs))
-                codeRanges.append(NSRange(location: start, length: result.length - start))
-            } else {
-                result.append(inlineMarkdown(segment.text, font: font, color: color))
+    func formattedMessage(_ message: String, font: NSFont, color: NSColor) -> NSAttributedString {
+        let blocks = MarkdownBlockParser.parse(message)
+        guard !blocks.isEmpty else {
+            return inlineMarkdown(message, font: font, color: color)
+        }
+
+        let result = NSMutableAttributedString()
+        for block in blocks {
+            switch block {
+            case .paragraph(let text):
+                appendInlineBlock(
+                    text,
+                    font: font,
+                    color: color,
+                    style: blockParagraphStyle(spacing: 4),
+                    to: result
+                )
+            case .heading(let level, let text):
+                let pointSize = font.pointSize + (level == 1 ? 8 : level == 2 ? 4 : 2)
+                let headingFont = NSFont(
+                    descriptor: font.fontDescriptor.withSymbolicTraits(.bold),
+                    size: pointSize
+                ) ?? NSFont.boldSystemFont(ofSize: pointSize)
+                appendInlineBlock(
+                    text,
+                    font: headingFont,
+                    color: Theme.shared.centerText,
+                    style: blockParagraphStyle(spacing: 3, before: 6),
+                    to: result
+                )
+            case .bullet(let text, let depth):
+                let indent = CGFloat(depth) * 16
+                appendInlineBlock(
+                    "•  " + text,
+                    font: font,
+                    color: color,
+                    style: blockParagraphStyle(
+                        spacing: 2,
+                        firstLineIndent: indent,
+                        headIndent: indent + 16
+                    ),
+                    to: result
+                )
+            case .ordered(let number, let text, let depth):
+                let indent = CGFloat(depth) * 16
+                appendInlineBlock(
+                    "\(number).  " + text,
+                    font: font,
+                    color: color,
+                    style: blockParagraphStyle(
+                        spacing: 2,
+                        firstLineIndent: indent,
+                        headIndent: indent + 22
+                    ),
+                    to: result
+                )
+            case .blockquote(let text):
+                let quoted = text.components(separatedBy: "\n")
+                    .map { "▎ " + $0 }
+                    .joined(separator: "\n")
+                appendInlineBlock(
+                    quoted,
+                    font: font,
+                    color: color.withAlphaComponent(0.82),
+                    style: blockParagraphStyle(
+                        spacing: 3,
+                        firstLineIndent: 12,
+                        headIndent: 24
+                    ),
+                    to: result
+                )
+            case .code(let language, let text):
+                appendCodeBlock(language: language, text: text, font: font, color: color, to: result)
+            case .table(let headers, let rows):
+                appendTable(headers: headers, rows: rows, font: font, color: color, to: result)
+            case .horizontalRule:
+                let style = blockParagraphStyle(spacing: 6, firstLineIndent: 4, headIndent: 4)
+                let rule = NSAttributedString(
+                    string: String(repeating: "─", count: 40) + "\n",
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: Theme.shared.divider,
+                        .paragraphStyle: style,
+                    ]
+                )
+                result.append(rule)
             }
         }
 
+        let fullRange = NSRange(location: 0, length: result.length)
+        var codeRanges: [NSRange] = []
+        result.enumerateAttribute(Self.markdownCodeAttribute, in: fullRange) { value, range, _ in
+            if value != nil { codeRanges.append(range) }
+        }
         applyInlineEnhancements(to: result, codeRanges: codeRanges, font: font)
         return result
     }
 
-    func splitCodeBlocks(_ message: String) -> [(text: String, isCode: Bool)] {
-        var segments: [(String, Bool)] = []
-        var buffer = ""
-        var inCode = false
-        for line in message.components(separatedBy: "\n") {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                if inCode {
-                    segments.append((buffer, true))
-                    buffer = ""
-                    inCode = false
-                } else {
-                    if !buffer.isEmpty { segments.append((buffer, false)) }
-                    buffer = ""
-                    inCode = true
-                }
-                continue
-            }
-            buffer += line + "\n"
-        }
-        if !buffer.isEmpty {
-            let trimmed = buffer.trimmingCharacters(in: .newlines)
-            if !trimmed.isEmpty { segments.append((trimmed, inCode)) }
-        }
-        return segments
+    func blockParagraphStyle(
+        spacing: CGFloat,
+        before: CGFloat = 0,
+        firstLineIndent: CGFloat = 0,
+        headIndent: CGFloat = 0
+    ) -> NSMutableParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byWordWrapping
+        style.paragraphSpacing = spacing
+        style.paragraphSpacingBefore = before
+        style.firstLineHeadIndent = firstLineIndent
+        style.headIndent = headIndent
+        return style
     }
 
-    func inlineMarkdown(_ message: String, font: NSFont, color: NSColor) -> NSAttributedString {
-        let processedMessage = preprocessMarkdown(message)
+    func appendInlineBlock(
+        _ text: String,
+        font: NSFont,
+        color: NSColor,
+        style: NSParagraphStyle,
+        to result: NSMutableAttributedString
+    ) {
+        let attributed = inlineMarkdown(
+            text,
+            font: font,
+            color: color,
+            paragraphStyle: style
+        )
+        result.append(attributed)
+        if !attributed.string.hasSuffix("\n") {
+            result.append(NSAttributedString(
+                string: "\n",
+                attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style]
+            ))
+        }
+    }
+
+    func registerMarkdownCodeBlock(_ text: String) -> String {
+        if markdownCodeBlockBuffers.count > 200 {
+            markdownCodeBlockBuffers.removeAll(keepingCapacity: true)
+        }
+        let id = UUID().uuidString.lowercased()
+        markdownCodeBlockBuffers[id] = text
+        return id
+    }
+
+    func appendCodeBlock(
+        language: String?,
+        text: String,
+        font: NSFont,
+        color: NSColor,
+        to result: NSMutableAttributedString
+    ) {
+        let codeFont = NSFont.monospacedSystemFont(ofSize: max(11, font.pointSize - 0.5), weight: .regular)
+        let captionFont = NSFont.monospacedSystemFont(ofSize: max(9, font.pointSize - 2), weight: .semibold)
+        let codeColor = Theme.shared.centerText.withAlphaComponent(0.08)
+        let style = blockParagraphStyle(spacing: 0, firstLineIndent: 10, headIndent: 10)
+        let id = registerMarkdownCodeBlock(text)
+
+        let languageLabel = (language?.isEmpty == false ? language!.uppercased() : "CODE")
+        let header = NSMutableAttributedString(
+            string: "\(languageLabel)    Copy",
+            attributes: [
+                .font: captionFont,
+                .foregroundColor: Theme.shared.centerTextMuted,
+                .backgroundColor: codeColor,
+                .paragraphStyle: style,
+            ]
+        )
+        let copyRange = (header.string as NSString).range(of: "Copy")
+        if copyRange.location != NSNotFound,
+           let link = URL(string: "mattermost-copy-code://\(id)") {
+            header.addAttributes([
+                .link: link,
+                .foregroundColor: Theme.shared.buttonBg,
+            ], range: copyRange)
+        }
+        header.addAttribute(
+            Self.markdownCodeAttribute,
+            value: true,
+            range: NSRange(location: 0, length: header.length)
+        )
+        result.append(header)
+        result.append(NSAttributedString(
+            string: "\n",
+            attributes: [.font: captionFont, .backgroundColor: codeColor, .paragraphStyle: style]
+        ))
+
+        let body = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: codeFont,
+                .foregroundColor: color,
+                .backgroundColor: codeColor,
+                .paragraphStyle: style,
+            ]
+        )
+        for (range, kind) in MarkdownSyntaxHighlighter.highlights(in: text, language: language) {
+            let highlightColor: NSColor
+            switch kind {
+            case .comment:
+                highlightColor = Theme.shared.centerTextMuted
+            case .string:
+                highlightColor = .systemGreen
+            case .number:
+                highlightColor = .systemOrange
+            case .keyword:
+                highlightColor = .systemPurple
+            }
+            body.addAttribute(.foregroundColor, value: highlightColor, range: range)
+        }
+        body.addAttribute(
+            Self.markdownCodeAttribute,
+            value: true,
+            range: NSRange(location: 0, length: body.length)
+        )
+        result.append(body)
+        result.append(NSAttributedString(
+            string: "\n",
+            attributes: [.font: codeFont, .backgroundColor: codeColor, .paragraphStyle: style]
+        ))
+    }
+
+    func appendTable(
+        headers: [String],
+        rows: [[String]],
+        font: NSFont,
+        color: NSColor,
+        to result: NSMutableAttributedString
+    ) {
+        guard !headers.isEmpty else { return }
+        let monoFont = NSFont.monospacedSystemFont(ofSize: max(10, font.pointSize - 1), weight: .regular)
+        let headerFont = NSFont.monospacedSystemFont(ofSize: max(10, font.pointSize - 1), weight: .semibold)
+        let style = blockParagraphStyle(spacing: 1, firstLineIndent: 4, headIndent: 4)
+        let widths = headers.indices.map { index in
+            max(headers[index].count, rows.map { $0[index].count }.max() ?? 0)
+        }
+        func pad(_ value: String, width: Int) -> String {
+            value + String(repeating: " ", count: max(0, width - value.count))
+        }
+
+        let headerLine = headers.enumerated()
+            .map { pad($0.element, width: widths[$0.offset]) }
+            .joined(separator: " │ ")
+        let separator = widths.map { String(repeating: "─", count: $0) }.joined(separator: "─┼─")
+        result.append(NSAttributedString(
+            string: headerLine + "\n",
+            attributes: [.font: headerFont, .foregroundColor: Theme.shared.centerText, .paragraphStyle: style]
+        ))
+        result.append(NSAttributedString(
+            string: separator + "\n",
+            attributes: [.font: monoFont, .foregroundColor: Theme.shared.centerTextMuted, .paragraphStyle: style]
+        ))
+        for row in rows {
+            let line = headers.indices
+                .map { pad(row[$0], width: widths[$0]) }
+                .joined(separator: " │ ")
+            result.append(NSAttributedString(
+                string: line + "\n",
+                attributes: [.font: monoFont, .foregroundColor: color, .paragraphStyle: style]
+            ))
+        }
+    }
+
+    func inlineMarkdown(
+        _ message: String,
+        font: NSFont,
+        color: NSColor,
+        paragraphStyle: NSParagraphStyle? = nil
+    ) -> NSAttributedString {
         var options = AttributedString.MarkdownParsingOptions()
         options.interpretedSyntax = .inlineOnlyPreservingWhitespace
 
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineBreakMode = .byWordWrapping
+        let resolvedStyle: NSParagraphStyle
+        if let paragraphStyle = paragraphStyle {
+            resolvedStyle = paragraphStyle
+        } else {
+            let style = NSMutableParagraphStyle()
+            style.lineBreakMode = .byWordWrapping
+            resolvedStyle = style
+        }
 
-        guard let attr = try? AttributedString(markdown: processedMessage, options: options) else {
-            return NSAttributedString(string: processedMessage, attributes: [
+        guard let attr = try? AttributedString(markdown: message, options: options) else {
+            return NSAttributedString(string: message, attributes: [
                 .font: font,
                 .foregroundColor: color,
-                .paragraphStyle: paragraphStyle
+                .paragraphStyle: resolvedStyle,
             ])
         }
 
@@ -2459,11 +2706,12 @@ extension MainWindow {
             var attrs: [NSAttributedString.Key: Any] = [
                 .font: runFont,
                 .foregroundColor: (run.link != nil) ? brandBlue : color,
-                .paragraphStyle: paragraphStyle
+                .paragraphStyle: resolvedStyle,
             ]
 
             if isCode {
                 attrs[.backgroundColor] = Theme.shared.centerText.withAlphaComponent(0.08)
+                attrs[Self.markdownCodeAttribute] = true
             }
 
             if intent.contains(.strikethrough) {
@@ -2502,7 +2750,7 @@ extension MainWindow {
         }
 
         // ~channel and #channel links
-        if let regex = try? NSRegularExpression(pattern: #"(?<![\w])[~#]([A-Za-z0-9][A-Za-z0-9_-]+)"#) {
+        if let regex = try? NSRegularExpression(pattern: #"(?<![\w/#])[~#]([A-Za-z0-9][A-Za-z0-9_-]+)"#) {
             for match in regex.matches(in: result.string, options: [], range: fullRange) where !isCode(match.range) {
                 let name = string.substring(with: match.range(at: 1)).lowercased()
                 guard channelsByName[name] != nil || channelsByName[name.replacingOccurrences(of: "-", with: " ")] != nil else { continue }

@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **85/85 pass** |
+| `./test.sh` | **93/93 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -29,23 +29,6 @@ completed baseline remains at the end.
 ## P3 — Web-parity backlog
 
 ### Message rendering
-
-- [ ] **Markdown block support is incomplete** — `M`
-  - `formattedMessage` uses `.inlineOnlyPreservingWhitespace`
-    (`MainWindow+Timeline.swift:1961-2037`). Blockquotes are flattened to `|` prefixes,
-    bullets to `•`, and numbered lists/headings/tables/horizontal rules are not rendered;
-    fenced code has no language label, copy button, or syntax highlighting.
-  - Add a proper block parser (or a Markdown renderer) for headings, ordered lists, tables,
-    blockquote styling and fenced-code chrome. Keep the current inline pass for
-    mentions/channels/emoji.
-  - The inline-enhancement pass excludes only fenced code, not backtick inline-code spans
-    (`MainWindow+Timeline.swift:2123-2169`), so `@user`, `~channel` and `:emoji:` inside
-    inline code get styled or replaced; the channel regex also matches `#fragment` in URLs.
-  - The bundled emoji catalog has ~371 entries (`MainWindowSupport.swift:159-551`), so other
-    valid shortcodes render literally (`MainWindow+Timeline.swift:1272-1278`). Ship the full
-    Mattermost emoji data or load it from the server.
-  - Author labels are not truncated and the "Update your status" pill precedes the timestamp
-    (`MainWindow+Timeline.swift:1786-1849`), so long usernames or the pill clip the time.
 
 - [ ] **No reply count/thread indicator on timeline root posts** — `S`
   - `createPostRow` never shows "N replies" or a participant avatars row, so users cannot
@@ -331,7 +314,7 @@ completed baseline remains at the end.
 ## Suggested next 10 (highest value first)
 
 1. **Sign, notarize and verify the release artifact** — requires the Developer ID certificate and notary credentials.
-2. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
+2. **Reaction UX gaps** — web-parity reaction controls.
 3. **Accessibility/localization pass** — labels, focus traversal and localized strings.
 4. **Timeline incremental updates + bounded caches** — scalability for large channels.
 5. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
@@ -365,8 +348,10 @@ history is in git; the original long-form checklist lives in prior commits of th
 - **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
   badges, mentions, "New Messages" divider + floating jump pill, date separators with
   localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,
-  attachments/image cards/lightbox, reactions chips with add/remove, hover toolbar, inline
-  markdown/code/mentions/channels/emoji/images, Giphy rendering.
+  attachments/image cards/lightbox, reactions chips with add/remove, hover toolbar,
+  block-level Markdown (headings, ordered/nested lists, blockquotes, tables, rules),
+  fenced code with language labels, syntax highlighting and copy links, inline
+  markdown/mentions/channels/emoji/images, full Mattermost emoji catalog, Giphy rendering.
 - **Realtime:** WebSocket posts, presence, typing, reaction refresh, exponential-backoff
   reconnect, wake/network reconnect, connection banner, 15 s status backstop.
 - **Sidebar/teams:** scrollable channel sidebar with pinned team/filter header, server
@@ -393,7 +378,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 85 tests today; keep the count rising
+./test.sh       # 93 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

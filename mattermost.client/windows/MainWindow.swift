@@ -588,6 +588,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         set { viewModel.currentUserStatus = newValue }
     }
     var userAvatarsById = BoundedImageCache()
+    var markdownCodeBlockBuffers: [String: String] = [:]
     var userAvatarFetchTasks: [String: Task<Void, Never>] = [:]
     var composerSendIconView: NSImageView?
     var composerSendEnabled = false
