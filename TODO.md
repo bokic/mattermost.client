@@ -152,9 +152,14 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     from Mattermost") appears below the channel header while the socket is down and hides on connect;
     the Settings panel's Reconnect row shows Connected/Reconnecting.
 
-- [ ] **Typing is receive-only; date/time handling is static** — `S`
-  - Where: `sendUserTyping` is never called; dates use `en_US_POSIX` and a fixed `h:mm a` format.
-  - Done when: typing is sent while editing, and dates respect the user's locale/time zone.
+- [x] **Typing is receive-only; date/time handling is static** — `S`
+  - Typing: `sendTypingIfNeeded()` already fires from the composer's text-change delegate (throttled to
+    1.5 s) via `user_typing`; receive-side indicators were already wired.
+  - Dates: every formatter now uses `Locale.current` — timestamps are `timeStyle = .short` (respects
+    24-hour settings), date separators use relative Today/Yesterday (`doesRelativeDateFormatting`),
+    localized weekday names and the localized medium date; search results, mentions, saved/pinned
+    rows, the edited tooltip and the DND "Tomorrow" label all use the same helpers. The hardcoded
+    `en_US_POSIX` formatters are gone.
 
 ---
 

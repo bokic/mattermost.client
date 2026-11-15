@@ -108,6 +108,48 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     let rightPanel = RoundedEdgePanel()
     let rightPanelTitle = NSTextField(labelWithString: "Threads")
     let rightPanelCloseButton = RoundedEdgePanel()
+    private static let localizedTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    private static let localizedDateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    private static let localizedDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+    private static let localizedWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("EEEE")
+        return formatter
+    }()
+    private static let localizedShortWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter
+    }()
+    private static let localizedRelativeDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        formatter.doesRelativeDateFormatting = true
+        return formatter
+    }()
+    
     let connectionBanner = RoundedEdgePanel()
     let connectionLabel = NSTextField(labelWithString: "")
     let rightPanelScroll = NSScrollView()
@@ -1078,9 +1120,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         let author = usersById[post.user_id]?.username ?? "Unknown"
         let channelName = channelsById[post.channel_id].map { channelDisplayName(for: $0) } ?? ""
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, h:mm a"
-        let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+        let when = Self.localizedDateTimeFormatter.string(
+            from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000)
+        )
         let meta = [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · ")
         
         let metaLabel = NSTextField(labelWithString: meta)
@@ -2043,10 +2085,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         
         let tomorrowDayString: String = {
             let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = "EEE"
-            return "\(formatter.string(from: tomorrow)), 9:00 AM"
+            return "\(Self.localizedShortWeekdayFormatter.string(from: tomorrow)), 9:00 AM"
         }()
         
         let rows: [(title: String, rightText: String?, y: CGFloat, height: CGFloat, durationSeconds: TimeInterval?)] = [
@@ -4347,11 +4386,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
             let posts = list.order.compactMap { list.posts[$0] }
             self.hydrateUsers(posts.map { $0.user_id }) {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MMM d, h:mm a"
+                let dateFormatter = Self.localizedDateTimeFormatter
                 let rows = posts.map { post -> RightPanelRow in
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
-                    let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+                    let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
                     return RightPanelRow(
                         title: post.message.replacingOccurrences(of: "\n", with: " "),
                         subtitle: "\(author) · \(when)",
@@ -4386,12 +4424,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
             let posts = list.order.compactMap { list.posts[$0] }
             self.hydrateUsers(posts.map { $0.user_id }) {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MMM d, h:mm a"
+                let dateFormatter = Self.localizedDateTimeFormatter
                 let rows = posts.map { post -> RightPanelRow in
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
                     let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
-                    let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+                    let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
                     return RightPanelRow(
                         title: post.message.replacingOccurrences(of: "\n", with: " "),
                         subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
@@ -4426,12 +4463,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
             let posts = list.order.compactMap { list.posts[$0] }
             self.hydrateUsers(posts.map { $0.user_id }) {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MMM d, h:mm a"
+                let dateFormatter = Self.localizedDateTimeFormatter
                 let rows = posts.map { post -> RightPanelRow in
                     let author = self.usersById[post.user_id]?.username ?? "Unknown"
                     let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
-                    let when = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+                    let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
                     return RightPanelRow(
                         title: post.message.replacingOccurrences(of: "\n", with: " "),
                         subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
@@ -5074,9 +5110,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             .foregroundColor: editColor
         ]
         if let date = editDate {
-            let editTimeFmt = DateFormatter()
-            editTimeFmt.dateFormat = "h:mm a"
-            tooltipAttrs[.toolTip] = "Edited at \(editTimeFmt.string(from: date))"
+            tooltipAttrs[.toolTip] = "Edited at \(Self.localizedTimeFormatter.string(from: date))"
         } else {
             tooltipAttrs[.toolTip] = "Edited"
         }
@@ -5917,27 +5951,18 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         timelineDocView.addSubview(timelineHeroContainer)
         currentY += heroH + 16
         
-        // 2. Posts and Date Separators
-        let fullDateFmt = DateFormatter()
-        fullDateFmt.locale = Locale(identifier: "en_US_POSIX")
-        fullDateFmt.dateFormat = "MMMM d, yyyy"
-        let weekdayFmt = DateFormatter()
-        weekdayFmt.locale = Locale(identifier: "en_US_POSIX")
-        weekdayFmt.dateFormat = "EEEE"
+        // 2. Posts and Date Separators (localized)
         let calendar = Calendar.current
         func separatorString(for date: Date) -> String {
-            if calendar.isDateInToday(date) { return "Today" }
-            if calendar.isDateInYesterday(date) { return "Yesterday" }
+            if calendar.isDateInToday(date) || calendar.isDateInYesterday(date) {
+                return Self.localizedRelativeDateFormatter.string(from: date)
+            }
             let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: Date())).day ?? 99
             if days < 6 {
-                return weekdayFmt.string(from: date)
+                return Self.localizedWeekdayFormatter.string(from: date)
             }
-            return fullDateFmt.string(from: date)
+            return Self.localizedDateFormatter.string(from: date)
         }
-        
-        let timeFmt = DateFormatter()
-        timeFmt.locale = Locale(identifier: "en_US_POSIX")
-        timeFmt.dateFormat = "h:mm a"
         
         var postsToRender = currentChannelPosts
         if postsToRender.isEmpty && !((NSApp.delegate as? AppDelegate)?.webService.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
@@ -6058,7 +6083,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             let withinGroupingWindow = (post.create_at - lastPostTimestamp) <= 5 * 60 * 1000
             let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId
                 && !post.user_id.isEmpty && withinGroupingWindow)
-            let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: timeFmt.string(from: postDate), isConsecutive: isConsecutive)
+            let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: Self.localizedTimeFormatter.string(from: postDate), isConsecutive: isConsecutive)
             rowView.frame.origin.y = currentY
             timelineDocView.addSubview(rowView)
             currentY += rowH + (isConsecutive ? 2 : 4)
