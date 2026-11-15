@@ -4,10 +4,12 @@
 set -euo pipefail
 
 LOG_FILE="${TMPDIR:-/tmp}/mattermost-build.log"
+APP_VERSION="$("$(dirname "$0")/version.sh" --full)"
 
-echo "Building mattermost.client..."
+echo "Building mattermost.client $APP_VERSION..."
 set +e
-xcodebuild -project mattermost.client.xcodeproj -scheme mattermost.client -derivedDataPath build build 2>&1 | tee "$LOG_FILE"
+xcodebuild -project mattermost.client.xcodeproj -scheme mattermost.client -derivedDataPath build \
+    MARKETING_VERSION="$APP_VERSION" build 2>&1 | tee "$LOG_FILE"
 STATUS=${PIPESTATUS[0]}
 set -e
 

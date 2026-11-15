@@ -5,12 +5,12 @@ set -e
 
 APP_PATH="build/Build/Products/Release/mattermost.client.app"
 
-GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-GIT_COMMITS=$(git rev-list "${GIT_TAG}"..HEAD --count 2>/dev/null || echo "0")
-DMG_PATH="build/Build/Products/Release/mattermost.client-${GIT_TAG}-${GIT_COMMITS}.dmg"
+APP_VERSION="$("$(dirname "$0")/version.sh" --full)"
+DMG_PATH="build/Build/Products/Release/mattermost.client-${APP_VERSION}.dmg"
 
-echo "Building mattermost.client (Release)..."
-xcodebuild -project mattermost.client.xcodeproj -scheme mattermost.client -derivedDataPath build -configuration Release build
+echo "Building mattermost.client ${APP_VERSION} (Release)..."
+xcodebuild -project mattermost.client.xcodeproj -scheme mattermost.client -derivedDataPath build \
+    -configuration Release MARKETING_VERSION="$APP_VERSION" build
 
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: .app bundle not found at $APP_PATH"

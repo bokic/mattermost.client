@@ -442,7 +442,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         self.isReleasedWhenClosed = false
         self.backgroundColor = Theme.shared.sidebarTeamBarBg
 
-        self.title = "Mattermost"
+        self.title = AppVersion.windowTitle
         self.contentViewController = MainWindowViewController()
         self.setContentSize(NSSize(width: rect.width, height: rect.height))
         self.center()

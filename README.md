@@ -50,6 +50,7 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Status Bar Item**: System menu bar icon with click-to-toggle window visibility.
 - **Dynamic UI Zoom & Scaling**: Native macOS View menu and keyboard shortcuts (`⌘+` / `⌘=` to zoom in, `⌘-` to zoom out, `⌘0` to reset to actual size), plus trackpad pinch-to-zoom and `⌘`+scroll wheel. A shared `WindowZoomController` owns the scaling for both the login and main windows: it rewrites `contentView.bounds` to `frame / zoomFactor`, re-applies on resize, forwards zoom shortcuts, and shows the HUD. A stored zoom level always wins; when none is saved the app defers to the OS display scale and renders at actual size.
 - **Window Frame**: Opens at the web client's viewport (1440×783, clamped to the screen) and remembers the last frame via `NSWindow` autosave.
+- **Build Version**: The main window title appends the build version, computed at build time as `<nearest git tag>.<commits since that tag>` when there are commits after the tag; if HEAD is exactly on the tag, only the tag is shown (for example `Mattermost 0.8.0` vs `Mattermost 0.8.0.1`). `version.sh` exposes the base/count/full strings; tags do not need to be pushed for local builds.
 - **Unread Badges & Notifications**: Incoming messages for channels you are not looking at bump a blue dot on the menu-bar icon, set the Dock badge, and post a native macOS notification; opening the channel (or returning to the app) clears them.
 - **App Sandbox & Credentials**: Release builds store the bearer token and account password in the macOS Keychain as generic-password items scoped to this app. Debug builds (`#if DEBUG`) use a plaintext UserDefaults store instead so rebuilds do not trigger macOS Keychain authorization prompts. Plaintext values written by older builds are migrated and deleted at launch.
 - **Privacy Manifest**: Ships `PrivacyInfo.xcprivacy` declaring no tracking or collected data and the single required-reason API in use (`UserDefaults`, reason `CA92.1`).
@@ -75,6 +76,8 @@ Compile the application with Xcode command line tools:
 ```bash
 ./build.sh
 ```
+
+`build.sh` derives the app version from the nearest local git tag plus the number of commits since it (see `version.sh`); on the tag itself no suffix is added. If no tag exists it falls back to the project's `MARKETING_VERSION`, so CI builds still work when tags are intentionally kept local.
 
 ### Run
 
@@ -139,6 +142,7 @@ mattermost.client/
 ├── run.sh                                      # Launches the compiled application
 ├── test.sh                                     # Runs the unit test suite via xcrun xctest
 ├── lint.sh                                     # swift-format lint for migrated source files
+├── version.sh                                  # Tag + commits-since-tag build version
 ├── .swift-format                               # swift-format configuration (4-space indent)
 ├── .github/workflows/ci.yml                    # Build, test and lint on macOS runners
 ├── tools/                                      # Web-client DOM/computed-style measurement tools
@@ -151,6 +155,7 @@ mattermost.client/
 │   ├── AppDelegate.swift                       # Lifecycle, status bar item, and window controller
 │   ├── KeychainHelper.swift                    # Sandboxed persistent credential and token storage
 │   ├── ChatViewModel.swift                     # Live workspace state (REST/WebSocket data model)
+│   ├── AppVersion.swift                        # Build version and window title
 │   ├── DesignTokens.swift                      # Shared radii, metrics and native accents
 │   ├── TimelineSupport.swift                   # Timeline pagination and date separators
 │   ├── Theme.swift                             # Server theme parsing and palettes
