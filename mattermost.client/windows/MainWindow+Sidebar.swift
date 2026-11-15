@@ -93,7 +93,19 @@ extension MainWindow {
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let memberships = try? await ws.fetchChannelMemberships(userId: userId, teamId: team.id) else { return }
+            var memberships: [MMChannelMembership] = []
+            var page = 0
+            while true {
+                guard let batch = try? await ws.fetchChannelMemberships(
+                    userId: userId,
+                    teamId: team.id,
+                    page: page,
+                    perPage: 200
+                ) else { return }
+                memberships += batch
+                if batch.count < 200 { break }
+                page += 1
+            }
             guard self.activeTeam?.id == team.id else { return }
             self.membershipsByChannel = Dictionary(memberships.map { ($0.channel_id, $0) }, uniquingKeysWith: { _, latest in latest })
             var unread: [String: Int] = [:]

@@ -521,12 +521,23 @@ extension MainWindow {
             rightPanelResizeHandle.frame = NSRect(x: 0, y: 0, width: 6, height: panelHeight)
 
             let isThreadMode = (rightPanelMode == .thread)
+            let isMembersMode = (rightPanelMode == .members)
             let replyBarHeight: CGFloat = isThreadMode ? threadComposerHeight : 0
+            let memberSearchHeight: CGFloat = isMembersMode ? 34 : 0
+            memberSearchField.isHidden = !isMembersMode
+            if isMembersMode {
+                memberSearchField.frame = NSRect(
+                    x: 16,
+                    y: panelHeight - 56 - 30,
+                    width: max(80, panelWidth - 32),
+                    height: 24
+                )
+            }
             rightPanelScroll.frame = NSRect(
                 x: 0,
                 y: replyBarHeight,
                 width: panelWidth,
-                height: max(0, panelHeight - 56 - replyBarHeight)
+                height: max(0, panelHeight - 56 - replyBarHeight - memberSearchHeight)
             )
             if abs(panelWidth - lastRightPanelContentWidth) > 1 {
                 lastRightPanelContentWidth = panelWidth

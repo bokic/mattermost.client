@@ -14,7 +14,7 @@ inspection, asset inspection and a live run against Mattermost v12.1.0.
 |---|---|
 | Clean build (`./build.sh`) | **Succeeds** |
 | Unit tests (`./test.sh`) | **79/79 pass** |
-| Coverage | **33.3% line coverage**, enforced by a 30% gate in `test.sh` |
+| Coverage | **32.8% line coverage**, enforced by a 30% gate in `test.sh` |
 | Swift mode | **Swift 6** with `SWIFT_STRICT_CONCURRENCY = complete`, zero concurrency warnings |
 | Lint (`./lint.sh`) | **Passes** for the migrated allowlist (`swift-format --strict`) |
 | Deployment target | **macOS 15.0** (app and tests) |

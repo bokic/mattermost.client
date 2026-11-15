@@ -1444,6 +1444,11 @@ extension MainWindow {
             }
             return
         }
+        if (notification.object as? NSTextField) === memberSearchField {
+            memberSearchQuery = memberSearchField.stringValue
+            renderMembersPanel()
+            return
+        }
         guard (notification.object as? NSTextField) === findChannelLabel else { return }
         channelFilterQuery = findChannelLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)

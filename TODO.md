@@ -28,15 +28,6 @@ completed baseline remains at the end.
 
 ## P1 — Correctness, data loss & reliability
 
-- [ ] **Every RHS list is first-page-only** — `M`
-  - Members: 60 (`webservice.swift:822-832`), Files: 60 (`:1036`), Saved: 60 (`:846`),
-    Mentions: 30 (`MainWindow+RightPanel.swift:571`), Pinned: no pagination. Only Threads
-    paginates today; the remaining lists do not load more on scroll.
-  - Members also have no search, role/presence grouping, pagination, or click-through to a
-    profile/DM (`loadChannelMembers`, `MainWindow+RightPanel.swift:349-378`).
-  - `loadUnreadState` fetches one page of 200 memberships (`MainWindow+Sidebar.swift:85`,
-    `webservice.swift:882-890`), so users in more than 200 channels lose badges for the rest.
-
 - [ ] **RHS panels have stale/list-detail bugs** — `M`
   - Loaders do not cancel or check the current mode/channel: closing or switching panels
     leaves old rows visible, and a late response can overwrite the new panel
@@ -382,12 +373,11 @@ completed baseline remains at the end.
 ## Suggested next 10 (highest value first)
 
 1. **Sign, notarize and verify the release artifact** — requires the Developer ID certificate and notary credentials.
-2. **RHS pagination + stale-result guards** — the daily-use list panels still stop at one page.
-3. **Sidebar scrolling + category management** — long sidebars become unreachable.
-4. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
-5. **Accessibility/localization pass** — labels, focus traversal and localized strings.
-6. **Timeline incremental updates + bounded caches** — scalability for large channels.
-7. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
+2. **Sidebar scrolling + category management** — long sidebars become unreachable.
+3. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
+4. **Accessibility/localization pass** — labels, focus traversal and localized strings.
+5. **Timeline incremental updates + bounded caches** — scalability for large channels.
+6. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
 
 ---
 
@@ -406,10 +396,11 @@ history is in git; the original long-form checklist lives in prior commits of th
   Messages/Files results with scroll/load-more, Up/Down/Enter navigation, term highlighting,
   recent searches, working `From:`/`In:`/`On:`/`Before:`/`After:` filter pills, and scoped
   `in:` prefill from ⌘F.
-- **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels,
-  paginated thread list with unread indicators and read-state clearing, thread view with
-  newest-reply pagination, grouped replies, multiline/emoji/autocomplete/attachment reply
-  composer, typing indicators and send state, draggable/persisted width, channel subtitle.
+- **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels;
+  paginated thread/member/file/mention/saved/pinned lists with load-more on scroll; member
+  search plus admin/presence grouping and DM click-through; thread read state and
+  newest-reply pagination; rich thread reply composer with typing/send state; draggable
+  width and channel subtitle.
 - **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
   badges, mentions, "New Messages" divider + floating jump pill, date separators with
   localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,

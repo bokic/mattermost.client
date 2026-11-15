@@ -31,6 +31,16 @@ extension MainWindow {
         rightPanelSubtitle.isSelectable = false
         rightPanel.addSubview(rightPanelSubtitle)
 
+        memberSearchField.placeholderString = "Search members"
+        memberSearchField.font = MMFont.font(ofSize: 12)
+        memberSearchField.isBezeled = false
+        memberSearchField.drawsBackground = true
+        memberSearchField.backgroundColor = Theme.shared.centerHover
+        memberSearchField.focusRingType = .none
+        memberSearchField.delegate = self
+        memberSearchField.isHidden = true
+        rightPanel.addSubview(memberSearchField)
+
         rightPanelCloseButton.cornerRadius = MMRadius.control
         rightPanelCloseButton.color = .clear
         let closeIcon = NSImageView()
@@ -188,6 +198,8 @@ extension MainWindow {
             loadThreads()
         case .members:
             rightPanelTitle.stringValue = L10n.string("Members")
+            memberSearchQuery = ""
+            memberSearchField.stringValue = ""
             loadChannelMembers()
         case .pinned:
             rightPanelTitle.stringValue = L10n.string("Pinned Posts")
@@ -329,14 +341,60 @@ extension MainWindow {
     }
 
     @objc func rightPanelDidScroll() {
-        guard isRightPanelVisible,
-              rightPanelMode == .threads,
-              threadItemsHasMore,
-              !threadItemsLoading
-        else { return }
+        guard isRightPanelVisible else { return }
         let clip = rightPanelScroll.contentView.bounds
-        if clip.maxY >= rightPanelDoc.frame.height - 100 {
-            loadMoreThreads()
+        let nearBottom = clip.maxY >= rightPanelDoc.frame.height - 100
+        guard nearBottom else { return }
+
+        switch rightPanelMode {
+        case .threads:
+            if threadItemsHasMore, !threadItemsLoading {
+                loadMoreThreads()
+            }
+        case .members:
+            loadMoreMembers()
+        case .files:
+            loadMoreChannelFiles()
+        case .mentions:
+            loadMoreMentions()
+        case .saved:
+            loadMoreSavedPosts()
+        case .pinned:
+            loadMorePinnedPosts()
+        default:
+            break
+        }
+    }
+
+    func rhsKey(for mode: RightPanelMode) -> String? {
+        switch mode {
+        case .members: return "members"
+        case .files: return "files"
+        case .mentions: return "mentions"
+        case .saved: return "saved"
+        case .pinned: return "pinned"
+        default: return nil
+        }
+    }
+
+    func rhsHasMore(_ mode: RightPanelMode) -> Bool {
+        guard let key = rhsKey(for: mode) else { return false }
+        return rhsHasMoreByMode[key] ?? false
+    }
+
+    func rhsLoading(_ mode: RightPanelMode) -> Bool {
+        guard let key = rhsKey(for: mode) else { return false }
+        return rhsLoadingByMode[key] ?? false
+    }
+
+    func loadMoreForMode(_ mode: RightPanelMode) {
+        switch mode {
+        case .members: loadMoreMembers()
+        case .files: loadMoreChannelFiles()
+        case .mentions: loadMoreMentions()
+        case .saved: loadMoreSavedPosts()
+        case .pinned: loadMorePinnedPosts()
+        default: break
         }
     }
 
@@ -802,38 +860,154 @@ extension MainWindow {
         }
     }
 
-    func loadChannelMembers() {
+    func loadChannelMembers(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
               !activeChannelId.isEmpty else {
             renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
+        let key = "members"
+        if reset {
+            rhsRequestTokenByMode[key, default: 0] += 1
+            rhsPageByMode[key] = 0
+            rhsHasMoreByMode[key] = false
+            rhsLoadingByMode[key] = true
+            channelMembers = []
+            renderRightPanel(empty: "Loading members…", rows: [])
+        } else {
+            guard rhsHasMoreByMode[key] == true, rhsLoadingByMode[key] != true else { return }
+            rhsLoadingByMode[key] = true
+            renderMembersPanel()
+        }
+
+        let token = rhsRequestTokenByMode[key] ?? 0
+        let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
+        let pageSize = 60
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let members = try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200) else {
-                self.renderRightPanel(empty: "Could not load members", rows: [])
-                return
-            }
-            guard self.activeChannelId == channelId else { return }
-            self.channelMembersCountLabel.stringValue = members.count >= 200 ? "200+" : "\(members.count)"
-            self.layoutRightChatPanel()
-            self.hydrateUsers(members.map { $0.user_id }) {
-                let rows = members.map { member -> RightPanelRow in
-                    let user = self.usersById[member.user_id]
-                    let name = user?.username ?? member.user_id
-                    let role = (member.roles ?? "").contains("channel_admin") ? "Channel Admin"
-                        : (member.roles ?? "").contains("channel_user") ? "Member" : ""
-                    return RightPanelRow(
-                        title: name,
-                        subtitle: [user?.first_name, user?.last_name].compactMap { $0 }.joined(separator: " "),
-                        meta: role,
-                        action: nil
-                    )
+            do {
+                let members = try await ws.fetchChannelMembers(
+                    channelId: channelId,
+                    page: page,
+                    perPage: pageSize
+                )
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.activeChannelId == channelId,
+                      self.rightPanelMode == .members
+                else { return }
+                let existing = Set(reset ? [] : self.channelMembers.map(\.user_id))
+                let newMembers = members.filter { !existing.contains($0.user_id) }
+                self.channelMembers = reset ? members : self.channelMembers + newMembers
+                self.rhsPageByMode[key] = page
+                self.rhsHasMoreByMode[key] = members.count == pageSize
+                self.rhsLoadingByMode[key] = false
+                self.channelMembersCountLabel.stringValue =
+                    self.rhsHasMoreByMode[key] == true ? "\(self.channelMembers.count)+" : "\(self.channelMembers.count)"
+                self.layoutRightChatPanel()
+                self.hydrateUsers(members.map { $0.user_id }) { [weak self] in
+                    guard let self = self, token == self.rhsRequestTokenByMode[key] else { return }
+                    self.renderMembersPanel()
                 }
-                self.renderRightPanel(empty: L10n.string("No members"), rows: rows)
+            } catch {
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .members
+                else { return }
+                self.rhsLoadingByMode[key] = false
+                if reset {
+                    self.renderRightPanel(empty: "Could not load members", rows: [])
+                } else {
+                    self.renderMembersPanel()
+                }
             }
         }
+    }
+
+    func loadMoreMembers() {
+        loadChannelMembers(reset: false)
+    }
+
+    func renderMembersPanel() {
+        let query = memberSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = channelMembers.filter { member in
+            guard !query.isEmpty else { return true }
+            let user = usersById[member.user_id]
+            let name = user?.username.lowercased() ?? member.user_id.lowercased()
+            let full = [user?.first_name, user?.last_name]
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .lowercased()
+            return name.contains(query) || full.contains(query)
+        }
+        guard !filtered.isEmpty else {
+            renderRightPanel(
+                empty: query.isEmpty ? L10n.string("No members") : "No members match “\(memberSearchQuery)”",
+                rows: []
+            )
+            return
+        }
+
+        var groups: [(String, [MMChannelMember])] = []
+        if !query.isEmpty {
+            groups = [("Results", filtered)]
+        } else {
+            let admins = filtered.filter { member in
+                let roles = member.roles ?? ""
+                return roles.contains("channel_admin") || roles.contains("team_admin")
+                    || roles.contains("system_admin")
+            }
+            let adminIds = Set(admins.map(\.user_id))
+            let online = filtered.filter { member in
+                guard !adminIds.contains(member.user_id) else { return false }
+                let status = userStatusById[member.user_id] ?? "offline"
+                return status == "online" || status == "away" || status == "dnd"
+            }
+            let onlineIds = Set(online.map(\.user_id))
+            let offline = filtered.filter {
+                !adminIds.contains($0.user_id) && !onlineIds.contains($0.user_id)
+            }
+            groups = [
+                ("Admins", admins),
+                ("Online", online),
+                ("Offline", offline),
+            ]
+        }
+
+        var rows: [RightPanelRow] = []
+        for (title, members) in groups where !members.isEmpty {
+            rows.append(RightPanelRow(
+                title: title,
+                subtitle: "",
+                meta: "\(members.count)",
+                action: nil,
+                isSectionHeader: true
+            ))
+            for member in members {
+                let user = usersById[member.user_id]
+                let name = user?.username ?? member.user_id
+                let roles = member.roles ?? ""
+                let role = roles.contains("system_admin") ? "System Admin"
+                    : roles.contains("team_admin") ? "Team Admin"
+                    : roles.contains("channel_admin") ? "Channel Admin"
+                    : roles.contains("guest") ? "Guest"
+                    : "Member"
+                let status = userStatusById[member.user_id] ?? "offline"
+                let fullName = [user?.first_name, user?.last_name]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                rows.append(RightPanelRow(
+                    title: name,
+                    subtitle: fullName,
+                    meta: "\(role) · \(status.capitalized)",
+                    action: { [weak self] in
+                        guard let self = self, let user = self.usersById[member.user_id] else { return }
+                        self.startDirectMessage(with: user)
+                        self.closeRightPanel()
+                    }
+                ))
+            }
+        }
+        renderRightPanel(empty: L10n.string("No members"), rows: rows)
     }
 
     func loadPinnedPosts() {
@@ -842,54 +1016,139 @@ extension MainWindow {
             renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
+        let key = "pinned"
+        rhsRequestTokenByMode[key, default: 0] += 1
+        let token = rhsRequestTokenByMode[key] ?? 0
+        rhsLoadingByMode[key] = true
+        rhsHasMoreByMode[key] = false
+        pinnedVisibleLimit = 20
+        pinnedPosts = []
+        renderRightPanel(empty: "Loading pinned posts…", rows: [])
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let list = try? await ws.fetchPinnedPosts(channelId: channelId) else {
-                self.renderRightPanel(empty: "Could not load pinned posts", rows: [])
-                return
-            }
-            let posts = list.order.compactMap { list.posts[$0] }
-            self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
-                guard let self = self else { return }
-                let dateFormatter = Self.localizedDateTimeFormatter
-                let rows = posts.map { post -> RightPanelRow in
-                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
-                    let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
-                    return RightPanelRow(
-                        title: post.message.replacingOccurrences(of: "\n", with: " "),
-                        subtitle: "\(author) · \(when)",
-                        meta: "",
-                        action: { [weak self] in
-                            guard let self = self else { return }
-                            self.pendingJumpPostId = post.id
-                            self.openChannel(withId: post.channel_id)
-                            self.closeRightPanel()
-                        }
-                    )
+            do {
+                let list = try await ws.fetchPinnedPosts(channelId: channelId)
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.activeChannelId == channelId,
+                      self.rightPanelMode == .pinned
+                else { return }
+                self.pinnedPosts = list.order.compactMap { list.posts[$0] }
+                self.rhsLoadingByMode[key] = false
+                self.rhsHasMoreByMode[key] = self.pinnedPosts.count > self.pinnedVisibleLimit
+                self.hydrateUsers(self.pinnedPosts.map { $0.user_id }) { [weak self] in
+                    self?.renderPinnedPosts()
                 }
-                self.renderRightPanel(empty: "No pinned posts", rows: rows)
+            } catch {
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .pinned
+                else { return }
+                self.rhsLoadingByMode[key] = false
+                self.renderRightPanel(empty: "Could not load pinned posts", rows: [])
             }
         }
     }
 
-    func loadChannelFiles() {
+    func loadMorePinnedPosts() {
+        guard pinnedPosts.count > pinnedVisibleLimit else { return }
+        pinnedVisibleLimit += 20
+        rhsHasMoreByMode["pinned"] = pinnedPosts.count > pinnedVisibleLimit
+        renderPinnedPosts()
+    }
+
+    func renderPinnedPosts() {
+        let visible = Array(pinnedPosts.prefix(pinnedVisibleLimit))
+        guard !visible.isEmpty else {
+            renderRightPanel(empty: "No pinned posts", rows: [])
+            return
+        }
+        let dateFormatter = Self.localizedDateTimeFormatter
+        let rows = visible.map { post -> RightPanelRow in
+            let author = usersById[post.user_id]?.username ?? "Unknown"
+            let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+            let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
+            return RightPanelRow(
+                title: snippet.isEmpty ? "(attachment)" : snippet,
+                subtitle: "\(author) · \(when)",
+                meta: "",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.pendingJumpPostId = post.id
+                    self.openChannel(withId: post.channel_id)
+                    self.closeRightPanel()
+                }
+            )
+        }
+        renderRightPanel(empty: "No pinned posts", rows: rows)
+    }
+
+    func loadChannelFiles(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam, !activeChannelId.isEmpty else {
             renderFilesPanel([], empty: "Sign in to see files")
             return
         }
+        let key = "files"
+        if reset {
+            rhsRequestTokenByMode[key, default: 0] += 1
+            rhsPageByMode[key] = 0
+            rhsHasMoreByMode[key] = false
+            rhsLoadingByMode[key] = true
+            channelFiles = []
+            renderFilesPanel([], empty: "Loading files…")
+        } else {
+            guard rhsHasMoreByMode[key] == true, rhsLoadingByMode[key] != true else { return }
+            rhsLoadingByMode[key] = true
+            renderFilesPanel(channelFiles, empty: L10n.string("No files yet"), scrollToTop: false)
+        }
+
+        let token = rhsRequestTokenByMode[key] ?? 0
+        let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
+        let pageSize = 60
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let files = try? await ws.searchChannelFiles(teamId: team.id, channelId: channelId) else {
-                self.renderFilesPanel([], empty: "Could not load files")
-                return
-            }
-            self.hydrateUsers(files.compactMap { $0.user_id }) {
-                self.renderFilesPanel(files, empty: L10n.string("No files yet"))
+            do {
+                let files = try await ws.searchChannelFiles(
+                    teamId: team.id,
+                    channelId: channelId,
+                    page: page,
+                    perPage: pageSize
+                )
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.activeChannelId == channelId,
+                      self.rightPanelMode == .files
+                else { return }
+                let existing = Set(reset ? [] : self.channelFiles.map(\.id))
+                let newFiles = files.filter { !existing.contains($0.id) }
+                self.channelFiles = reset ? files : self.channelFiles + newFiles
+                self.rhsPageByMode[key] = page
+                self.rhsHasMoreByMode[key] = files.count == pageSize
+                self.rhsLoadingByMode[key] = false
+                self.hydrateUsers(files.compactMap { $0.user_id }) { [weak self] in
+                    guard let self = self, token == self.rhsRequestTokenByMode[key] else { return }
+                    self.renderFilesPanel(
+                        self.channelFiles,
+                        empty: L10n.string("No files yet"),
+                        scrollToTop: reset
+                    )
+                }
+            } catch {
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .files
+                else { return }
+                self.rhsLoadingByMode[key] = false
+                if reset {
+                    self.renderFilesPanel([], empty: "Could not load files")
+                } else {
+                    self.renderFilesPanel(self.channelFiles, empty: L10n.string("No files yet"), scrollToTop: false)
+                }
             }
         }
+    }
+
+    func loadMoreChannelFiles() {
+        loadChannelFiles(reset: false)
     }
 
     func fileTimestamp(_ file: MMFileInfo) -> String {
@@ -906,7 +1165,7 @@ extension MainWindow {
         return "\(TimelineDateFormatter.date.string(from: date)) at \(time)"
     }
 
-    func renderFilesPanel(_ files: [MMFileInfo], empty: String) {
+    func renderFilesPanel(_ files: [MMFileInfo], empty: String, scrollToTop: Bool = true) {
         let width = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
         rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
 
@@ -1009,12 +1268,26 @@ extension MainWindow {
             y += rowHeight + 8
         }
 
+        if rhsHasMore(.files) || rhsLoading(.files) {
+            let loading = rhsLoading(.files)
+            let footer = makeRightPanelFooter(
+                title: loading ? "Loading more files…" : "Load more files",
+                width: rowWidth,
+                action: loading ? nil : { [weak self] in self?.loadMoreChannelFiles() }
+            )
+            footer.frame = NSRect(x: 14, y: y, width: rowWidth, height: 32)
+            rightPanelDoc.addSubview(footer)
+            y += 40
+        }
+
         rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
-        rightPanelScroll.contentView.scroll(to: .zero)
-        rightPanelScroll.reflectScrolledClipView(rightPanelScroll.contentView)
+        if scrollToTop {
+            rightPanelScroll.contentView.scroll(to: .zero)
+            rightPanelScroll.reflectScrolledClipView(rightPanelScroll.contentView)
+        }
     }
 
-    func loadMentions() {
+    func loadMentions(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
             renderRightPanel(empty: "Sign in to see mentions", rows: [])
@@ -1025,38 +1298,75 @@ extension MainWindow {
             renderRightPanel(empty: "Sign in to see mentions", rows: [])
             return
         }
+        let key = "mentions"
+        if reset {
+            rhsRequestTokenByMode[key, default: 0] += 1
+            rhsPageByMode[key] = 0
+            rhsHasMoreByMode[key] = false
+            rhsLoadingByMode[key] = true
+            mentionPosts = []
+            renderRightPanel(empty: "Loading mentions…", rows: [])
+        } else {
+            guard rhsHasMoreByMode[key] == true, rhsLoadingByMode[key] != true else { return }
+            rhsLoadingByMode[key] = true
+            renderMentionsPanel()
+        }
+
+        let token = rhsRequestTokenByMode[key] ?? 0
+        let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
+        let pageSize = 30
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let list = try? await ws.searchPosts(teamId: team.id, terms: "@" + username, perPage: 30) else {
-                self.renderRightPanel(empty: "Could not load mentions", rows: [])
-                return
-            }
-            let posts = list.order.compactMap { list.posts[$0] }
-            self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
-                guard let self = self else { return }
-                let dateFormatter = Self.localizedDateTimeFormatter
-                let rows = posts.map { post -> RightPanelRow in
-                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
-                    let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
-                    let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
-                    return RightPanelRow(
-                        title: post.message.replacingOccurrences(of: "\n", with: " "),
-                        subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
-                        meta: "",
-                        action: { [weak self] in
-                            guard let self = self else { return }
-                            self.pendingJumpPostId = post.id
-                            self.openChannel(withId: post.channel_id)
-                            self.closeRightPanel()
-                        }
-                    )
+            do {
+                let list = try await ws.searchPosts(
+                    teamId: team.id,
+                    terms: "@" + username,
+                    page: page,
+                    perPage: pageSize
+                )
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .mentions
+                else { return }
+                let posts = list.order.compactMap { list.posts[$0] }
+                let existing = Set(reset ? [] : self.mentionPosts.map(\.id))
+                let newPosts = posts.filter { !existing.contains($0.id) }
+                self.mentionPosts = reset ? posts : self.mentionPosts + newPosts
+                self.rhsPageByMode[key] = page
+                self.rhsHasMoreByMode[key] = posts.count == pageSize
+                self.rhsLoadingByMode[key] = false
+                self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
+                    guard let self = self, token == self.rhsRequestTokenByMode[key] else { return }
+                    self.renderMentionsPanel()
                 }
-                self.renderRightPanel(empty: "No recent mentions", rows: rows)
+            } catch {
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .mentions
+                else { return }
+                self.rhsLoadingByMode[key] = false
+                if reset {
+                    self.renderRightPanel(empty: "Could not load mentions", rows: [])
+                } else {
+                    self.renderMentionsPanel()
+                }
             }
         }
     }
 
-    func loadSavedPosts() {
+    func loadMoreMentions() {
+        loadMentions(reset: false)
+    }
+
+    func renderMentionsPanel() {
+        let dateFormatter = Self.localizedDateTimeFormatter
+        renderPostRows(mentionPosts, empty: "No recent mentions") { post in
+            let author = self.usersById[post.user_id]?.username ?? "Unknown"
+            let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
+            let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+            return [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+    }
+
+    func loadSavedPosts(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
               let team = activeTeam else {
             renderRightPanel(empty: "Sign in to see saved posts", rows: [])
@@ -1067,36 +1377,99 @@ extension MainWindow {
             renderRightPanel(empty: "Sign in to see saved posts", rows: [])
             return
         }
+        let key = "saved"
+        if reset {
+            rhsRequestTokenByMode[key, default: 0] += 1
+            rhsPageByMode[key] = 0
+            rhsHasMoreByMode[key] = false
+            rhsLoadingByMode[key] = true
+            savedPosts = []
+            renderRightPanel(empty: "Loading saved posts…", rows: [])
+        } else {
+            guard rhsHasMoreByMode[key] == true, rhsLoadingByMode[key] != true else { return }
+            rhsLoadingByMode[key] = true
+            renderSavedPostsPanel()
+        }
+
+        let token = rhsRequestTokenByMode[key] ?? 0
+        let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
+        let pageSize = 60
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let list = try? await ws.fetchFlaggedPosts(userId: userId, teamId: team.id) else {
-                self.renderRightPanel(empty: "Could not load saved posts", rows: [])
-                return
-            }
-            let posts = list.order.compactMap { list.posts[$0] }
-            self.savedPostIds = Set(posts.map { $0.id })
-            self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
-                guard let self = self else { return }
-                let dateFormatter = Self.localizedDateTimeFormatter
-                let rows = posts.map { post -> RightPanelRow in
-                    let author = self.usersById[post.user_id]?.username ?? "Unknown"
-                    let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
-                    let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
-                    return RightPanelRow(
-                        title: post.message.replacingOccurrences(of: "\n", with: " "),
-                        subtitle: [author, channelName, when].filter { !$0.isEmpty }.joined(separator: " · "),
-                        meta: "Saved",
-                        action: { [weak self] in
-                            guard let self = self else { return }
-                            self.pendingJumpPostId = post.id
-                            self.openChannel(withId: post.channel_id)
-                            self.closeRightPanel()
-                        }
-                    )
+            do {
+                let list = try await ws.fetchFlaggedPosts(
+                    userId: userId,
+                    teamId: team.id,
+                    page: page,
+                    perPage: pageSize
+                )
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .saved
+                else { return }
+                let posts = list.order.compactMap { list.posts[$0] }
+                let existing = Set(reset ? [] : self.savedPosts.map(\.id))
+                let newPosts = posts.filter { !existing.contains($0.id) }
+                self.savedPosts = reset ? posts : self.savedPosts + newPosts
+                self.savedPostIds = Set(self.savedPosts.map { $0.id })
+                self.rhsPageByMode[key] = page
+                self.rhsHasMoreByMode[key] = posts.count == pageSize
+                self.rhsLoadingByMode[key] = false
+                self.hydrateUsers(posts.map { $0.user_id }) { [weak self] in
+                    guard let self = self, token == self.rhsRequestTokenByMode[key] else { return }
+                    self.renderSavedPostsPanel()
                 }
-                self.renderRightPanel(empty: "No saved posts", rows: rows)
+            } catch {
+                guard token == self.rhsRequestTokenByMode[key],
+                      self.rightPanelMode == .saved
+                else { return }
+                self.rhsLoadingByMode[key] = false
+                if reset {
+                    self.renderRightPanel(empty: "Could not load saved posts", rows: [])
+                } else {
+                    self.renderSavedPostsPanel()
+                }
             }
         }
+    }
+
+    func loadMoreSavedPosts() {
+        loadSavedPosts(reset: false)
+    }
+
+    func renderSavedPostsPanel() {
+        let dateFormatter = Self.localizedDateTimeFormatter
+        renderPostRows(savedPosts, empty: "No saved posts") { post in
+            let author = self.usersById[post.user_id]?.username ?? "Unknown"
+            let channelName = self.channelsById[post.channel_id].map { self.channelDisplayName(for: $0) } ?? ""
+            let when = dateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000))
+            return [author, channelName, when, "Saved"].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+    }
+
+    func renderPostRows(
+        _ posts: [MMPost],
+        empty: String,
+        subtitle: (MMPost) -> String
+    ) {
+        guard !posts.isEmpty else {
+            renderRightPanel(empty: empty, rows: [])
+            return
+        }
+        let rows = posts.map { post -> RightPanelRow in
+            let snippet = post.message.replacingOccurrences(of: "\n", with: " ")
+            return RightPanelRow(
+                title: snippet.isEmpty ? "(attachment)" : snippet,
+                subtitle: subtitle(post),
+                meta: "",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.pendingJumpPostId = post.id
+                    self.openChannel(withId: post.channel_id)
+                    self.closeRightPanel()
+                }
+            )
+        }
+        renderRightPanel(empty: empty, rows: rows)
     }
 
     func loadSettingsPanel() {
@@ -1388,11 +1761,46 @@ extension MainWindow {
             y = 56
         } else {
             for item in rows {
-                let row = makeRightPanelRow(item, width: width - 24)
-                row.frame = NSRect(x: 12, y: y, width: width - 24, height: 64)
-                rightPanelDoc.addSubview(row)
-                y += 68
+                if item.isSectionHeader {
+                    let header = NSTextField(labelWithString: item.title)
+                    header.font = MMFont.font(ofSize: 11, weight: .semibold)
+                    header.textColor = Theme.shared.centerTextMuted
+                    header.isEditable = false
+                    header.isSelectable = false
+                    header.frame = NSRect(x: 14, y: y + 6, width: width - 52, height: 16)
+                    rightPanelDoc.addSubview(header)
+                    if !item.meta.isEmpty {
+                        let count = NSTextField(labelWithString: item.meta)
+                        count.font = MMFont.font(ofSize: 11)
+                        count.textColor = Theme.shared.centerTextMuted
+                        count.alignment = .right
+                        count.isEditable = false
+                        count.isSelectable = false
+                        count.frame = NSRect(x: width - 44, y: y + 6, width: 32, height: 16)
+                        rightPanelDoc.addSubview(count)
+                    }
+                    y += 26
+                } else {
+                    let row = makeRightPanelRow(item, width: width - 24)
+                    row.frame = NSRect(x: 12, y: y, width: width - 24, height: 64)
+                    rightPanelDoc.addSubview(row)
+                    y += 68
+                }
             }
+        }
+
+        if let key = rhsKey(for: rightPanelMode), !rows.isEmpty,
+           (rhsHasMoreByMode[key] == true || rhsLoadingByMode[key] == true) {
+            let mode = rightPanelMode
+            let loading = rhsLoadingByMode[key] == true
+            let footer = makeRightPanelFooter(
+                title: loading ? "Loading more…" : "Load more",
+                width: width - 24,
+                action: loading ? nil : { [weak self] in self?.loadMoreForMode(mode) }
+            )
+            footer.frame = NSRect(x: 12, y: y, width: width - 24, height: 32)
+            rightPanelDoc.addSubview(footer)
+            y += 38
         }
 
         if rightPanelMode == .threads, !rows.isEmpty,

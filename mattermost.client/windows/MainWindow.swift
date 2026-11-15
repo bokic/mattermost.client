@@ -302,6 +302,18 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     var threadsSidebarItem: SidebarItemView?
     var totalUnreadThreads = 0
+    let memberSearchField = NSSearchField()
+    var memberSearchQuery = ""
+    var channelMembers: [MMChannelMember] = []
+    var channelFiles: [MMFileInfo] = []
+    var savedPosts: [MMPost] = []
+    var mentionPosts: [MMPost] = []
+    var pinnedPosts: [MMPost] = []
+    var pinnedVisibleLimit = 20
+    var rhsPageByMode: [String: Int] = [:]
+    var rhsHasMoreByMode: [String: Bool] = [:]
+    var rhsLoadingByMode: [String: Bool] = [:]
+    var rhsRequestTokenByMode: [String: Int] = [:]
     var sidebarCategories: [SidebarCategoryView] = []
     var selectedSidebarItemId: String = "town-square"
 
@@ -816,6 +828,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let subtitle: String
         let meta: String
         let action: (() -> Void)?
+        var isSectionHeader: Bool = false
     }
 
     struct ParsedGiphyMessage {
