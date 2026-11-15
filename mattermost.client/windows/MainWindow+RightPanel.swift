@@ -41,6 +41,16 @@ extension MainWindow {
         memberSearchField.isHidden = true
         rightPanel.addSubview(memberSearchField)
 
+        filesSearchField.placeholderString = "Search files"
+        filesSearchField.font = MMFont.font(ofSize: 12)
+        filesSearchField.isBezeled = false
+        filesSearchField.drawsBackground = true
+        filesSearchField.backgroundColor = Theme.shared.centerHover
+        filesSearchField.focusRingType = .none
+        filesSearchField.delegate = self
+        filesSearchField.isHidden = true
+        rightPanel.addSubview(filesSearchField)
+
         rightPanelCloseButton.cornerRadius = MMRadius.control
         rightPanelCloseButton.color = .clear
         let closeIcon = NSImageView()
@@ -182,14 +192,12 @@ extension MainWindow {
         if completionTarget == .thread && mode != .thread {
             closeCompletion()
         }
+        invalidateRHSRequests()
+        clearRightPanelContent()
         rightPanelMode = mode
         isRightPanelVisible = true
         rightPanel.isHidden = false
-        if mode == .settings || mode == .browse {
-            rightPanelSubtitle.stringValue = ""
-        } else {
-            rightPanelSubtitle.stringValue = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
-        }
+        rightPanelSubtitle.stringValue = rightPanelSubtitleText(for: mode)
         layoutRightChatPanel()
 
         switch mode {
@@ -224,12 +232,52 @@ extension MainWindow {
             loadThread()
         case .files:
             rightPanelTitle.stringValue = L10n.string("Files")
+            filesSearchQuery = ""
+            filesSearchField.stringValue = ""
             loadChannelFiles()
         case .channelInfo:
             rightPanelTitle.stringValue = L10n.string("Channel Info")
             loadChannelInfo()
         }
         layoutRightChatPanel()
+    }
+
+    func invalidateRHSRequests() {
+        threadRequestToken += 1
+        threadsRequestToken += 1
+        for key in rhsRequestTokenByMode.keys {
+            rhsRequestTokenByMode[key, default: 0] += 1
+        }
+    }
+
+    func clearRightPanelContent() {
+        rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
+        let width = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
+        rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: 1)
+    }
+
+    func rightPanelSubtitleText(for mode: RightPanelMode) -> String {
+        let channelName = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
+        let teamName = activeTeam?.display_name ?? "your team"
+        switch mode {
+        case .threads:
+            return "Across your channels"
+        case .mentions:
+            return "Recent mentions across \(teamName)"
+        case .saved:
+            return "Saved posts across \(teamName)"
+        case .settings, .browse:
+            return ""
+        case .thread:
+            if let post = threadPosts.first(where: { $0.id == threadRootId })
+                ?? threadPosts.first,
+               let channel = channelsById[post.channel_id] {
+                return channelDisplayName(for: channel)
+            }
+            return channelName
+        case .members, .pinned, .files, .channelInfo:
+            return channelName
+        }
     }
 
     func toggleRightPanel(mode: RightPanelMode) {
@@ -243,6 +291,8 @@ extension MainWindow {
     func closeRightPanel() {
         if rightPanelMode == .thread { saveThreadDraft() }
         if completionTarget == .thread { closeCompletion() }
+        invalidateRHSRequests()
+        clearRightPanelContent()
         isRightPanelVisible = false
         rightPanel.isHidden = true
         lastRightPanelContentWidth = 0
@@ -301,7 +351,9 @@ extension MainWindow {
                     page: page,
                     perPage: pageSize
                 )
-                guard token == self.threadsRequestToken else { return }
+                guard token == self.threadsRequestToken,
+                      self.rightPanelMode == .threads
+                else { return }
                 if reset {
                     self.threadItems = response.threads
                 } else {
@@ -324,7 +376,9 @@ extension MainWindow {
                     self.renderThreadsPanel()
                 }
             } catch {
-                guard token == self.threadsRequestToken else { return }
+                guard token == self.threadsRequestToken,
+                      self.rightPanelMode == .threads
+                else { return }
                 self.threadItemsLoading = false
                 if reset {
                     self.renderRightPanel(empty: "Could not load threads", rows: [])
@@ -457,6 +511,7 @@ extension MainWindow {
 
     func showThread(for post: MMPost) {
         let root = (post.root_id?.isEmpty == false) ? post.root_id! : post.id
+        invalidateRHSRequests()
         if rightPanelMode == .thread && threadRootId != root {
             saveThreadDraft()
         }
@@ -984,9 +1039,10 @@ extension MainWindow {
             ))
             for member in members {
                 let user = usersById[member.user_id]
-                let name = user?.username ?? member.user_id
+                let name = user?.username ?? "Unknown user"
                 let roles = member.roles ?? ""
-                let role = roles.contains("system_admin") ? "System Admin"
+                let role = user?.is_bot == true ? "Bot"
+                    : roles.contains("system_admin") ? "System Admin"
                     : roles.contains("team_admin") ? "Team Admin"
                     : roles.contains("channel_admin") ? "Channel Admin"
                     : roles.contains("guest") ? "Guest"
@@ -1076,6 +1132,10 @@ extension MainWindow {
                     self.pendingJumpPostId = post.id
                     self.openChannel(withId: post.channel_id)
                     self.closeRightPanel()
+                },
+                secondaryActionTitle: "Unpin",
+                secondaryAction: { [weak self] in
+                    self?.togglePin(post)
                 }
             )
         }
@@ -1121,7 +1181,8 @@ extension MainWindow {
                 else { return }
                 let existing = Set(reset ? [] : self.channelFiles.map(\.id))
                 let newFiles = files.filter { !existing.contains($0.id) }
-                self.channelFiles = reset ? files : self.channelFiles + newFiles
+                self.channelFiles = (reset ? files : self.channelFiles + newFiles)
+                    .sorted { ($0.create_at ?? 0) > ($1.create_at ?? 0) }
                 self.rhsPageByMode[key] = page
                 self.rhsHasMoreByMode[key] = files.count == pageSize
                 self.rhsLoadingByMode[key] = false
@@ -1169,6 +1230,13 @@ extension MainWindow {
         let width = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
         rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
 
+        let query = filesSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let visibleFiles = files.filter { file in
+            guard !query.isEmpty else { return true }
+            let uploader = file.user_id.flatMap { usersById[$0]?.username.lowercased() } ?? ""
+            return (file.name ?? "").lowercased().contains(query) || uploader.contains(query)
+        }
+
         var y: CGFloat = 12
         let heading = NSTextField(labelWithString: "Recent files")
         heading.font = MMFont.font(ofSize: 14, weight: .semibold)
@@ -1179,8 +1247,10 @@ extension MainWindow {
         rightPanelDoc.addSubview(heading)
         y += 30
 
-        if files.isEmpty {
-            let label = NSTextField(labelWithString: empty)
+        if visibleFiles.isEmpty {
+            let label = NSTextField(
+                labelWithString: query.isEmpty ? empty : "No files match “\(filesSearchQuery)”"
+            )
             label.font = MMFont.font(ofSize: 13)
             label.textColor = Theme.shared.centerTextMuted
             label.alignment = .center
@@ -1188,13 +1258,30 @@ extension MainWindow {
             label.isSelectable = false
             label.frame = NSRect(x: 12, y: y + 8, width: max(0, width - 24), height: 20)
             rightPanelDoc.addSubview(label)
-            rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: y + 48)
+            y += 48
+            let rowWidth = max(200, width - 28)
+            if rhsHasMore(.files) || rhsLoading(.files) {
+                let loading = rhsLoading(.files)
+                let footer = makeRightPanelFooter(
+                    title: loading ? "Loading more files…" : "Load more files",
+                    width: rowWidth,
+                    action: loading ? nil : { [weak self] in self?.loadMoreChannelFiles() }
+                )
+                footer.frame = NSRect(x: 14, y: y, width: rowWidth, height: 32)
+                rightPanelDoc.addSubview(footer)
+                y += 40
+            }
+            rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: max(y, 1))
+            if scrollToTop {
+                rightPanelScroll.contentView.scroll(to: .zero)
+                rightPanelScroll.reflectScrolledClipView(rightPanelScroll.contentView)
+            }
             return
         }
 
         let rowWidth = max(200, width - 28)
         let rowHeight: CGFloat = 64
-        for file in files {
+        for file in visibleFiles {
             let card = FlippedEdgePanel()
             card.cornerRadius = MMRadius.control
             card.color = Theme.shared.centerBg
@@ -1221,10 +1308,16 @@ extension MainWindow {
                 imageView.imageScaling = .scaleProportionallyUpOrDown
                 thumb.addSubview(imageView)
                 card.addSubview(thumb)
-                if let ws = webService {
+                if let cached = filePreviewImages[file.id] {
+                    imageView.image = cached
+                    thumbImage = cached
+                } else if let ws = webService, !filePreviewLoading.contains(file.id) {
+                    filePreviewLoading.insert(file.id)
                     Task { @MainActor [weak imageView] in
+                        defer { self.filePreviewLoading.remove(file.id) }
                         if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
                            let image = NSImage(data: data) {
+                            self.filePreviewImages[file.id] = image
                             imageView?.image = image
                             thumbImage = image
                         }
@@ -1242,10 +1335,11 @@ extension MainWindow {
             name.lineBreakMode = .byTruncatingMiddle
             name.isEditable = false
             name.isSelectable = false
-            name.frame = NSRect(x: 64, y: 12, width: max(60, rowWidth - 76), height: 17)
+            name.frame = NSRect(x: 64, y: 12, width: max(60, rowWidth - 108), height: 17)
             card.addSubview(name)
 
-            let details = [formatFileSize(file.size), fileTimestamp(file)]
+            let uploader = file.user_id.flatMap { usersById[$0]?.username } ?? "Unknown user"
+            let details = [uploader, formatFileSize(file.size), fileTimestamp(file)]
                 .filter { !$0.isEmpty }
                 .joined(separator: "  •  ")
             let metadata = NSTextField(labelWithString: details)
@@ -1253,8 +1347,29 @@ extension MainWindow {
             metadata.textColor = Theme.shared.centerText
             metadata.isEditable = false
             metadata.isSelectable = false
-            metadata.frame = NSRect(x: 64, y: 32, width: max(60, rowWidth - 76), height: 17)
+            metadata.frame = NSRect(x: 64, y: 32, width: max(60, rowWidth - 108), height: 17)
             card.addSubview(metadata)
+
+            let download = RoundedEdgePanel()
+            download.cornerRadius = MMRadius.control
+            download.color = .clear
+            download.frame = NSRect(x: rowWidth - 32, y: 20, width: 22, height: 22)
+            let downloadIcon = NSImageView()
+            if let image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Download file") {
+                downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+                downloadIcon.contentTintColor = Theme.shared.centerTextMuted
+            }
+            downloadIcon.frame = NSRect(x: 4, y: 4, width: 14, height: 14)
+            download.addSubview(downloadIcon)
+            download.onHoverChanged = { [weak download] isHovered in
+                download?.color = isHovered ? Theme.shared.centerHover : .clear
+                download?.setNeedsAppearanceUpdate()
+            }
+            download.onClick = { [weak self] in
+                self?.downloadAttachment(file)
+            }
+            download.accessibilityTitle = "Download \(file.name ?? "file")"
+            card.addSubview(download)
 
             card.onClick = { [weak self] in
                 if isImage {
@@ -1496,8 +1611,10 @@ extension MainWindow {
                     : "Reconnecting…",
                 meta: "Connection",
                 action: { [weak self] in
-                    self?.webService?.reconnectIfNeeded()
-                    self?.loadSettingsPanel()
+                    guard let self = self else { return }
+                    self.settingsAwaitingReconnect = self.webService?.isWebSocketConnected != true
+                    self.webService?.reconnectIfNeeded()
+                    self.loadSettingsPanel()
                 }
             ),
             RightPanelRow(
@@ -1545,12 +1662,24 @@ extension MainWindow {
                 title: "Log out",
                 subtitle: "Clear credentials and return to sign in",
                 meta: "",
-                action: {
-                    (NSApp.delegate as? AppDelegate)?.logout()
+                action: { [weak self] in
+                    self?.confirmLogout()
                 }
             )
         ]
         renderRightPanel(empty: "", rows: rows)
+    }
+
+    func confirmLogout() {
+        let alert = NSAlert()
+        alert.messageText = "Log out?"
+        alert.informativeText = "This clears the saved credentials and returns to the sign-in window."
+        alert.addButton(withTitle: "Log out")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: self) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            (NSApp.delegate as? AppDelegate)?.logout()
+        }
     }
 
     func exportDiagnostics() {
@@ -1597,7 +1726,7 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             let members = (try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200)) ?? []
-            guard self.activeChannelId == channelId else { return }
+            guard self.activeChannelId == channelId, self.rightPanelMode == .channelInfo else { return }
             let memberCount = members.count >= 200 ? "200+" : "\(members.count)"
             self.channelMembersCountLabel.stringValue = memberCount
             self.layoutRightChatPanel()
@@ -1677,9 +1806,11 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             guard let channels = try? await ws.fetchPublicChannels(teamId: team.id) else {
+                guard self.rightPanelMode == .browse else { return }
                 self.renderRightPanel(empty: "Could not load channels", rows: [])
                 return
             }
+            guard self.rightPanelMode == .browse else { return }
             let joinedIds = Set(self.channelsById.keys)
             let rows = channels
                 .filter { $0.type == "O" }
@@ -1735,10 +1866,13 @@ extension MainWindow {
             return
         }
         Task { @MainActor in
-            if let users = try? await ws.fetchUsersByIds(missing) {
+            do {
+                let users = try await ws.fetchUsersByIds(missing)
                 for user in users {
                     self.usersById[user.id] = user
                 }
+            } catch {
+                DebugLog.warning("Could not hydrate users \(missing.count): \(error.localizedDescription)")
             }
             completion()
         }
@@ -1846,13 +1980,14 @@ extension MainWindow {
         row.cornerRadius = MMRadius.menu
         row.color = .clear
 
+        let hasSecondary = !item.secondaryActionTitle.isEmpty && item.secondaryAction != nil
         let title = NSTextField(labelWithString: item.title)
         title.font = MMFont.font(ofSize: 13, weight: .semibold)
         title.textColor = Theme.shared.centerText
         title.lineBreakMode = .byTruncatingTail
         title.isEditable = false
         title.isSelectable = false
-        title.frame = NSRect(x: 10, y: 40, width: width - 20, height: 18)
+        title.frame = NSRect(x: 10, y: 40, width: width - (hasSecondary ? 96 : 20), height: 18)
         row.addSubview(title)
 
         if !item.subtitle.isEmpty {
@@ -1874,6 +2009,28 @@ extension MainWindow {
             meta.isSelectable = false
             meta.frame = NSRect(x: 10, y: 6, width: width - 20, height: 14)
             row.addSubview(meta)
+        }
+
+        if hasSecondary, let secondary = item.secondaryAction {
+            let button = RoundedEdgePanel()
+            button.cornerRadius = MMRadius.control
+            button.color = .clear
+            button.frame = NSRect(x: width - 80, y: 40, width: 70, height: 20)
+            let label = NSTextField(labelWithString: item.secondaryActionTitle)
+            label.font = MMFont.font(ofSize: 11, weight: .semibold)
+            label.textColor = Theme.shared.buttonBg
+            label.alignment = .center
+            label.frame = NSRect(x: 0, y: 3, width: 70, height: 14)
+            label.isEditable = false
+            label.isSelectable = false
+            button.addSubview(label)
+            button.onHoverChanged = { [weak button] isHovered in
+                button?.color = isHovered ? Theme.shared.centerHover : .clear
+                button?.setNeedsAppearanceUpdate()
+            }
+            button.onClick = secondary
+            button.accessibilityTitle = item.secondaryActionTitle
+            row.addSubview(button)
         }
 
         row.onHoverChanged = { [weak row] isHovered in

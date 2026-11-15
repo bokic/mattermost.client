@@ -140,7 +140,14 @@ extension MainWindow {
 
         ws.onWebSocketStateChanged = { [weak self] connected, message in
             Task { @MainActor [weak self] in
-                self?.updateConnectionState(connected: connected, message: message)
+                guard let self = self else { return }
+                self.updateConnectionState(connected: connected, message: message)
+                if connected, self.settingsAwaitingReconnect {
+                    self.settingsAwaitingReconnect = false
+                    if self.isRightPanelVisible, self.rightPanelMode == .settings {
+                        self.loadSettingsPanel()
+                    }
+                }
             }
         }
         updateConnectionState(

@@ -28,24 +28,6 @@ completed baseline remains at the end.
 
 ## P1 — Correctness, data loss & reliability
 
-- [ ] **RHS panels have stale/list-detail bugs** — `M`
-  - Loaders do not cancel or check the current mode/channel: closing or switching panels
-    leaves old rows visible, and a late response can overwrite the new panel
-    (`MainWindow+RightPanel.swift:159-162,764-788`).
-  - Threads/Mentions/Saved set the channel-name subtitle even though they are not
-    channel-scoped (`:108-116`), which is misleading.
-  - Pinned rows use the raw message as title (attachment-only pins render blank), have no
-    unpin action, and do not refresh after `togglePin` (`:380-415`,
-    `MainWindow+Timeline.swift:1225-1242`).
-  - Files do not show the uploader despite hydrating users, are not date-sorted, re-fetch
-    every preview with no cache, and have no download/search/filter controls
-    (`:417-434,450-556`).
-  - `hydrateUsers` silently swallows failures (`:748-762`), so rows show raw 26-character
-    user IDs or "Unknown"; member role logic only distinguishes `channel_admin` from
-    `channel_user` and ignores team/system admin, guest and bot roles (`:363-373`).
-  - Reconnect reloads the panel immediately after `reconnectIfNeeded`, so it often still says
-    "Reconnecting…" (`:659-669`); Logout has no confirmation (`:676-683`).
-
 ### Sidebar, navigation and layout
 
 - [ ] **The channel sidebar is not scrollable** — `M`
@@ -397,10 +379,11 @@ history is in git; the original long-form checklist lives in prior commits of th
   recent searches, working `From:`/`In:`/`On:`/`Before:`/`After:` filter pills, and scoped
   `in:` prefill from ⌘F.
 - **RHS:** Threads, Members, Pinned, Files, Mentions, Saved, Settings, Browse Channels;
-  paginated thread/member/file/mention/saved/pinned lists with load-more on scroll; member
-  search plus admin/presence grouping and DM click-through; thread read state and
-  newest-reply pagination; rich thread reply composer with typing/send state; draggable
-  width and channel subtitle.
+  paginated thread/member/file/mention/saved/pinned lists with load-more on scroll and
+  stale-response guards; member search plus admin/presence grouping and DM click-through;
+  thread read state and newest-reply pagination; rich thread reply composer with
+  typing/send state; unpin actions and pin-list refresh; file uploader/sort/search/download
+  and cached previews; reconnect-aware settings and confirmed logout.
 - **Timeline:** 60-post `before` pagination with viewport anchoring, per-channel unread
   badges, mentions, "New Messages" divider + floating jump pill, date separators with
   localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,

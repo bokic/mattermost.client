@@ -1345,6 +1345,9 @@ extension MainWindow {
                 if let updated = try? await ws.fetchPost(postId: post.id) {
                     self.applyUpdatedPost(updated)
                 }
+                if self.isRightPanelVisible && self.rightPanelMode == .pinned {
+                    self.loadPinnedPosts()
+                }
             } catch {
                 NSLog("Pin update failed: \(error.localizedDescription)")
             }

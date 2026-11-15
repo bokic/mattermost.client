@@ -1449,6 +1449,11 @@ extension MainWindow {
             renderMembersPanel()
             return
         }
+        if (notification.object as? NSTextField) === filesSearchField {
+            filesSearchQuery = filesSearchField.stringValue
+            renderFilesPanel(channelFiles, empty: L10n.string("No files yet"), scrollToTop: false)
+            return
+        }
         guard (notification.object as? NSTextField) === findChannelLabel else { return }
         channelFilterQuery = findChannelLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)

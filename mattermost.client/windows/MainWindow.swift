@@ -310,6 +310,11 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var mentionPosts: [MMPost] = []
     var pinnedPosts: [MMPost] = []
     var pinnedVisibleLimit = 20
+    var filesSearchField = NSSearchField()
+    var filesSearchQuery = ""
+    var filePreviewImages = BoundedImageCache(countLimit: 200)
+    var filePreviewLoading: Set<String> = []
+    var settingsAwaitingReconnect = false
     var rhsPageByMode: [String: Int] = [:]
     var rhsHasMoreByMode: [String: Bool] = [:]
     var rhsLoadingByMode: [String: Bool] = [:]
@@ -829,6 +834,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let meta: String
         let action: (() -> Void)?
         var isSectionHeader: Bool = false
+        var secondaryActionTitle: String = ""
+        var secondaryAction: (() -> Void)? = nil
     }
 
     struct ParsedGiphyMessage {
