@@ -1970,7 +1970,9 @@ extension MainWindow {
         let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
 
         // Parse message for text & Giphy GIF URLs
-        let rawMessage = post.message.isEmpty ? (isSystem ? "System update" : "") : post.message
+        let rawMessage = post.message.isEmpty
+            ? (isSystem ? SystemMessageText.text(for: post) : "")
+            : post.message
         let parsed = parseGiphyInMessage(rawMessage)
         let isDeleted = (post.delete_at ?? 0) > 0
         let bodyText = isDeleted ? "This message was deleted." : parsed.text
@@ -2108,9 +2110,8 @@ extension MainWindow {
         }
 
         let userObj = usersById[post.user_id]
-        let isBotUser = (authorName.lowercased() == "system-bot" ||
-                         (userObj?.roles?.lowercased().contains("bot") ?? false) ||
-                         (userObj?.is_bot ?? false))
+        let isBotUser = isBotAccount(userObj)
+            || (userObj == nil && authorName.lowercased() == "system-bot")
 
         // Post header/body metrics mirror the web client:
         // 16pt top padding, 32pt avatar at 37pt, text column at 79pt, 14pt bottom padding.

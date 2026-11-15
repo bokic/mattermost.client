@@ -449,10 +449,9 @@ extension MainWindow {
     func isChannelBot(for channel: MMChannel) -> Bool {
         guard channel.type == "D" else { return false }
         if let targetId = resolveDMTargetUserId(for: channel),
-           let user = usersById[targetId] {
-            if user.is_bot == true { return true }
-            let roles = user.roles?.lowercased() ?? ""
-            if roles.contains("bot") { return true }
+           let user = usersById[targetId],
+           isBotAccount(user) {
+            return true
         }
         return channelDisplayName(for: channel).lowercased() == "system-bot"
     }
@@ -461,10 +460,7 @@ extension MainWindow {
         if let chId = activeChannelId.isEmpty ? nil : activeChannelId, let ch = channelsById[chId] {
             return isChannelBot(for: ch)
         }
-        if selectedSidebarItemId.lowercased().contains("bot") || channelTitleLabel.stringValue.lowercased().contains("bot") {
-            return true
-        }
-        return false
+        return selectedSidebarItemId == "system-bot"
     }
 
     func populateSidebarCategories(from response: MMSidebarCategoriesResponse, channels: [MMChannel]) {

@@ -112,6 +112,18 @@ final class TimelineSupportTests: XCTestCase {
         )
     }
 
+    func testFutureDateIsNotGivenAWeekdayLabel() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now)!
+
+        XCTAssertEqual(
+            TimelineDateSeparator.style(for: tomorrow, now: now, calendar: calendar),
+            .absolute
+        )
+    }
+
     private func makePost(id: String, createAt: Int64) -> MMPost {
         MMPost(
             id: id,

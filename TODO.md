@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **98/98 pass** |
+| `./test.sh` | **104/104 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -29,18 +29,6 @@ completed baseline remains at the end.
 ## P3 — Web-parity backlog
 
 ### Message rendering
-
-- [ ] **System messages, presence and bot detection are heuristic** — `S`
-  - `MMPost` has no `props`, so system posts with an empty `message` collapse to
-    "System update" (`MainWindow+Timeline.swift:1561`) instead of the join/leave/header
-    text the web renders.
-  - Unknown/not-yet-fetched users default to a green "online" dot
-    (`MainWindow+Timeline.swift:1910`); Mattermost treats a missing status as offline.
-  - Bot detection is a username substring check (`:1688-1691`), so humans named "abbott" get
-    a BOT badge while a bot named `ci` does not.
-  - Date separators dedupe by formatted label rather than calendar day (`:2338-2347`), and
-    future-dated posts get a weekday because the day difference is negative
-    (`TimelineSupport.swift:75-83`).
 
 - [ ] **No link previews** — `M`
   - Mattermost renders Open Graph previews for URLs. The native client leaves bare links.
@@ -344,6 +332,8 @@ history is in git; the original long-form checklist lives in prior commits of th
   badges, mentions, "New Messages" divider + floating jump pill, date separators with
   localized relative labels, 5-minute grouping, edit/delete tombstones, pinned markers,
   clickable reply-count thread footers refreshed from live reply/thread events,
+  props-backed system messages, role/is_bot-based bot detection, offline-by-default
+  presence and calendar-day date separators including future dates,
   attachments/image cards/lightbox, reactions chips with add/remove, hover toolbar,
   block-level Markdown (headings, ordered/nested lists, blockquotes, tables, rules),
   fenced code with language labels, syntax highlighting and copy links, inline
@@ -374,7 +364,7 @@ history is in git; the original long-form checklist lives in prior commits of th
 
 ```bash
 ./build.sh      # must succeed with no new warnings
-./test.sh       # 98 tests today; keep the count rising
+./test.sh       # 104 tests today; keep the count rising
 ./lint.sh       # swift-format --strict on the migrated allowlist
 ./run.sh        # manual smoke test
 ```

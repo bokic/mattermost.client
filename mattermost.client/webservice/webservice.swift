@@ -285,6 +285,20 @@ struct MMPostMetadata: Codable {
     let reactions: [MMReaction]?
 }
 
+struct MMPostProps: Codable {
+    var username: String? = nil
+    var channel_display_name: String? = nil
+    var team_display_name: String? = nil
+    var addedUsername: String? = nil
+    var removedUsername: String? = nil
+    var new_header: String? = nil
+    var old_header: String? = nil
+    var new_purpose: String? = nil
+    var old_purpose: String? = nil
+    var new_displayname: String? = nil
+    var old_displayname: String? = nil
+}
+
 struct MMPost: Codable {
     let id: String
     let create_at: Int64
@@ -301,6 +315,7 @@ struct MMPost: Codable {
     var file_ids: [String]? = nil
     var metadata: MMPostMetadata? = nil
     var reply_count: Int? = nil
+    var props: MMPostProps? = nil
 }
 
 struct MMThreadParticipant: Decodable {

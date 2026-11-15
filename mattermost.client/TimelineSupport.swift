@@ -118,3 +118,59 @@ enum TimelineDateSeparator {
         }
     }
 }
+
+/// Human-readable text for Mattermost system posts. Falls back to the server's
+/// message when a system type does not have a known local template.
+enum SystemMessageText {
+    static func text(for post: MMPost) -> String {
+        let props = post.props
+        let username = props?.username ?? "Someone"
+        let channel = props?.channel_display_name ?? "the channel"
+        let team = props?.team_display_name ?? "the team"
+        let type = post.type ?? ""
+
+        switch type {
+        case "system_join_channel":
+            return "\(username) joined \(channel)."
+        case "system_leave_channel":
+            return "\(username) left \(channel)."
+        case "system_add_to_channel":
+            return "\(username) added \(props?.addedUsername ?? "a member") to \(channel)."
+        case "system_remove_from_channel":
+            return "\(username) removed \(props?.removedUsername ?? "a member") from \(channel)."
+        case "system_join_team":
+            return "\(username) joined \(team)."
+        case "system_leave_team":
+            return "\(username) left \(team)."
+        case "system_add_to_team":
+            return "\(username) added \(props?.addedUsername ?? "a member") to \(team)."
+        case "system_remove_from_team":
+            return "\(username) removed \(props?.removedUsername ?? "a member") from \(team)."
+        case "system_header_change":
+            let header = props?.new_header?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return header.isEmpty
+                ? "\(username) removed the channel header."
+                : "\(username) updated the channel header to: \(header)"
+        case "system_purpose_change":
+            let purpose = props?.new_purpose?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return purpose.isEmpty
+                ? "\(username) removed the channel purpose."
+                : "\(username) updated the channel purpose to: \(purpose)"
+        case "system_displayname_change":
+            let oldName = props?.old_displayname ?? "the old name"
+            let newName = props?.new_displayname ?? channel
+            return "\(username) changed the channel name from \(oldName) to \(newName)."
+        case "system_channel_deleted":
+            return "\(username) deleted \(channel)."
+        case "system_channel_restored":
+            return "\(username) restored \(channel)."
+        case "system_convert_channel_to_private":
+            return "\(username) converted \(channel) to a private channel."
+        case "system_convert_channel_to_public":
+            return "\(username) converted \(channel) to a public channel."
+        default:
+            let message = post.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            return message.isEmpty ? "System update" : message
+        }
+    }
+}

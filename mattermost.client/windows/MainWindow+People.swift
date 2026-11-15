@@ -11,6 +11,15 @@ import UniformTypeIdentifiers
 
 extension MainWindow {
 
+    func isBotAccount(_ user: MMUser?) -> Bool {
+        guard let user = user else { return false }
+        if user.is_bot == true { return true }
+        let roles = (user.roles ?? "").lowercased()
+            .split(whereSeparator: { $0 == " " || $0 == "," })
+            .map(String.init)
+        return roles.contains("bot")
+    }
+
     func statusColor(for status: String) -> NSColor {
         switch status.lowercased() {
         case "online":
@@ -22,7 +31,7 @@ extension MainWindow {
         case "offline":
             return Theme.shared.centerTextPlaceholder
         default:
-            return Theme.shared.onlineIndicator
+            return Theme.shared.centerTextPlaceholder
         }
     }
 
@@ -32,7 +41,7 @@ extension MainWindow {
         case 1: return "away"
         case 2: return "dnd"
         case 3: return "offline"
-        default: return "online"
+        default: return "offline"
         }
     }
 
@@ -68,7 +77,7 @@ extension MainWindow {
         case "away": return 1
         case "dnd": return 2
         case "offline": return 3
-        default: return 0
+        default: return 3
         }
     }
 
