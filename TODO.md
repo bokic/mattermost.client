@@ -533,8 +533,18 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     `refreshSidebarDMTitles`, so `isBotBadge`/avatar state now persists in the model.
   - Documented the genuinely remaining work: release signing/notarization, accessibility and
     localization, test-target hosting/coverage, and timeline/avatar performance.
-- [ ] **Commit the DOM-inspection tooling** used for parity work (AppleScript/Chrome driver +
-  measurement scripts) under `tools/`, so metrics can be re-verified. — `S`
+- [x] **Commit the DOM-inspection tooling** — `S`
+  - Added `tools/runjs.py` (run an ad-hoc JS snippet in the logged-in Chrome tab, chunked so large
+    results survive AppleScript reply limits), `tools/mmdrive.py` (capture a computed-style dump) and
+    `tools/dom_dump.js` (viewport, theme variables, key element metrics and a depth-limited style
+    tree).
+  - Added `tools/hud_measure.swift` to measure the native zoom pill/text bounds and padding from a
+    screenshot, and `tools/README.md` with usage, Chrome requirements and a warning not to commit
+    live dumps.
+  - Parameterized the tab matcher via `--match`/`MM_TAB_MATCH` instead of the hardcoded server URL;
+    dumps are git-ignored because they contain live message text.
+  - Verified both the JS bridge and the full dump against the live server (1440×783 viewport, 170
+    tree nodes, 31 measured elements).
 - [ ] **Logging strategy**: keep `DebugLog` for development, add levels and rotation, and stop
   shipping verbose logs. — `S`
 

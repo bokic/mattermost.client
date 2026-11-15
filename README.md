@@ -138,6 +138,7 @@ mattermost.client/
 ├── lint.sh                                     # swift-format lint for migrated source files
 ├── .swift-format                               # swift-format configuration (4-space indent)
 ├── .github/workflows/ci.yml                    # Build, test and lint on macOS runners
+├── tools/                                      # Web-client DOM/computed-style measurement tools
 ├── build_release.sh                            # Builds Release build and packages DMG installer
 ├── LICENSE                                     # MIT License
 ├── README.md                                   # Project documentation
@@ -162,6 +163,12 @@ mattermost.client/
 │   │   ├── MainWindowSupport.swift             # Shared views, drag helpers and emoji catalog
 │   │   └── MainWindow+{Header,Sidebar,Timeline,Composer,Menus,RightPanel,People,Layout,LiveData}.swift
 │   └── Assets.xcassets/                        # App icons, status bar icons, and vector SVGs
+├── tools/
+│   ├── runjs.py                                # Run JS in the logged-in Chrome tab
+│   ├── mmdrive.py                              # Capture the computed-style dump
+│   ├── dom_dump.js                             # DOM/theme/metric snapshot script
+│   ├── hud_measure.swift                       # Measure the zoom HUD from a screenshot
+│   └── README.md                               # Parity-tooling usage
 └── mattermost.clientTests/                     # Unit test bundle
     ├── WebServiceTests.swift                   # WebService & WebSocket parsing tests
     ├── KeychainHelperTests.swift               # Debug credential-store tests

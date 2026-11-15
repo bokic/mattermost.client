@@ -21,6 +21,7 @@ FILES=(
     mattermost.clientTests/WebServiceErrorTests.swift
     mattermost.clientTests/WebServiceTests.swift
     mattermost.clientTests/ZoomTests.swift
+    tools/hud_measure.swift
 )
 
 exec xcrun swift-format lint --strict --configuration .swift-format "${FILES[@]}"
