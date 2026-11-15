@@ -29,6 +29,14 @@ final class LayoutTests: XCTestCase {
         window.updateViews()
         XCTAssertGreaterThan(window.chatPanel.frame.width, 0)
         XCTAssertGreaterThan(window.timelineScrollView.frame.width, 0)
+        XCTAssertGreaterThan(window.sidebarScroll.frame.height, 0)
+        XCTAssertTrue(window.sidebarScroll.superview === window.mainPanel)
+        XCTAssertTrue(window.sidebarScroll.documentView === window.sidebarDoc)
+        XCTAssertLessThanOrEqual(window.sidebarScroll.frame.maxY, window.findChannelPanel.frame.minY)
+        XCTAssertGreaterThanOrEqual(
+            window.sidebarDoc.frame.height,
+            window.sidebarScroll.contentView.bounds.height
+        )
 
         window.showRightPanel(mode: .settings)
         XCTAssertTrue(window.isRightPanelVisible)

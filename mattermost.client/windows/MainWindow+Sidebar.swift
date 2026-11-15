@@ -308,6 +308,17 @@ extension MainWindow {
             self.findChannelLabel.textColor = isHovered ? Theme.shared.sidebarText : mutedTint
         }
         mainPanel.addSubview(findChannelPanel)
+
+        sidebarScroll.drawsBackground = false
+        sidebarScroll.hasVerticalScroller = true
+        sidebarScroll.hasHorizontalScroller = false
+        sidebarScroll.horizontalScrollElasticity = .none
+        sidebarScroll.autohidesScrollers = true
+        sidebarScroll.borderType = .noBorder
+        sidebarScroll.documentView = sidebarDoc
+        sidebarScroll.contentView.postsBoundsChangedNotifications = false
+        mainPanel.addSubview(sidebarScroll)
+
         setupFilterMenu()
 
         // 3. Threads Navigation Row
@@ -320,7 +331,7 @@ extension MainWindow {
             showsCloseOnHover: false
         )
         threadsSidebarItem = threadsItem
-        mainPanel.addSubview(threadsItem.row)
+        sidebarDoc.addSubview(threadsItem.row)
 
         // 4. Collapsible Categories & Channels
         buildDefaultSidebarCategories()
@@ -715,9 +726,9 @@ extension MainWindow {
             self?.toggleSidebarCategory(id)
         }
 
-        mainPanel.addSubview(headerRow)
+        sidebarDoc.addSubview(headerRow)
         for item in items {
-            mainPanel.addSubview(item.row)
+            sidebarDoc.addSubview(item.row)
         }
 
         return SidebarCategoryView(
@@ -1099,8 +1110,15 @@ extension MainWindow {
             query.isEmpty || title.lowercased().contains(query)
         }
 
-        // Row 3: Threads item
-        var currentY = topBarY - 126
+        // Row 3: Scrollable navigation content below the pinned filter row.
+        sidebarScroll.frame = NSRect(
+            x: sidebarX,
+            y: 0,
+            width: sidebarWidth,
+            height: max(0, topBarY - 96)
+        )
+
+        var currentY: CGFloat = 4
         if let threads = threadsSidebarItem {
             if matches(threads.label.stringValue) && !sidebarFavoritesOnly {
                 threads.row.isHidden = false
@@ -1108,7 +1126,7 @@ extension MainWindow {
                 threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
                 threads.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                 threads.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 64, height: 20)
-                currentY -= 32
+                currentY += 32
             } else {
                 threads.row.isHidden = true
             }
@@ -1121,7 +1139,7 @@ extension MainWindow {
             sidebarEmptyStateLabel.alignment = .left
             sidebarEmptyStateLabel.isEditable = false
             sidebarEmptyStateLabel.isSelectable = false
-            mainPanel.addSubview(sidebarEmptyStateLabel)
+            sidebarDoc.addSubview(sidebarEmptyStateLabel)
         }
         sidebarEmptyStateLabel.isHidden = true
         if let favorites = favoritesCategory {
@@ -1135,7 +1153,7 @@ extension MainWindow {
                     favorites.chevronView.image = img.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
                 }
                 favorites.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
-                currentY -= 32
+                currentY += 32
                 for item in favorites.items {
                     if !matches(item.label.stringValue) || isFavoritesCollapsed {
                         item.row.isHidden = true
@@ -1146,9 +1164,9 @@ extension MainWindow {
                     item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
                     item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                     item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
-                    currentY -= 32
+                    currentY += 32
                 }
-                currentY -= 8
+                currentY += 8
             } else {
                 favorites.headerRow.isHidden = true
                 favorites.items.forEach { $0.row.isHidden = true }
@@ -1158,11 +1176,11 @@ extension MainWindow {
                 sidebarEmptyStateLabel.isHidden = false
                 sidebarEmptyStateLabel.frame = NSRect(
                     x: sidebarX + 17,
-                    y: currentY - 4,
+                    y: currentY,
                     width: sidebarWidth - 34,
                     height: 18
                 )
-                currentY -= 28
+                currentY += 28
             }
         }
 
@@ -1184,7 +1202,7 @@ extension MainWindow {
             category.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
             category.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
             category.addButton?.frame = NSRect(x: sidebarWidth - 32, y: 6, width: 20, height: 20)
-            currentY -= 32
+            currentY += 32
 
             for item in category.items {
                 if !matches(item.label.stringValue)
@@ -1200,10 +1218,34 @@ extension MainWindow {
                     item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                     item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
                     item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 10, width: 12, height: 12)
-                    currentY -= 32
+                    currentY += 32
                 }
             }
-            currentY -= 8
+            currentY += 8
+        }
+
+        sidebarDoc.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: sidebarWidth,
+            height: max(currentY + 4, sidebarScroll.contentView.bounds.height)
+        )
+        if lastSidebarScrollSelection != selectedSidebarItemId {
+            lastSidebarScrollSelection = selectedSidebarItemId
+            scrollSidebarSelectionIntoView()
+        }
+    }
+
+    func scrollSidebarSelectionIntoView() {
+        let items = (threadsSidebarItem.map { [$0] } ?? [])
+            + (favoritesCategory?.items ?? [])
+            + sidebarCategories.flatMap { $0.items }
+        guard let item = items.first(where: { $0.id == selectedSidebarItemId }),
+              !item.row.isHidden
+        else { return }
+        let visible = sidebarScroll.contentView.bounds.insetBy(dx: 0, dy: -8)
+        if !visible.contains(item.row.frame) {
+            sidebarDoc.scrollToVisible(item.row.frame)
         }
     }
 }

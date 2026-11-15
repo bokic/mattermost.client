@@ -26,19 +26,6 @@ completed baseline remains at the end.
 
 ---
 
-## P1 — Correctness, data loss & reliability
-
-### Sidebar, navigation and layout
-
-- [ ] **The channel sidebar is not scrollable** — `M`
-  - The sidebar is laid out entirely with fixed frames and has no `NSScrollView`
-    (`MainWindow+Sidebar.swift:941-1053`). Once categories/channels exceed the panel height,
-    rows get negative Y positions and become clipped/unreachable.
-  - Done when the sidebar has a scroll view (with stable hit-testing and hover state) and the
-    team/filter/threads header stays pinned.
-
----
-
 ## P2 — Security, privacy & packaging
 
 - [ ] **No SSO / SAML / OAuth / MFA login** — `L`
@@ -355,11 +342,10 @@ completed baseline remains at the end.
 ## Suggested next 10 (highest value first)
 
 1. **Sign, notarize and verify the release artifact** — requires the Developer ID certificate and notary credentials.
-2. **Sidebar scrolling + category management** — long sidebars become unreachable.
-3. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
-4. **Accessibility/localization pass** — labels, focus traversal and localized strings.
-5. **Timeline incremental updates + bounded caches** — scalability for large channels.
-6. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
+2. **Markdown block rendering + reaction UX gaps** — web-parity rendering work.
+3. **Accessibility/localization pass** — labels, focus traversal and localized strings.
+4. **Timeline incremental updates + bounded caches** — scalability for large channels.
+5. **Hosted test bundle + coverage/CI/lint migration** — finish the quality tooling work.
 
 ---
 
@@ -391,10 +377,10 @@ history is in git; the original long-form checklist lives in prior commits of th
   markdown/code/mentions/channels/emoji/images, Giphy rendering.
 - **Realtime:** WebSocket posts, presence, typing, reaction refresh, exponential-backoff
   reconnect, wake/network reconnect, connection banner, 15 s status backstop.
-- **Sidebar/teams:** server categories, favorites persisted as user preferences, unread/
-  mention state from memberships, live Find channel filter, add/browse/join channels, invite
-  email, create team + switch, DM creation, channel menu (info/pins/files/favorite/copy/
-  leave).
+- **Sidebar/teams:** scrollable channel sidebar with pinned team/filter header, server
+  categories, favorites persisted as user preferences, unread/mention state from paged
+  memberships, live Find channel filter, add/browse/join channels, invite email, create
+  team + switch, DM creation, channel menu (info/pins/files/favorite/copy/leave).
 - **Status:** custom status with duration, DND expiry normalization, status menu/checkmarks,
   server-backed presence, correct `dnd_end_time` units and custom-status durations.
 - **Themes:** Denim/Sapphire/Quartz/Indigo/Onyx + custom palettes, dark detection, app-wide

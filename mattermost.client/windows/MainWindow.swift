@@ -183,6 +183,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     // Sidebar filter menu
     let filterMenu = RoundedEdgePanel()
     let sidebarEmptyStateLabel = NSTextField(labelWithString: "")
+    let sidebarScroll = NSScrollView()
+    let sidebarDoc = TimelineFlippedView()
     var isFilterMenuOpen = false
     var sidebarFavoritesOnly = false
     var filterAllCheck: NSImageView?
@@ -321,6 +323,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var rhsRequestTokenByMode: [String: Int] = [:]
     var sidebarCategories: [SidebarCategoryView] = []
     var selectedSidebarItemId: String = "town-square"
+    var lastSidebarScrollSelection = ""
 
     // Right Chat Panel views
     // 1. Channel Header Bar
