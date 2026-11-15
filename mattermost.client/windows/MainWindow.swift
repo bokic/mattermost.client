@@ -5804,6 +5804,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
 
         lightboxImageView.imageScaling = .scaleProportionallyUpOrDown
         lightboxImageView.imageAlignment = .alignCenter
+        lightboxImageView.animates = true
         lightboxImageView.wantsLayer = true
         lightboxImageView.layer?.cornerRadius = 8
         lightboxImageView.layer?.masksToBounds = true
