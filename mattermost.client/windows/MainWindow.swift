@@ -526,6 +526,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         entryView.onDropStateChanged = { [weak self] active in
             self?.setComposerDropHighlight(active)
         }
+        entryView.onImagePasted = { [weak self] data, filename in
+            self?.uploadPastedImage(data, filename: filename)
+        }
         composerAttachmentTray.isHidden = true
         chatEntryPanel.addSubview(composerAttachmentTray)
 

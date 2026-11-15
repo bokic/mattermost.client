@@ -715,6 +715,35 @@ extension MainWindow {
         }
     }
 
+    func uploadPastedImage(_ data: Data, filename: String) {
+        guard !activeChannelId.isEmpty, let ws = webService else { return }
+        let channelId = activeChannelId
+        composerHelpLabel.stringValue = "Uploading pasted image…"
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let fileId = try await ws.uploadFile(
+                    channelId: channelId,
+                    data: data,
+                    filename: filename,
+                    mimeType: "image/png"
+                )
+                guard self.activeChannelId == channelId else { return }
+                self.pendingAttachments.append(
+                    PendingAttachment(id: fileId, name: filename, size: Int64(data.count))
+                )
+                self.renderPendingAttachments()
+                self.layoutRightChatPanel()
+                self.updateComposerSendState()
+                self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
+            } catch {
+                guard self.activeChannelId == channelId else { return }
+                self.composerHelpLabel.stringValue = "Upload failed"
+                self.showInfoAlert("Could not upload the pasted image: \(error.localizedDescription)")
+            }
+        }
+    }
+
     func renderPendingAttachments() {
         composerAttachmentTray.subviews.forEach { $0.removeFromSuperview() }
         composerAttachmentTray.isHidden = pendingAttachments.isEmpty

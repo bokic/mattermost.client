@@ -593,8 +593,20 @@ final class ComposerTextView: NSTextView {
 
     var onFilesDropped: (([URL]) -> Void)?
     var onDropStateChanged: ((Bool) -> Void)?
+    var onImagePasted: ((Data, String) -> Void)?
 
     var isFileDropTarget = false
+
+    override func paste(_ sender: Any?) {
+        if let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage,
+           let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            onImagePasted?(png, "pasted-image.png")
+            return
+        }
+        super.paste(sender)
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
