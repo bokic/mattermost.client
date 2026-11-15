@@ -11,51 +11,70 @@ import XCTest
 
 @MainActor
 final class ZoomTests: XCTestCase {
-
-    private var originalFactor: CGFloat = 1.0
-
-    override func setUp() {
-        super.setUp()
-        originalFactor = ZoomManager.shared.currentZoomFactor
-    }
-
-    override func tearDown() {
-        ZoomManager.shared.setZoomFactor(originalFactor)
-        super.tearDown()
+    // XCTest's setUp/tearDown overrides are nonisolated on some toolchains, so
+    // restore the shared zoom factor inside each test via this helper instead.
+    private func withPreservedZoom(_ body: () -> Void) {
+        let original = ZoomManager.shared.currentZoomFactor
+        defer { ZoomManager.shared.setZoomFactor(original) }
+        body()
     }
 
     func testZoomInAndOutFollowPresetLevels() {
-        ZoomManager.shared.setZoomFactor(1.0)
+        withPreservedZoom {
+            ZoomManager.shared.setZoomFactor(1.0)
 
-        ZoomManager.shared.zoomIn()
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, 1.1, accuracy: 0.0001)
+            ZoomManager.shared.zoomIn()
+            XCTAssertEqual(ZoomManager.shared.currentZoomFactor, 1.1, accuracy: 0.0001)
 
-        ZoomManager.shared.zoomOut()
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, 1.0, accuracy: 0.0001)
+            ZoomManager.shared.zoomOut()
+            XCTAssertEqual(ZoomManager.shared.currentZoomFactor, 1.0, accuracy: 0.0001)
+        }
     }
 
     func testZoomStopsAtPresetBounds() {
-        ZoomManager.shared.setZoomFactor(2.5)
-        ZoomManager.shared.zoomIn()
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, 2.5, accuracy: 0.0001)
+        withPreservedZoom {
+            ZoomManager.shared.setZoomFactor(2.5)
+            ZoomManager.shared.zoomIn()
+            XCTAssertEqual(ZoomManager.shared.currentZoomFactor, 2.5, accuracy: 0.0001)
 
-        ZoomManager.shared.setZoomFactor(0.6)
-        ZoomManager.shared.zoomOut()
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, ZoomManager.minZoomFactor, accuracy: 0.0001)
+            ZoomManager.shared.setZoomFactor(0.6)
+            ZoomManager.shared.zoomOut()
+            XCTAssertEqual(
+                ZoomManager.shared.currentZoomFactor,
+                ZoomManager.minZoomFactor,
+                accuracy: 0.0001
+            )
+        }
     }
 
     func testSetZoomFactorClampsToRange() {
-        ZoomManager.shared.setZoomFactor(9)
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, ZoomManager.maxZoomFactor, accuracy: 0.0001)
+        withPreservedZoom {
+            ZoomManager.shared.setZoomFactor(9)
+            XCTAssertEqual(
+                ZoomManager.shared.currentZoomFactor,
+                ZoomManager.maxZoomFactor,
+                accuracy: 0.0001
+            )
 
-        ZoomManager.shared.setZoomFactor(0.1)
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, ZoomManager.minZoomFactor, accuracy: 0.0001)
+            ZoomManager.shared.setZoomFactor(0.1)
+            XCTAssertEqual(
+                ZoomManager.shared.currentZoomFactor,
+                ZoomManager.minZoomFactor,
+                accuracy: 0.0001
+            )
+        }
     }
 
     func testResetZoomUsesDefault() {
-        ZoomManager.shared.setZoomFactor(1.5)
-        ZoomManager.shared.resetZoom()
-        XCTAssertEqual(ZoomManager.shared.currentZoomFactor, ZoomManager.defaultZoomFactor, accuracy: 0.0001)
+        withPreservedZoom {
+            ZoomManager.shared.setZoomFactor(1.5)
+            ZoomManager.shared.resetZoom()
+            XCTAssertEqual(
+                ZoomManager.shared.currentZoomFactor,
+                ZoomManager.defaultZoomFactor,
+                accuracy: 0.0001
+            )
+        }
     }
 
     func testSystemZoomFactorIsActualSize() {
