@@ -18,15 +18,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let mainPanel = RoundedEdgePanel()
     let chatPanel = RoundedEdgePanel()
     let chatEntryPanel = OutlinePanel()
-    let mainTreeDelegate = MainWindowDelegate()
-    let treeView = NSOutlineView()
     let entryView = ComposerTextView()
 
     let boxImage = NSImageView(image: NSImage(named: NSImage.Name("E82F"))!)
     let logo = NSImageView(image: NSImage(named: NSImage.Name("Mattermost Logo"))!)
 
     // Top Global Bar views
-    let sidebarTopBorder = RoundedEdgePanel()
     let productSwitcherPanel = RoundedEdgePanel()
     let editionBadgePanel = RoundedEdgePanel()
     let editionBadgeLabel = NSTextField(labelWithString: "TEAM EDITION")
@@ -370,18 +367,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let heroInviteIconView = NSImageView()
     let heroInviteLabel = NSTextField(labelWithString: "Invite others to the workspace")
 
-    let dateSep1LeftLine = RoundedEdgePanel()
-    let dateSep1RightLine = RoundedEdgePanel()
-    let dateSep1Label = NSTextField(labelWithString: "December 01, 2025")
-    let systemMessageRow = RoundedEdgePanel()
 
-    let dateSep2LeftLine = RoundedEdgePanel()
-    let dateSep2RightLine = RoundedEdgePanel()
-    let dateSep2Label = NSTextField(labelWithString: "December 11, 2025")
-    let userMessageRow = RoundedEdgePanel()
     let statusPromptPill = RoundedEdgePanel()
-    weak var statusPromptLabelRef: NSTextField?
-    weak var statusPromptIconRef: NSImageView?
 
     // 3. Message Composer & Formatting Toolbar
     let composerPlaceholderLabel = NSTextField(labelWithString: "Write to Town Square")
@@ -468,12 +455,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var lastTypingSentAt: Date?
     var menuAvatarStatusDot: RoundedEdgePanel?
     var statusPollingTimer: Timer?
-    var sysAuthorLabelRef: NSTextField?
-    var sysTimeLabelRef: NSTextField?
-    var sysBodyLabelRef: NSTextField?
-    var usrAuthorLabelRef: NSTextField?
-    var usrTimeLabelRef: NSTextField?
-    var usrBodyLabelRef: NSTextField?
 
     override init(contentRect rect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
 
@@ -492,8 +473,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
         mainPanel.color = Theme.shared.sidebarBg
         mainPanel.cornerRadius = 8
-        sidebarTopBorder.color = Theme.shared.sidebarText.withAlphaComponent(0.10)
-        sidebarTopBorder.cornerRadius = 0
 
         entryView.backgroundColor = .clear
         entryView.drawsBackground = false
@@ -542,11 +521,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         completionPanel.isHidden = true
         chatPanel.addSubview(completionPanel)
 
-        treeView.delegate = mainTreeDelegate
-        treeView.isHidden = true
-
-        mainPanel.addSubview(treeView)
-        mainPanel.addSubview(sidebarTopBorder)
 
         contentView?.addSubview(mainPanel)
 

@@ -20,10 +20,6 @@ class MainWindowViewController: NSViewController {
     }
 }
 
-class MainWindowDelegate: NSObject, NSOutlineViewDelegate {
-
-}
-
 class TimelineFlippedView: NSView {
     override var isFlipped: Bool { true }
 }

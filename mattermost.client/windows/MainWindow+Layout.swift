@@ -664,12 +664,9 @@ extension MainWindow {
         let chatPanelX: CGFloat = 269
         mainPanel.frame = NSRect(x: gutter, y: gutter, width: size.width - gutter * 2, height: topBarY - gutter)
         mainPanel.cornerRadius = 12
-        sidebarTopBorder.frame = NSRect(x: 0, y: mainPanel.bounds.height - 1, width: size.width - gutter * 2, height: 1)
-        sidebarTopBorder.isHidden = true
         chatPanel.frame = NSRect(x: chatPanelX, y: gutter, width: size.width - chatPanelX - gutter, height: topBarY - gutter)
         chatPanel.cornerRadius = 12
 
-        treeView.frame = NSRect(x: 0, y: 0, width: 264, height: mainPanel.bounds.height)
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         layoutRightChatPanel()
         if isLightboxVisible { layoutLightbox() }

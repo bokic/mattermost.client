@@ -453,8 +453,15 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
     before `connectWebSocket()`.
   - Verified session restore, workspace render, WebSocket connection and a full token-less launch
     (stored-password login → injected service → live workspace); all 27 tests pass.
-- [ ] **Remove dead/legacy code**: hidden `treeView` + `sidebarTopBorder`, hidden `entryView`,
-  `appendRealtimePost`, `dateSep1/2*` views, `sysAuthorLabelRef`/`usr*Ref` leftovers. — `S`
+- [x] **Remove dead/legacy code** — `S`
+  - Deleted the unused `NSOutlineView` sidebar (`treeView`, `mainTreeDelegate`, `MainWindowDelegate`),
+    the hidden `sidebarTopBorder` and its init/layout code, the `dateSep1/2*` prototype divider views,
+    `systemMessageRow`/`userMessageRow`, `statusPromptLabelRef`/`statusPromptIconRef`, and the
+    `sysAuthorLabelRef`/`usr*Ref` leftovers.
+  - Kept `entryView` — it is the live `ComposerTextView` used by send/edit/autocomplete, not dead
+    code. Kept `appendRealtimePost`, which still performs the optimistic realtime insert and user
+    hydration on the WebSocket path.
+  - Verified the workspace renders unchanged; build is clean and all 27 tests pass.
 - [ ] **Centralize design tokens** (theme colors, radii, metrics currently repeated as literals in
   dozens of places). — `M`
 - [ ] **Deduplicate HTTP request building** (`login`, `performAuthenticatedRequest`,
