@@ -365,7 +365,20 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Verified with an in-app harness: ⌘F produced `in:town-square `, ↑ loaded the last message,
     Esc cancelled it, and the focus cycle logged composer → sidebar → timeline → composer.
     27 tests pass.
-- [ ] **Drag & drop files** onto the composer — `M`
+- [x] **Drag & drop files** onto the composer — `M`
+  - The composer text view and its outline panel are file-URL drag destinations; dragging over
+    either highlights the composer border in the theme's button color and shows
+    "Drop files to attach".
+  - Dropped files (and the attach button) upload to the current channel and appear as pending
+    attachment chips above the editor, each with a remove button. The composer grows by 36pt while
+    attachments are pending and the timeline stays scrolled to the bottom.
+  - Send includes the pending `file_ids`; text is optional when files are attached. On success the
+    tray clears and the composer shrinks. Switching channels clears pending attachments. File reads
+    use security-scoped access for Finder drops.
+  - Attach now stages files in the draft instead of sending immediately, matching the web client.
+  - Verified with an in-app harness: one uploaded file added a 36pt tray, the composer height became
+    86, sending created a post with one file, the pending list cleared, and the test post was
+    deleted afterwards. 27 tests pass.
 - [ ] **Mentions/autocomplete** for `@user`, `#channel`, `:emoji:` while typing — `L`
 
 ---

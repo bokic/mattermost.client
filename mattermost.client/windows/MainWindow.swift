@@ -582,6 +582,78 @@ final class ComposerTextView: NSTextView {
         didSet { needsDisplay = true }
     }
 
+    var onFilesDropped: (([URL]) -> Void)?
+    var onDropStateChanged: ((Bool) -> Void)?
+
+    private var isFileDropTarget = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        registerForDraggedTypes([
+            .fileURL,
+            .string,
+            .rtf,
+            .rtfd,
+            .tiff,
+            .png
+        ])
+    }
+
+    private func fileURLs(from info: NSDraggingInfo) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let objects = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]
+        return (objects ?? []).filter { !$0.hasDirectoryPath }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let urls = fileURLs(from: sender)
+        guard !urls.isEmpty, onFilesDropped != nil else {
+            return super.draggingEntered(sender)
+        }
+        isFileDropTarget = true
+        onDropStateChanged?(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let urls = fileURLs(from: sender)
+        guard !urls.isEmpty, onFilesDropped != nil else {
+            return super.draggingUpdated(sender)
+        }
+        if !isFileDropTarget {
+            isFileDropTarget = true
+            onDropStateChanged?(true)
+        }
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        isFileDropTarget = false
+        onDropStateChanged?(false)
+        super.draggingExited(sender)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        !fileURLs(from: sender).isEmpty
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = fileURLs(from: sender)
+        guard !urls.isEmpty, let onFilesDropped = onFilesDropped else {
+            return super.performDragOperation(sender)
+        }
+        isFileDropTarget = false
+        onDropStateChanged?(false)
+        onFilesDropped(urls)
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        isFileDropTarget = false
+        onDropStateChanged?(false)
+        super.concludeDragOperation(sender)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholderString.isEmpty, let font = font else { return }
@@ -940,6 +1012,18 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let composerAttachButton = RoundedEdgePanel()
     let composerSendButton = RoundedEdgePanel()
     let composerHelpLabel = NSTextField(labelWithString: "Help")
+    let composerAttachmentTray = NSView()
+
+    private struct PendingAttachment {
+        let id: String
+        let name: String
+        let size: Int64?
+    }
+
+    private var pendingAttachments: [PendingAttachment] = []
+    private var composerBaseHeight: CGFloat { isComposerToolbarVisible ? 90 : 50 }
+    private var composerPendingHeight: CGFloat { pendingAttachments.isEmpty ? 0 : 36 }
+    private var composerTotalHeight: CGFloat { composerBaseHeight + composerPendingHeight }
     
     // Live WebService state
     private var currentUser: LoginWebService?
@@ -1005,6 +1089,21 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         chatEntryPanel.borderWidth = 2
         chatPanel.addSubview(chatEntryPanel)
         chatEntryPanel.addSubview(entryView)
+
+        chatEntryPanel.onFilesDropped = { [weak self] urls in
+            self?.uploadFiles(urls)
+        }
+        chatEntryPanel.onDropStateChanged = { [weak self] active in
+            self?.setComposerDropHighlight(active)
+        }
+        entryView.onFilesDropped = { [weak self] urls in
+            self?.uploadFiles(urls)
+        }
+        entryView.onDropStateChanged = { [weak self] active in
+            self?.setComposerDropHighlight(active)
+        }
+        composerAttachmentTray.isHidden = true
+        chatEntryPanel.addSubview(composerAttachmentTray)
         
         treeView.delegate = mainTreeDelegate
         treeView.isHidden = true
@@ -5451,23 +5550,28 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         panel.canChooseFiles = true
         panel.beginSheetModal(for: self) { [weak self] response in
             guard response == .OK, let self = self else { return }
-            self.uploadAndSendFiles(panel.urls)
+            self.uploadFiles(panel.urls)
         }
     }
-    
-    private func uploadAndSendFiles(_ urls: [URL]) {
-        guard !urls.isEmpty,
+
+    /// Uploads files and attaches them to the current draft (web-style), rather
+    /// than sending immediately. Drop and the attach button share this path.
+    private func uploadFiles(_ urls: [URL]) {
+        let files = urls.filter { !$0.hasDirectoryPath }
+        guard !files.isEmpty,
               !activeChannelId.isEmpty,
               let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
         let channelId = activeChannelId
-        let message = entryView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        composerHelpLabel.stringValue = "Uploading…"
-        
+        composerHelpLabel.stringValue = files.count == 1 ? "Uploading…" : "Uploading \(files.count) files…"
+
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            var fileIds: [String] = []
-            for url in urls {
-                guard let data = try? Data(contentsOf: url) else { continue }
+            var uploaded: [PendingAttachment] = []
+            for url in files {
+                let accessed = url.startAccessingSecurityScopedResource()
+                let data = try? Data(contentsOf: url)
+                if accessed { url.stopAccessingSecurityScopedResource() }
+                guard let data = data else { continue }
                 let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
                 if let fileId = try? await ws.uploadFile(
                     channelId: channelId,
@@ -5475,29 +5579,125 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                     filename: url.lastPathComponent,
                     mimeType: mime
                 ) {
-                    fileIds.append(fileId)
+                    uploaded.append(PendingAttachment(id: fileId, name: url.lastPathComponent, size: Int64(data.count)))
                 }
             }
-            guard !fileIds.isEmpty else {
+            guard !uploaded.isEmpty else {
                 self.composerHelpLabel.stringValue = "Upload failed"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
                     self?.composerHelpLabel.stringValue = "Help"
                 }
                 return
             }
-            do {
-                let post = try await ws.createPost(channelId: channelId, message: message, fileIds: fileIds)
-                if self.activeChannelId == channelId {
-                    self.currentChannelPosts.append(post)
-                    self.rebuildTimelineContent(scrollToBottom: true)
-                }
-                self.entryView.string = ""
-                self.updateComposerSendState()
-                self.composerHelpLabel.stringValue = "Help"
-            } catch {
-                self.composerHelpLabel.stringValue = "Upload failed"
-                NSLog("Failed to send attachment: \(error.localizedDescription)")
+            self.pendingAttachments.append(contentsOf: uploaded)
+            self.layoutRightChatPanel()
+            self.renderPendingAttachments()
+            self.scrollTimelineToBottom()
+            self.updateComposerSendState()
+            self.composerHelpLabel.stringValue = "Attached \(self.pendingAttachments.count) file\(self.pendingAttachments.count == 1 ? "" : "s")"
+        }
+    }
+
+    private func renderPendingAttachments() {
+        composerAttachmentTray.subviews.forEach { $0.removeFromSuperview() }
+        composerAttachmentTray.isHidden = pendingAttachments.isEmpty
+        guard !pendingAttachments.isEmpty else { return }
+
+        let trayWidth = max(composerAttachmentTray.bounds.width, 200)
+        let chipW: CGFloat = 168
+        let chipH: CGFloat = 24
+        let gap: CGFloat = 6
+        let maxVisible = max(1, Int((trayWidth + gap) / (chipW + gap)))
+        var x: CGFloat = 0
+
+        for attachment in pendingAttachments.prefix(maxVisible) {
+            let chip = RoundedEdgePanel()
+            chip.cornerRadius = 4
+            chip.color = Theme.shared.centerHover
+            chip.borderWidth = 1
+            chip.borderColor = Theme.shared.divider
+            chip.frame = NSRect(x: x, y: 2, width: chipW, height: chipH)
+
+            let icon = NSImageView()
+            if let image = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: attachment.name) {
+                icon.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+                icon.contentTintColor = Theme.shared.centerTextMuted
             }
+            icon.frame = NSRect(x: 7, y: 6, width: 12, height: 12)
+            chip.addSubview(icon)
+
+            let name = NSTextField(labelWithString: attachment.name)
+            name.font = MMFont.font(ofSize: 11)
+            name.textColor = Theme.shared.centerText
+            name.lineBreakMode = .byTruncatingMiddle
+            name.isEditable = false
+            name.isSelectable = false
+            name.frame = NSRect(x: 24, y: 5, width: chipW - 50, height: 14)
+            chip.addSubview(name)
+
+            let remove = RoundedEdgePanel()
+            remove.cornerRadius = 3
+            remove.color = .clear
+            remove.frame = NSRect(x: chipW - 22, y: 4, width: 16, height: 16)
+            let xIcon = NSImageView()
+            if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Remove attachment") {
+                xIcon.image = image.withSymbolConfiguration(.init(pointSize: 8, weight: .bold))
+                xIcon.contentTintColor = Theme.shared.centerTextMuted
+            }
+            xIcon.frame = NSRect(x: 4, y: 4, width: 8, height: 8)
+            remove.addSubview(xIcon)
+            let attachmentId = attachment.id
+            remove.onClick = { [weak self] in
+                self?.removePendingAttachment(id: attachmentId)
+            }
+            chip.addSubview(remove)
+
+            composerAttachmentTray.addSubview(chip)
+            x += chipW + gap
+        }
+
+        if pendingAttachments.count > maxVisible {
+            let more = NSTextField(labelWithString: "+\(pendingAttachments.count - maxVisible)")
+            more.font = MMFont.font(ofSize: 11, weight: .semibold)
+            more.textColor = Theme.shared.centerTextMuted
+            more.isEditable = false
+            more.isSelectable = false
+            more.frame = NSRect(x: x + 2, y: 7, width: 32, height: 14)
+            composerAttachmentTray.addSubview(more)
+        }
+    }
+
+    private func removePendingAttachment(id: String) {
+        pendingAttachments.removeAll { $0.id == id }
+        renderPendingAttachments()
+        layoutRightChatPanel()
+        scrollTimelineToBottom()
+        updateComposerSendState()
+        composerHelpLabel.stringValue = pendingAttachments.isEmpty
+            ? "Help"
+            : "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+    }
+
+    private func clearPendingAttachments() {
+        guard !pendingAttachments.isEmpty else { return }
+        pendingAttachments.removeAll()
+        composerAttachmentTray.subviews.forEach { $0.removeFromSuperview() }
+        composerAttachmentTray.isHidden = true
+        updateComposerSendState()
+        layoutRightChatPanel()
+    }
+
+    private func setComposerDropHighlight(_ active: Bool) {
+        chatEntryPanel.color = active
+            ? Theme.shared.buttonBg
+            : Theme.shared.centerText.withAlphaComponent(0.16)
+        chatEntryPanel.setNeedsAppearanceUpdate()
+        if active {
+            composerHelpLabel.stringValue = "Drop files to attach"
+        } else if pendingAttachments.isEmpty {
+            composerHelpLabel.stringValue = "Help"
+        } else {
+            composerHelpLabel.stringValue = "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
         }
     }
     
@@ -8601,7 +8801,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         // Keep in sync with layoutRightChatPanel(): 56pt header, 50/90pt composer.
         let headerH: CGFloat = 56
         let headerY = chatH - headerH
-        let composerH: CGFloat = isComposerToolbarVisible ? 90 : 50
+        let composerH: CGFloat = composerTotalHeight
         let composerTop = 24 + composerH
         let scrollH = max(0, headerY - composerTop)
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
@@ -8796,7 +8996,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         connectionLabel.frame = NSRect(x: 12, y: 4, width: max(0, chatW - 24), height: 18)
         
         if isRightPanelVisible {
-            let composerArea: CGFloat = 24 + (isComposerToolbarVisible ? 90 : 50) + 8
+            let composerArea: CGFloat = 24 + composerTotalHeight + 8
             let maxPanelWidth = max(280, chatW - 360)
             let panelWidth = min(max(280, rightPanelWidth), maxPanelWidth)
             let panelHeight = max(0, chatH - headerH - composerArea)
@@ -8890,7 +9090,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         
         // 2. Composer at bottom (web: 2pt border, 4pt radius, 50pt editor + 24pt footer)
         let composerW = max(chatW - 48, 200)
-        let composerH: CGFloat = isComposerToolbarVisible ? 90 : 50
+        let baseComposerH = composerBaseHeight
+        let composerH = composerTotalHeight
         let composerBottom: CGFloat = 24
         chatEntryPanel.frame = NSRect(x: 24, y: composerBottom, width: composerW, height: composerH)
         if isComposerToolbarVisible {
@@ -8898,12 +9099,13 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             entryView.frame = NSRect(x: 14, y: 40, width: composerW - 28, height: 36)
         } else {
             entryView.textContainerInset = NSSize(width: 0, height: 13)
-            entryView.frame = NSRect(x: 14, y: 0, width: composerW - 234, height: composerH)
+            entryView.frame = NSRect(x: 14, y: 0, width: composerW - 234, height: baseComposerH)
         }
+        composerAttachmentTray.frame = NSRect(x: 8, y: baseComposerH + 2, width: composerW - 16, height: 28)
         composerHelpLabel.frame = NSRect(x: chatW - 24 - 180, y: 3, width: 180, height: 18)
         composerHelpLabel.alignment = .right
         
-        let toolY: CGFloat = isComposerToolbarVisible ? 8 : (composerH - 32) / 2
+        let toolY: CGFloat = isComposerToolbarVisible ? 8 : (baseComposerH - 32) / 2
         
         var btnX: CGFloat = 8
         for (i, btn) in composerLeftButtons.enumerated() {
@@ -9261,6 +9463,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
         activeChannelId = ch.id
         _ = cancelEditing()
+        clearPendingAttachments()
         newMessagesDividerPostId = nil
         newMessagesDividerView = nil
         newMessagesCount = 0
@@ -9494,6 +9697,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     /// Enables/disables the send button as the editor content changes.
     private func updateComposerSendState() {
         let hasText = !entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !pendingAttachments.isEmpty
         guard hasText != composerSendEnabled else { return }
         composerSendEnabled = hasText
         if hasText {
@@ -9510,7 +9714,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     /// accepted so a failure does not lose the user's text.
     @discardableResult
     private func startEditingLastMessage() -> Bool {
-        guard editingPostId == nil else { return false }
+        guard editingPostId == nil, pendingAttachments.isEmpty else { return false }
         let myId = currentUser?.id ?? (NSApp.delegate as? AppDelegate)?.webService.currentUserId ?? ""
         guard !myId.isEmpty else { return false }
         guard let post = currentChannelPosts.last(where: {
@@ -9542,9 +9746,15 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     private func sendComposerMessage() {
         let message = entryView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, !activeChannelId.isEmpty else { return }
+        let fileIds = pendingAttachments.map { $0.id }
+        guard !message.isEmpty || !fileIds.isEmpty, !activeChannelId.isEmpty else { return }
         let channelId = activeChannelId
         let editingId = editingPostId
+
+        if editingId != nil && !fileIds.isEmpty {
+            composerHelpLabel.stringValue = "Remove attachments to edit"
+            return
+        }
 
         entryView.string = ""
         entryView.needsDisplay = true
@@ -9559,10 +9769,20 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                     self.editingPostId = nil
                     self.applyUpdatedPost(updated)
                 } else {
-                    let post = try await ws.createPost(channelId: channelId, message: message)
+                    let post = try await ws.createPost(
+                        channelId: channelId,
+                        message: message,
+                        fileIds: fileIds
+                    )
                     if self.activeChannelId == channelId {
                         self.currentChannelPosts.append(post)
                         self.rebuildTimelineContent(scrollToBottom: true)
+                    }
+                    if !fileIds.isEmpty {
+                        self.pendingAttachments.removeAll()
+                        self.renderPendingAttachments()
+                        self.layoutRightChatPanel()
+                        self.scrollTimelineToBottom()
                     }
                 }
                 self.composerHelpLabel.stringValue = "Help"
@@ -9579,6 +9799,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 NSLog("Failed to send post: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func scrollTimelineToBottom() {
+        let maxY = max(0, timelineDocView.frame.height - timelineScrollView.contentView.bounds.height)
+        timelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
+        timelineScrollView.reflectScrolledClipView(timelineScrollView.contentView)
     }
     
     func sendActiveChannelPost(message: String) {
