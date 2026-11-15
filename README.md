@@ -26,7 +26,8 @@ A native macOS desktop client for [Mattermost](https://mattermost.com/) built wi
 - **Right-hand Panel**: Threads, Members and Pinned Posts lists with hover states, empty states and click-to-open, toggled from the sidebar Threads row or the header buttons.
 - **Welcome Hero**: Channel introduction illustration, welcome title, description, and workspace invitation action.
 - **Message Timeline**: White date-separator pills (13 pt bold over a 1 pt rule) for *Today*, *Yesterday*, weekday, or full date, with 32 pt avatars, 14 pt semibold authors, and 12.6 pt timestamps measured from the web DOM. Scrolling to the top loads older pages (60 at a time) via `before` pagination without losing your place.
-- **Rich Posts**: Image previews and downloadable file chips, web-style reaction chips (blue for your own reactions, clickable, with a hover add-reaction chip), a post hover toolbar (add reaction, reply, more), pinned-post pins, an ✎ Edited marker, and deleted-message tombstones.
+- **Rich Posts**: Web-sized image previews (natural size up to 700×350), file attachment cards with type, size and download, web-style reaction chips (blue for your own reactions, clickable, with a hover add-reaction chip), a post hover toolbar (add reaction, reply, more), pinned-post pins, an ✎ Edited marker, and deleted-message tombstones.
+- **Image Lightbox**: Full-screen preview with file details, download, zoom and `Esc`/backdrop close.
 - **Threads**: Right-hand thread view with the root post, grouped replies, and an inline reply composer.
 - **Rich Text**: Bold/italic/strike, fenced and inline code with tinted backgrounds, highlighted `@mentions`, clickable `~channel` links, expanded `:emoji:` shortcodes, inline images and external links.
 - **Localized Dates**: Timestamps, date separators and panel rows use the system locale and 24-hour setting, with relative Today/Yesterday labels.

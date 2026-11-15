@@ -246,7 +246,23 @@ Effort: **S** ≤½ day · **M** 1–3 days · **L** >3 days.
   - Verified by an in-app harness (synthetic clicks are blocked in the locked desktop session):
     reaction add → remove → restore, thread load, and reply count 2 → 3. Added WebSocket reaction
     parsing and endpoint URL tests (19 tests pass).
-- [ ] **Attachments and inline images** with correct web sizing, thumbnail previews and lightbox — `M`
+- [x] **Attachments and inline images** with correct web sizing, thumbnail previews and lightbox — `M`
+  - Image attachments now match `.file-view--single`: natural size capped at 700pt wide and 350pt
+    tall, 8pt radius, 1pt `rgba(63,67,80,0.16)` border, with a hover download button. Preview data
+    comes from `/files/{id}/preview`; the full file is loaded for the lightbox.
+  - File attachments now render as `.post-image__column` cards: 320×64pt white card, 4pt radius,
+    1pt border, 63pt blue file-type thumbnail, 12pt semibold name, `TYPE SIZE` (e.g. `TXT 20B`) and
+    a 32pt download button. Multiple cards flow horizontally and wrap at the post width.
+  - Inline markdown/Giphy images use the web inline metrics: natural size, 100% max width, 350pt max
+    height, 4pt radius, no upscaling. Pixel dimensions are read from image reps (not `NSImage.size`,
+    which is in points) and cached so the timeline reflows once to the real aspect ratio.
+  - Added the full-screen lightbox: 72pt black header (40pt avatar, 16pt filename, author +
+    `Shared In ~channel`, download and close actions), 40pt translucent zoom bar with −/fit/+,
+    and a 90% black stage with a 48pt padded, 8pt-radius image centred at fit size. `Esc` or a
+    click on the backdrop closes it; the download action saves the file (or remote image) via a
+    save panel; the overlay follows window resize/zoom.
+  - Verified against computed styles from the live web client and screenshots of the timeline and
+    lightbox; 19 tests pass.
 - [ ] **"New Messages" divider and unread pill** above the first unread post — `S`
 - [ ] **Right-hand sidebar** (threads, members, pinned posts, files) with resize/persist — `L`
 - [ ] **Saved posts / mentions / settings / invite / channel browser / DM creation** — `M` each

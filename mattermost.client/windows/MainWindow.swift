@@ -35,6 +35,37 @@ private class TimelineRowView: RoundedEdgePanel {
     var reactionAddChip: NSView?
 }
 
+/// Rounded panel with a top-down coordinate system, used for file cards.
+private class FlippedEdgePanel: RoundedEdgePanel {
+    override var isFlipped: Bool { true }
+}
+
+/// Draws the blue file-sheet thumbnail shown on attachment cards.
+private class FileTypeIconView: NSView {
+    var fileExtension: String = ""
+
+    override func draw(_ dirtyRect: NSRect) {
+        let blue = NSColor(red: 56 / 255, green: 111 / 255, blue: 229 / 255, alpha: 1.0)
+        let sheet = NSRect(x: (bounds.width - 32) / 2, y: (bounds.height - 40) / 2, width: 32, height: 40)
+        let path = NSBezierPath(roundedRect: sheet, xRadius: 3, yRadius: 3)
+        path.lineWidth = 1.5
+        blue.setStroke()
+        path.stroke()
+
+        let label = fileExtension.uppercased()
+        guard !label.isEmpty else { return }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: MMFont.font(ofSize: 8, weight: .bold),
+            .foregroundColor: blue
+        ]
+        let size = (label as NSString).size(withAttributes: attrs)
+        label.draw(
+            at: NSPoint(x: sheet.midX - size.width / 2, y: sheet.midY - size.height / 2),
+            withAttributes: attrs
+        )
+    }
+}
+
 private class TimelineScrollView: NSScrollView {
     var onScrollWheel: (() -> Void)?
 
@@ -176,6 +207,34 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
     private var isPostActionMenuOpen = false
     private var postActionMenuAnchorInChat: NSRect = .zero
     private var postActionMenuPost: MMPost?
+
+    // Full-window image lightbox
+    let lightboxOverlay = RoundedEdgePanel()
+    let lightboxHeaderPanel = RoundedEdgePanel()
+    let lightboxZoomBar = RoundedEdgePanel()
+    let lightboxContentPanel = RoundedEdgePanel()
+    let lightboxImageView = NSImageView()
+    let lightboxAvatarView = NSImageView()
+    let lightboxAvatarPanel = RoundedEdgePanel()
+    let lightboxTitleLabel = NSTextField(labelWithString: "")
+    let lightboxSubtitleLabel = NSTextField(labelWithString: "")
+    let lightboxDownloadButton = RoundedEdgePanel()
+    let lightboxCloseButton = RoundedEdgePanel()
+    let lightboxZoomOutButton = RoundedEdgePanel()
+    let lightboxZoomFitButton = RoundedEdgePanel()
+    let lightboxZoomInButton = RoundedEdgePanel()
+    private var isLightboxVisible = false
+    private var lightboxFile: MMFileInfo?
+    private var lightboxRemoteURL: String?
+    private var lightboxNaturalSize: NSSize = .zero
+    private var lightboxScale: CGFloat = 1
+    private var lightboxKeyMonitor: Any?
+    private var lightboxLoadToken = UUID()
+
+    // Natural sizes cached after an inline image loads so the timeline can reflow once.
+    private var inlineImageSizeCache: [String: NSSize] = [:]
+    private var attachmentSizeCache: [String: NSSize] = [:]
+    private var isRelayoutScheduled = false
     
     // Channel header dropdown menu
     let channelMenu = RoundedEdgePanel()
@@ -3915,6 +3974,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         setupRightPanel()
         setupEmojiPanel()
         setupPostInteractionPanels()
+        setupLightbox()
         setupChannelMenu()
         rebuildTimelineContent(scrollToBottom: true)
     }
@@ -5194,53 +5254,112 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         return ParsedGiphyMessage(text: trimmed, gifURLs: gifURLs)
     }
 
-    private func createGiphyView(urlString: String, maxWidth: CGFloat) -> (NSView, CGFloat) {
-        let container = RoundedEdgePanel()
-        let viewH: CGFloat = 160
-        var viewW = min(maxWidth, 240)
+    /// Returns the pixel dimensions of an image. `NSImage.size` is in points and is
+    /// halved for @2x assets, while the web client sizes previews from pixel data.
+    private func pixelSize(of image: NSImage) -> NSSize {
+        if let rep = image.representations.max(by: {
+            ($0.pixelsWide * $0.pixelsHigh) < ($1.pixelsWide * $1.pixelsHigh)
+        }), rep.pixelsWide > 0, rep.pixelsHigh > 0 {
+            return NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+        }
+        return image.size
+    }
 
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
+    /// Fits an image into the web client's preview bounds while preserving its
+    /// natural aspect ratio. Images are never upscaled beyond their natural size.
+    private func fitImageSize(natural: NSSize, maxWidth: CGFloat, maxHeight: CGFloat) -> NSSize {
+        guard natural.width > 0, natural.height > 0 else {
+            return NSSize(width: min(240, maxWidth), height: min(160, maxHeight))
+        }
+        var width = min(natural.width, maxWidth)
+        var height = width * natural.height / natural.width
+        if height > maxHeight {
+            height = maxHeight
+            width = height * natural.width / natural.height
+        }
+        return NSSize(width: max(1, floor(width)), height: max(1, floor(height)))
+    }
+
+    /// Renders an inline markdown/Giphy image with the web client's inline metrics:
+    /// max 100% width, 350pt max height, 4pt radius, natural size otherwise.
+    private func createInlineImageView(urlString: String, maxWidth: CGFloat) -> (NSView, CGFloat) {
+        let maxHeight: CGFloat = 350
+        var naturalSize = inlineImageSizeCache[urlString] ?? NSSize(width: 240, height: 160)
+
+        // Use a disk-cached frame to establish the natural size before the network fetch.
+        var cachedImage: NSImage?
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("mattermost.client/giphy", isDirectory: true)
         if let dir = cacheDir {
             let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
             let safeName = urlString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "\(urlString.hashValue)"
             let filename = (safeName.count > 60 ? "\(urlString.hashValue)" : safeName) + ".gif"
             let diskURL = dir.appendingPathComponent(filename)
             let checkURL = (urlString.contains("ICOgUNjpvO0PC") && FileManager.default.fileExists(atPath: sampleFile.path)) ? sampleFile : diskURL
-            if let data = try? Data(contentsOf: checkURL), let cachedImg = NSImage(data: data) {
-                if cachedImg.size.height > 0 {
-                    let aspect = cachedImg.size.width / cachedImg.size.height
-                    viewW = min(maxWidth, max(40, viewH * aspect))
+            if let data = try? Data(contentsOf: checkURL), let image = NSImage(data: data) {
+                cachedImage = image
+                let pixels = pixelSize(of: image)
+                if inlineImageSizeCache[urlString] == nil, pixels.width > 0, pixels.height > 0 {
+                    naturalSize = pixels
                 }
             }
         }
 
-        container.frame = NSRect(x: 0, y: 0, width: viewW, height: viewH)
-        container.cornerRadius = 8
-        container.borderWidth = 0
-        container.borderColor = nil
+        let displaySize = fitImageSize(natural: naturalSize, maxWidth: maxWidth, maxHeight: maxHeight)
+        let container = RoundedEdgePanel()
+        container.cornerRadius = 4
         container.color = .clear
+        container.clipContentToBounds = true
+        container.frame = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
 
-        let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: viewW, height: viewH))
+        let imageView = NSImageView(frame: NSRect(origin: .zero, size: displaySize))
         imageView.animates = true
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.imageAlignment = .alignLeft
         imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 8
+        imageView.layer?.cornerRadius = 4
         imageView.layer?.masksToBounds = true
+        imageView.image = cachedImage
         container.addSubview(imageView)
 
-        loadGiphyAnimatedImage(from: urlString) { [weak container, weak imageView] image in
-            guard let image = image else { return }
+        container.onClick = { [weak self, weak imageView] in
+            let name = URL(string: urlString)?.lastPathComponent ?? "Image"
+            self?.showLightbox(image: imageView?.image, remoteURL: urlString, filename: name)
+        }
+
+        loadGiphyAnimatedImage(from: urlString) { [weak self, weak container, weak imageView] image in
+            guard let self = self, let image = image else { return }
             imageView?.image = image
-            if image.size.height > 0 {
-                let aspect = image.size.width / image.size.height
-                let actualW = min(maxWidth, max(40, viewH * aspect))
-                container?.frame.size.width = actualW
-                imageView?.frame.size.width = actualW
+            let pixels = self.pixelSize(of: image)
+            guard pixels.width > 0, pixels.height > 0 else { return }
+            let wasUncached = self.inlineImageSizeCache[urlString] == nil
+            self.inlineImageSizeCache[urlString] = pixels
+            let fitted = self.fitImageSize(natural: pixels, maxWidth: maxWidth, maxHeight: maxHeight)
+            if abs(fitted.width - displaySize.width) > 1 || abs(fitted.height - displaySize.height) > 1 {
+                container?.frame.size = fitted
+                imageView?.frame = NSRect(origin: .zero, size: fitted)
+                if wasUncached {
+                    self.scheduleImageRelayout()
+                }
             }
         }
 
-        return (container, viewH)
+        return (container, displaySize.height)
+    }
+
+    /// Rebuilds the list once after inline images report their natural size so
+    /// row heights account for the real aspect ratio (matching the web client).
+    private func scheduleImageRelayout() {
+        guard !isRelayoutScheduled else { return }
+        isRelayoutScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.isRelayoutScheduled = false
+            if self.isRightPanelVisible && self.rightPanelMode == .thread {
+                self.renderThreadPanel()
+            }
+            self.rebuildTimelineContent()
+        }
     }
 
     private func loadGiphyAnimatedImage(from urlString: String, completion: @escaping (NSImage?) -> Void) {
@@ -5598,6 +5717,286 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         chatPanel.addSubview(postActionMenu)
     }
 
+    // MARK: - Image lightbox
+
+    private func setupLightbox() {
+        lightboxOverlay.color = .clear
+        lightboxOverlay.cornerRadius = 0
+        lightboxOverlay.clipContentToBounds = true
+        lightboxOverlay.isHidden = true
+
+        lightboxHeaderPanel.cornerRadius = 0
+        lightboxHeaderPanel.color = .black
+        lightboxOverlay.addSubview(lightboxHeaderPanel)
+
+        lightboxZoomBar.cornerRadius = 0
+        lightboxZoomBar.color = NSColor(red: 61 / 255, green: 60 / 255, blue: 64 / 255, alpha: 0.75)
+        lightboxOverlay.addSubview(lightboxZoomBar)
+
+        lightboxContentPanel.cornerRadius = 0
+        lightboxContentPanel.color = NSColor.black.withAlphaComponent(0.9)
+        lightboxContentPanel.clipContentToBounds = true
+        lightboxContentPanel.onClick = { [weak self] in
+            self?.closeLightbox()
+        }
+        lightboxOverlay.addSubview(lightboxContentPanel)
+
+        lightboxAvatarPanel.cornerRadius = 20
+        lightboxAvatarPanel.color = NSColor(red: 28 / 255, green: 88 / 255, blue: 217 / 255, alpha: 1.0)
+        lightboxAvatarPanel.clipContentToBounds = true
+        lightboxAvatarView.imageScaling = .scaleProportionallyUpOrDown
+        lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+        lightboxAvatarPanel.addSubview(lightboxAvatarView)
+        lightboxHeaderPanel.addSubview(lightboxAvatarPanel)
+
+        lightboxTitleLabel.font = MMFont.font(ofSize: 16, weight: .semibold)
+        lightboxTitleLabel.textColor = .white
+        lightboxTitleLabel.lineBreakMode = .byTruncatingMiddle
+        lightboxTitleLabel.isEditable = false
+        lightboxTitleLabel.isSelectable = false
+        lightboxHeaderPanel.addSubview(lightboxTitleLabel)
+
+        lightboxSubtitleLabel.font = MMFont.font(ofSize: 14)
+        lightboxSubtitleLabel.textColor = NSColor.white.withAlphaComponent(0.75)
+        lightboxSubtitleLabel.lineBreakMode = .byTruncatingTail
+        lightboxSubtitleLabel.isEditable = false
+        lightboxSubtitleLabel.isSelectable = false
+        lightboxHeaderPanel.addSubview(lightboxSubtitleLabel)
+
+        configureLightboxButton(
+            lightboxDownloadButton,
+            symbol: "arrow.down.to.line",
+            description: "Download",
+            action: { [weak self] in self?.downloadFromLightbox() }
+        )
+        configureLightboxButton(
+            lightboxCloseButton,
+            symbol: "xmark",
+            description: "Close",
+            action: { [weak self] in self?.closeLightbox() }
+        )
+        configureLightboxButton(
+            lightboxZoomOutButton,
+            symbol: "minus",
+            description: "Zoom out",
+            size: 28,
+            action: { [weak self] in self?.adjustLightboxZoom(by: -0.25) }
+        )
+        configureLightboxButton(
+            lightboxZoomFitButton,
+            symbol: "minus.magnifyingglass",
+            description: "Fit to window",
+            size: 28,
+            action: { [weak self] in self?.resetLightboxZoom() }
+        )
+        configureLightboxButton(
+            lightboxZoomInButton,
+            symbol: "plus",
+            description: "Zoom in",
+            size: 28,
+            action: { [weak self] in self?.adjustLightboxZoom(by: 0.25) }
+        )
+        lightboxHeaderPanel.addSubview(lightboxDownloadButton)
+        lightboxHeaderPanel.addSubview(lightboxCloseButton)
+        lightboxZoomBar.addSubview(lightboxZoomOutButton)
+        lightboxZoomBar.addSubview(lightboxZoomFitButton)
+        lightboxZoomBar.addSubview(lightboxZoomInButton)
+
+        lightboxImageView.imageScaling = .scaleProportionallyUpOrDown
+        lightboxImageView.imageAlignment = .alignCenter
+        lightboxImageView.wantsLayer = true
+        lightboxImageView.layer?.cornerRadius = 8
+        lightboxImageView.layer?.masksToBounds = true
+        lightboxContentPanel.addSubview(lightboxImageView)
+    }
+
+    private func configureLightboxButton(
+        _ button: RoundedEdgePanel,
+        symbol: String,
+        description: String,
+        size: CGFloat = 40,
+        action: @escaping () -> Void
+    ) {
+        button.cornerRadius = 4
+        button.color = .clear
+        let icon = NSImageView()
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description) {
+            icon.image = image.withSymbolConfiguration(.init(pointSize: 16, weight: .medium))
+            icon.contentTintColor = .white
+        }
+        let inset = (size - 16) / 2
+        icon.frame = NSRect(x: inset, y: inset, width: 16, height: 16)
+        button.addSubview(icon)
+        button.onHoverChanged = { [weak button] isHovered in
+            button?.color = NSColor.white.withAlphaComponent(isHovered ? 0.12 : 0.0)
+            button?.setNeedsAppearanceUpdate()
+        }
+        button.onClick = action
+    }
+
+    /// Shows the web client's full-screen file preview: black 72pt header, 40pt zoom
+    /// bar and a 90% black stage with the image centred at its natural size.
+    private func showLightbox(image: NSImage?, file: MMFileInfo? = nil, remoteURL: String? = nil, filename: String) {
+        guard let contentView = contentView else { return }
+
+        lightboxFile = file
+        lightboxRemoteURL = remoteURL
+        lightboxScale = 1
+        lightboxTitleLabel.stringValue = filename
+        let author = currentUser?.username ?? UserDefaults.standard.string(forKey: "username") ?? ""
+        let channel = channelsById[activeChannelId].map { channelDisplayName(for: $0) } ?? ""
+        if !author.isEmpty && !channel.isEmpty {
+            lightboxSubtitleLabel.stringValue = "\(author) Shared In ~\(channel)"
+        } else if !channel.isEmpty {
+            lightboxSubtitleLabel.stringValue = "Shared In ~\(channel)"
+        } else {
+            lightboxSubtitleLabel.stringValue = ""
+        }
+
+        if let avatar = userAvatarsById[currentUser?.id ?? ""] {
+            lightboxAvatarView.image = avatar
+        } else {
+            lightboxAvatarView.image = nil
+        }
+
+        lightboxImageView.image = image
+        lightboxNaturalSize = image.map { pixelSize(of: $0) } ?? .zero
+        lightboxLoadToken = UUID()
+        let token = lightboxLoadToken
+
+        if let file = file, let ws = (NSApp.delegate as? AppDelegate)?.webService {
+            Task { @MainActor [weak self] in
+                guard let self = self, self.lightboxLoadToken == token,
+                      let data = try? await ws.fetchFileData(fileId: file.id),
+                      let full = NSImage(data: data) else { return }
+                self.lightboxImageView.image = full
+                self.lightboxNaturalSize = self.pixelSize(of: full)
+                self.layoutLightboxImage()
+            }
+        } else if let remoteURL = remoteURL, let url = URL(string: remoteURL) {
+            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
+            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+            URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+                guard let data = data, let full = NSImage(data: data) else { return }
+                DispatchQueue.main.async {
+                    guard let self = self, self.lightboxLoadToken == token else { return }
+                    self.lightboxImageView.image = full
+                    self.lightboxNaturalSize = self.pixelSize(of: full)
+                    self.layoutLightboxImage()
+                }
+            }.resume()
+        }
+
+        if lightboxOverlay.superview !== contentView {
+            lightboxOverlay.removeFromSuperview()
+            contentView.addSubview(lightboxOverlay)
+        } else {
+            contentView.addSubview(lightboxOverlay)
+        }
+        lightboxOverlay.isHidden = false
+        isLightboxVisible = true
+        layoutLightbox()
+
+        if lightboxKeyMonitor == nil {
+            lightboxKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isLightboxVisible else { return event }
+                if event.keyCode == 53 {
+                    self.closeLightbox()
+                    return nil
+                }
+                return event
+            }
+        }
+    }
+
+    private func closeLightbox() {
+        lightboxOverlay.isHidden = true
+        lightboxOverlay.removeFromSuperview()
+        isLightboxVisible = false
+        lightboxLoadToken = UUID()
+        if let monitor = lightboxKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            lightboxKeyMonitor = nil
+        }
+    }
+
+    private func adjustLightboxZoom(by delta: CGFloat) {
+        lightboxScale = min(3, max(0.25, lightboxScale + delta))
+        layoutLightboxImage()
+    }
+
+    private func resetLightboxZoom() {
+        lightboxScale = 1
+        layoutLightboxImage()
+    }
+
+    private func layoutLightbox() {
+        guard let contentView = contentView, isLightboxVisible else { return }
+        let bounds = contentView.bounds
+        let width = bounds.width
+        let height = bounds.height
+        let headerH: CGFloat = 72
+        let zoomH: CGFloat = 40
+
+        lightboxOverlay.frame = bounds
+        lightboxHeaderPanel.frame = NSRect(x: 0, y: height - headerH, width: width, height: headerH)
+        lightboxZoomBar.frame = NSRect(x: 0, y: height - headerH - zoomH, width: width, height: zoomH)
+        lightboxContentPanel.frame = NSRect(x: 0, y: 0, width: width, height: max(0, height - headerH - zoomH))
+
+        lightboxAvatarPanel.frame = NSRect(x: 16, y: 16, width: 40, height: 40)
+        lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+        lightboxTitleLabel.frame = NSRect(x: 68, y: headerH - 16 - 24, width: max(40, width - 68 - 120), height: 24)
+        lightboxSubtitleLabel.frame = NSRect(x: 68, y: headerH - 40 - 20, width: max(40, width - 68 - 120), height: 20)
+        lightboxCloseButton.frame = NSRect(x: width - 16 - 40, y: 18, width: 40, height: 40)
+        lightboxDownloadButton.frame = NSRect(x: lightboxCloseButton.frame.minX - 8 - 40, y: 18, width: 40, height: 40)
+
+        let zoomButtonSize: CGFloat = 28
+        let zoomGap: CGFloat = 12
+        let zoomTotal = zoomButtonSize * 3 + zoomGap * 2
+        let zoomStartX = (width - zoomTotal) / 2
+        let zoomY = (zoomH - zoomButtonSize) / 2
+        lightboxZoomOutButton.frame = NSRect(x: zoomStartX, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
+        lightboxZoomFitButton.frame = NSRect(x: zoomStartX + zoomButtonSize + zoomGap, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
+        lightboxZoomInButton.frame = NSRect(x: zoomStartX + (zoomButtonSize + zoomGap) * 2, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
+
+        layoutLightboxImage()
+    }
+
+    private func layoutLightboxImage() {
+        guard isLightboxVisible else { return }
+        let stage = lightboxContentPanel.bounds
+        let padding: CGFloat = 48
+        let maxW = max(1, stage.width - padding * 2)
+        let maxH = max(1, stage.height - padding * 2)
+        guard lightboxNaturalSize.width > 0, lightboxNaturalSize.height > 0 else {
+            lightboxImageView.frame = .zero
+            return
+        }
+        let fitted = fitImageSize(natural: lightboxNaturalSize, maxWidth: maxW, maxHeight: maxH)
+        let width = fitted.width * lightboxScale
+        let height = fitted.height * lightboxScale
+        lightboxImageView.frame = NSRect(
+            x: (stage.width - width) / 2,
+            y: (stage.height - height) / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    private func downloadFromLightbox() {
+        if let file = lightboxFile {
+            downloadAttachment(file)
+        } else if let remoteURL = lightboxRemoteURL, let url = URL(string: remoteURL) {
+            let name = url.lastPathComponent.isEmpty ? "image" : url.lastPathComponent
+            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                guard let data = data else { return }
+                DispatchQueue.main.async {
+                    self?.saveFileData(data, suggestedName: name)
+                }
+            }.resume()
+        }
+    }
+
     private func showReactionPicker(for post: MMPost, anchor: NSView) {
         showReactionPicker(for: post, anchorRect: frameInChat(anchor))
     }
@@ -5871,91 +6270,238 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         return counts.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
     
-    private func createAttachmentView(_ file: MMFileInfo, maxWidth: CGFloat) -> (NSView, CGFloat) {
-        let isImage = (file.mime_type ?? "").hasPrefix("image/")
-        if isImage {
-            var displayWidth = min(maxWidth, 320)
-            var displayHeight: CGFloat = 160
-            if let w = file.width, let h = file.height, w > 0, h > 0 {
-                let ratio = CGFloat(w) / CGFloat(h)
-                displayHeight = min(220, displayWidth / ratio)
-                if displayHeight < 60 {
-                    displayHeight = 60
-                    displayWidth = min(maxWidth, displayHeight * ratio)
-                }
-            }
-            let container = RoundedEdgePanel()
-            container.cornerRadius = 8
-            container.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-            container.frame = NSRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
-            
-            let imageView = NSImageView()
-            imageView.imageScaling = .scaleProportionallyUpOrDown
-            imageView.imageAlignment = .alignLeft
-            imageView.frame = NSRect(x: 1, y: 1, width: displayWidth - 2, height: displayHeight - 2)
-            container.addSubview(imageView)
-            
-            container.onClick = { [weak self] in
-                self?.openAttachment(file)
-            }
-            container.onHoverChanged = { [weak container] isHovered in
-                container?.color = isHovered
-                    ? NSColor(red: 233 / 255, green: 235 / 255, blue: 239 / 255, alpha: 1.0)
-                    : NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-                container?.setNeedsAppearanceUpdate()
-            }
-            
-            if let ws = (NSApp.delegate as? AppDelegate)?.webService {
-                Task { @MainActor [weak imageView] in
-                    if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
-                       let image = NSImage(data: data) {
-                        imageView?.image = image
-                    }
-                }
-            }
-            return (container, displayHeight)
+    private func fileExtensionLabel(for file: MMFileInfo) -> String {
+        if let ext = file.extension, !ext.isEmpty { return ext.uppercased() }
+        let pathExt = ((file.name ?? "") as NSString).pathExtension
+        if !pathExt.isEmpty { return pathExt.uppercased() }
+        if let mime = file.mime_type, let subtype = mime.split(separator: "/").last, !subtype.isEmpty {
+            return String(subtype).uppercased()
         }
-        
-        let height: CGFloat = 52
+        return "FILE"
+    }
+
+    private func formatFileSize(_ bytes: Int64?) -> String {
+        guard let bytes = bytes, bytes >= 0 else { return "" }
+        if bytes < 1024 { return "\(bytes)B" }
+        let kb = Double(bytes) / 1024
+        if kb < 1024 { return String(format: kb < 10 ? "%.1fKB" : "%.0fKB", kb) }
+        let mb = kb / 1024
+        if mb < 1024 { return String(format: mb < 10 ? "%.1fMB" : "%.0fMB", mb) }
+        return String(format: "%.1fGB", mb / 1024)
+    }
+
+    /// Image attachment preview matching `.file-view--single`: up to 700pt wide and
+    /// 350pt tall, natural size otherwise, 8pt radius and a 1pt subtle border.
+    private func createImageAttachmentView(_ file: MMFileInfo, maxWidth: CGFloat) -> (NSView, CGFloat) {
+        let maxW = min(maxWidth, 700)
+        let maxH: CGFloat = 350
+        var natural = NSSize.zero
+        if let width = file.width, let height = file.height, width > 0, height > 0 {
+            natural = NSSize(width: CGFloat(width), height: CGFloat(height))
+        }
+        if let cached = attachmentSizeCache[file.id] {
+            natural = cached
+        }
+        let placeholder = NSSize(width: min(400, maxW), height: min(240, maxH))
+        let displaySize = fitImageSize(
+            natural: natural == .zero ? placeholder : natural,
+            maxWidth: maxW,
+            maxHeight: maxH
+        )
+
         let container = RoundedEdgePanel()
-        container.cornerRadius = 6
-        container.color = NSColor(red: 243 / 255, green: 244 / 255, blue: 246 / 255, alpha: 1.0)
-        container.frame = NSRect(x: 0, y: 0, width: maxWidth, height: height)
-        
-        let icon = NSImageView()
-        if let image = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: "File") {
-            icon.image = image.withSymbolConfiguration(.init(pointSize: 16, weight: .regular))
-            icon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
+        container.cornerRadius = 8
+        container.color = .clear
+        container.borderWidth = 1
+        container.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        container.frame = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
+
+        let imageView = NSImageView()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignLeft
+        imageView.frame = NSRect(x: 1, y: 1, width: displaySize.width - 2, height: displaySize.height - 2)
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 7
+        imageView.layer?.masksToBounds = true
+        container.addSubview(imageView)
+
+        // Download affordance shown on hover (`.image-preview-utility-buttons-container`).
+        let download = RoundedEdgePanel()
+        download.cornerRadius = 4
+        download.color = .white
+        download.borderWidth = 1
+        download.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        download.shadowColor = .black
+        download.shadowOpacity = 0.08
+        download.shadowRadius = 3
+        download.shadowOffset = CGSize(width: 0, height: -2)
+        download.frame = NSRect(x: displaySize.width - 8 - 28, y: displaySize.height - 8 - 28, width: 28, height: 28)
+        download.isHidden = true
+        let downloadIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
+            downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            downloadIcon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.75)
         }
-        icon.frame = NSRect(x: 12, y: (height - 18) / 2, width: 18, height: 18)
-        container.addSubview(icon)
-        
+        downloadIcon.frame = NSRect(x: 7, y: 7, width: 14, height: 14)
+        download.addSubview(downloadIcon)
+        download.onClick = { [weak self] in
+            self?.downloadAttachment(file)
+        }
+        container.addSubview(download)
+
+        container.onHoverChanged = { [weak container, weak download] isHovered in
+            download?.isHidden = !isHovered
+            container?.borderColor = isHovered
+                ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.3)
+                : NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+            container?.setNeedsAppearanceUpdate()
+        }
+        container.onClick = { [weak self, weak imageView] in
+            self?.showLightbox(image: imageView?.image, file: file, filename: file.name ?? "Image")
+        }
+
+        if let ws = (NSApp.delegate as? AppDelegate)?.webService {
+            Task { @MainActor [weak self, weak container, weak imageView] in
+                guard let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
+                      let image = NSImage(data: data) else { return }
+                imageView?.image = image
+                let pixels = self?.pixelSize(of: image) ?? image.size
+                guard natural == .zero, pixels.width > 0, pixels.height > 0 else { return }
+                self?.attachmentSizeCache[file.id] = pixels
+                let fitted = self?.fitImageSize(natural: pixels, maxWidth: maxW, maxHeight: maxH)
+                    ?? displaySize
+                container?.frame.size = fitted
+                imageView?.frame = NSRect(x: 1, y: 1, width: fitted.width - 2, height: fitted.height - 2)
+                download.frame.origin = NSPoint(
+                    x: fitted.width - 8 - 28,
+                    y: fitted.height - 8 - 28
+                )
+                self?.scheduleImageRelayout()
+            }
+        }
+
+        return (container, displaySize.height)
+    }
+
+    /// File attachment card matching `.post-image__column`: 320×64 white card,
+    /// 4pt radius, 1pt border, 63pt thumbnail, name/type/size and a download button.
+    private func createFileAttachmentCard(_ file: MMFileInfo, maxWidth: CGFloat) -> NSView {
+        let cardW = min(320, maxWidth)
+        let cardH: CGFloat = 64
+        let card = FlippedEdgePanel()
+        card.cornerRadius = 4
+        card.color = .white
+        card.borderWidth = 1
+        card.borderColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.16)
+        card.frame = NSRect(x: 0, y: 0, width: cardW, height: cardH)
+        card.onHoverChanged = { [weak card] isHovered in
+            card?.color = isHovered
+                ? NSColor(red: 249 / 255, green: 250 / 255, blue: 251 / 255, alpha: 1.0)
+                : .white
+            card?.setNeedsAppearanceUpdate()
+        }
+        card.onClick = { [weak self] in
+            self?.openAttachment(file)
+        }
+
+        let icon = FileTypeIconView(frame: NSRect(x: 1, y: 1, width: 63, height: cardH - 2))
+        icon.fileExtension = fileExtensionLabel(for: file)
+        card.addSubview(icon)
+
+        let detailsLeft: CGFloat = 64
+        let nameWidth = min(151, max(60, cardW - detailsLeft - 40))
         let name = NSTextField(labelWithString: file.name ?? file.id)
-        name.font = MMFont.font(ofSize: 13, weight: .semibold)
-        name.textColor = NSColor(red: 31 / 255, green: 41 / 255, blue: 55 / 255, alpha: 1.0)
+        name.font = MMFont.font(ofSize: 12, weight: .semibold)
+        name.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
         name.lineBreakMode = .byTruncatingMiddle
         name.isEditable = false
         name.isSelectable = false
-        name.frame = NSRect(x: 38, y: 16, width: maxWidth - 50, height: 18)
-        container.addSubview(name)
-        
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        let sizeText = file.size.map { formatter.string(fromByteCount: $0) } ?? ""
-        let detail = NSTextField(labelWithString: sizeText)
-        detail.font = MMFont.font(ofSize: 11)
-        detail.textColor = NSColor(red: 107 / 255, green: 114 / 255, blue: 128 / 255, alpha: 1.0)
-        detail.isEditable = false
-        detail.isSelectable = false
-        detail.frame = NSRect(x: 38, y: 4, width: maxWidth - 50, height: 14)
-        container.addSubview(detail)
-        
-        container.onClick = { [weak self] in
-            self?.openAttachment(file)
+        name.frame = NSRect(x: detailsLeft, y: 13, width: nameWidth, height: 17)
+        card.addSubview(name)
+
+        let typeText = fileExtensionLabel(for: file)
+        let typeLabel = NSTextField(labelWithString: typeText)
+        typeLabel.font = MMFont.font(ofSize: 12)
+        typeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        typeLabel.isEditable = false
+        typeLabel.isSelectable = false
+        typeLabel.frame = NSRect(x: detailsLeft, y: 33, width: 60, height: 17)
+        card.addSubview(typeLabel)
+
+        let typeWidth = ceil((typeText as NSString).size(withAttributes: [.font: MMFont.font(ofSize: 12)]).width)
+        let sizeText = formatFileSize(file.size)
+        let sizeLabel = NSTextField(labelWithString: sizeText)
+        sizeLabel.font = MMFont.font(ofSize: 12)
+        sizeLabel.textColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 1.0)
+        sizeLabel.isEditable = false
+        sizeLabel.isSelectable = false
+        sizeLabel.frame = NSRect(x: detailsLeft + typeWidth + 4, y: 33, width: 70, height: 17)
+        card.addSubview(sizeLabel)
+
+        let downloadButton = RoundedEdgePanel()
+        downloadButton.cornerRadius = 4
+        downloadButton.color = .clear
+        downloadButton.frame = NSRect(x: cardW - 45, y: 16, width: 32, height: 32)
+        let downloadIcon = NSImageView()
+        if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
+            downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
+            downloadIcon.contentTintColor = NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.64)
         }
+        downloadIcon.frame = NSRect(x: 8, y: 8, width: 16, height: 16)
+        downloadButton.addSubview(downloadIcon)
+        downloadButton.onHoverChanged = { [weak downloadButton] isHovered in
+            downloadButton?.color = isHovered
+                ? NSColor(red: 63 / 255, green: 67 / 255, blue: 80 / 255, alpha: 0.08)
+                : .clear
+            downloadButton?.setNeedsAppearanceUpdate()
+        }
+        downloadButton.onClick = { [weak self] in
+            self?.downloadAttachment(file)
+        }
+        card.addSubview(downloadButton)
+
+        return card
+    }
+
+    /// Lays out every attachment of a post: images stack at their natural size and
+    /// non-image files flow as 320pt cards, wrapping at the post body width.
+    private func createAttachmentsView(_ files: [MMFileInfo], maxWidth: CGFloat) -> (NSView, CGFloat) {
+        let container = TimelineFlippedView(frame: NSRect(x: 0, y: 0, width: maxWidth, height: 1))
+        let images = files.filter { ($0.mime_type ?? "").hasPrefix("image/") }
+        let others = files.filter { !($0.mime_type ?? "").hasPrefix("image/") }
+
+        var y: CGFloat = 0
+        for file in images {
+            let (view, height) = createImageAttachmentView(file, maxWidth: maxWidth)
+            view.frame.origin = NSPoint(x: 0, y: y)
+            container.addSubview(view)
+            y += height + 5
+        }
+
+        if !others.isEmpty {
+            let cardW = min(320, maxWidth)
+            var x: CGFloat = 0
+            var rowHeight: CGFloat = 0
+            for file in others {
+                if x > 0 && x + cardW > maxWidth {
+                    x = 0
+                    y += rowHeight + 8
+                    rowHeight = 0
+                }
+                let card = createFileAttachmentCard(file, maxWidth: maxWidth)
+                card.frame.origin = NSPoint(x: x, y: y)
+                container.addSubview(card)
+                x += cardW + 12
+                rowHeight = max(rowHeight, 64)
+            }
+            y += rowHeight
+        }
+
+        let height = max(y, 1)
+        container.frame = NSRect(x: 0, y: 0, width: maxWidth, height: height)
         return (container, height)
     }
-    
+
     private func openAttachment(_ file: MMFileInfo) {
         guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
         Task { @MainActor in
@@ -5964,6 +6510,24 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
             try? data.write(to: url)
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func downloadAttachment(_ file: MMFileInfo) {
+        guard let ws = (NSApp.delegate as? AppDelegate)?.webService else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self, let data = try? await ws.fetchFileData(fileId: file.id) else { return }
+            self.saveFileData(data, suggestedName: file.name ?? file.id)
+        }
+    }
+
+    private func saveFileData(_ data: Data, suggestedName: String) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        panel.beginSheetModal(for: self) { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? data.write(to: url)
         }
     }
     
@@ -6063,18 +6627,19 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             }
 
             for gifURL in gifURLs {
-                let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
+                let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW)
                 giphyView.frame.origin = CGPoint(x: 79, y: contentY)
                 row.addSubview(giphyView)
                 contentY += gifH + 6
             }
             
             if !isDeleted {
-                for file in post.metadata?.files ?? [] {
-                    let (attachmentView, fileH) = createAttachmentView(file, maxWidth: bodyMaxW)
+                let files = post.metadata?.files ?? []
+                if !files.isEmpty {
+                    let (attachmentView, fileH) = createAttachmentsView(files, maxWidth: bodyMaxW)
                     attachmentView.frame.origin = CGPoint(x: 79, y: contentY)
                     row.addSubview(attachmentView)
-                    contentY += fileH + 6
+                    contentY += fileH + 2
                 }
             }
             contentY += addReactionChips(for: post, to: row, x: 79, y: contentY)
@@ -6121,17 +6686,21 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         let avatarSize: CGFloat = 32
         let contentX: CGFloat = 79
 
-        // GIF attachments are created first so the row height is known before layout.
+        // Inline images and file attachments are created first so the row height is known.
         var gifViews: [(NSView, CGFloat)] = []
         for gifURL in gifURLs {
-            let (giphyView, gifH) = createGiphyView(urlString: gifURL, maxWidth: bodyMaxW)
+            let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW)
             gifViews.append((giphyView, gifH))
         }
 
-        var attachmentViews: [(NSView, CGFloat)] = []
+        var attachmentsView: NSView?
+        var attachmentsHeight: CGFloat = 0
         if !isDeleted {
-            for file in post.metadata?.files ?? [] {
-                attachmentViews.append(createAttachmentView(file, maxWidth: bodyMaxW))
+            let files = post.metadata?.files ?? []
+            if !files.isEmpty {
+                let created = createAttachmentsView(files, maxWidth: bodyMaxW)
+                attachmentsView = created.0
+                attachmentsHeight = created.1
             }
         }
         let reactionGroups = groupedReactions(post)
@@ -6140,7 +6709,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         var stackHeight: CGFloat = 0
         if hasDisplayableText { stackHeight += bodyH + 3 }
         for (_, gifH) in gifViews { stackHeight += gifH + 6 }
-        for (_, fileH) in attachmentViews { stackHeight += fileH + 6 }
+        if attachmentsView != nil { stackHeight += attachmentsHeight + 2 }
         stackHeight += reactionsHeight
 
         let totalRowH = topPad + headerH + stackHeight + bottomPad
@@ -6314,10 +6883,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
             stackTop += gifH + 6
         }
         
-        for (attachmentView, fileH) in attachmentViews {
-            attachmentView.frame.origin = CGPoint(x: contentX, y: stackTop)
-            row.addSubview(attachmentView)
-            stackTop += fileH + 6
+        if let attachmentsView = attachmentsView {
+            attachmentsView.frame.origin = CGPoint(x: contentX, y: stackTop)
+            row.addSubview(attachmentsView)
+            stackTop += attachmentsHeight + 2
         }
         
         if !reactionGroups.isEmpty {
@@ -6993,6 +7562,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate {
         treeView.frame = NSRect(x: 0, y: 0, width: 264, height: mainPanel.bounds.height)
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
         layoutRightChatPanel()
+        if isLightboxVisible { layoutLightbox() }
 
         // Left: Product switcher container (grid icon, Mattermost logo, TEAM EDITION badge)
         let badgeText = editionBadgeLabel.stringValue.isEmpty ? "TEAM EDITION" : editionBadgeLabel.stringValue
