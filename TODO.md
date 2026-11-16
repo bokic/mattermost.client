@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **232/232 pass** |
+| `./test.sh` | **258/258 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,12 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **`WebService` is a single 1,500-line class** — `M`
-  - REST, WebSocket lifecycle, payload parsing, file transfer and debug logging share one
-    main-actor type. Split into `APIClient` (typed endpoints), `WebSocketClient` (parsing +
-    backoff) and `FileTransfer` with protocol seams; this also makes unit testing auth,
-    reconnect and event parsing much easier.
 
 - [ ] **Persistence is ad hoc `UserDefaults`** — `S`
   - Drafts, scroll positions, statuses, emojis and UI state have no unified store or

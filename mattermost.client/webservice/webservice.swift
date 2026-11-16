@@ -1,680 +1,199 @@
 //
-//  main.swift
-//  mattermost_ws_test
-//
-//  Created by Boris Barbulovski on 11.3.23.
+//  webservice.swift
+//  mattermost.client
 //
 
 import Foundation
-import os
 
-enum DebugLogLevel: Int, Comparable {
-    case debug = 0
-    case info
-    case warning
-    case error
-
-    static func < (lhs: DebugLogLevel, rhs: DebugLogLevel) -> Bool {
-        lhs.rawValue < rhs.rawValue
-    }
-
-    var label: String {
-        switch self {
-        case .debug: return "DEBUG"
-        case .info: return "INFO"
-        case .warning: return "WARN"
-        case .error: return "ERROR"
-        }
-    }
-}
-
-enum DebugLog {
-    static var logPath: String {
-        (NSTemporaryDirectory() as NSString).appendingPathComponent("mattermost_debug.log")
-    }
-
-    static var logArchivePath: String { logPath + ".1" }
-
-    /// Verbose file/stdout logging ships only in Debug builds or when explicitly
-    /// requested with `--debug-log` / the `debugFileLogging` default. Release
-    /// builds still emit warnings and errors through `Logger`.
-    static let isVerboseLoggingEnabled: Bool = {
-        #if DEBUG
-            return true
-        #else
-            return CommandLine.arguments.contains("--debug-log")
-                || UserDefaults.standard.bool(forKey: "debugFileLogging")
-        #endif
-    }()
-
-    /// Raw payload logging is off unless explicitly requested at launch
-    /// (`--debug-ws`) or via the `debugWebSocketLogging` default.
-    /// The flag is mutable for tests, so guard it with a lock instead of leaving
-    /// nonisolated shared mutable state behind.
-    private static let sensitiveLoggingState = OSAllocatedUnfairLock(
-        initialState:
-            CommandLine.arguments.contains("--debug-ws")
-            || UserDefaults.standard.bool(forKey: "debugWebSocketLogging")
-    )
-
-    static var isSensitiveLoggingEnabled: Bool {
-        get { sensitiveLoggingState.withLock { $0 } }
-        set { sensitiveLoggingState.withLock { $0 = newValue } }
-    }
-
-    private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "mattermost.client", category: "App")
-    private static let fileLock = NSLock()
-    private static let maxLogBytes = 1_000_000
-
-    /// Logs only when sensitive/frame logging is enabled.
-    static func logSensitive(_ message: @autoclosure () -> String) {
-        guard isSensitiveLoggingEnabled else { return }
-        log(.debug, message())
-    }
-
-    static func log(_ message: @autoclosure () -> String) {
-        log(.debug, message())
-    }
-
-    static func info(_ message: @autoclosure () -> String) {
-        log(.info, message())
-    }
-
-    static func warning(_ message: @autoclosure () -> String) {
-        log(.warning, message())
-    }
-
-    static func error(_ message: @autoclosure () -> String) {
-        log(.error, message())
-    }
-
-    static func log(_ level: DebugLogLevel, _ message: String) {
-        switch level {
-        case .debug: logger.debug("\(message, privacy: .private)")
-        case .info: logger.info("\(message, privacy: .private)")
-        case .warning: logger.warning("\(message, privacy: .private)")
-        case .error: logger.error("\(message, privacy: .private)")
-        }
-
-        guard shouldWriteToFile(level, verbose: isVerboseLoggingEnabled) else { return }
-
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(timestamp)] [\(level.label)] \(message)\n"
-
-        print("[STATUS_LOG] \(line)", terminator: "")
-        fflush(stdout)
-        NSLog("[STATUS_LOG] %@", "[\(level.label)] \(message)")
-
-        guard let data = line.data(using: .utf8) else { return }
-        fileLock.lock()
-        defer { fileLock.unlock() }
-        rotateIfNeeded()
-        if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            fileHandle.seekToEndOfFile()
-            fileHandle.write(data)
-            try? fileHandle.close()
-        } else {
-            try? data.write(to: URL(fileURLWithPath: logPath), options: .atomic)
-        }
-    }
-
-    /// Release builds persist warnings/errors; verbose levels need an explicit opt-in.
-    static func shouldWriteToFile(_ level: DebugLogLevel, verbose: Bool) -> Bool {
-        verbose || level >= .warning
-    }
-
-    private static func rotateIfNeeded() {
-        let manager = FileManager.default
-        guard let attributes = try? manager.attributesOfItem(atPath: logPath),
-            let size = attributes[.size] as? NSNumber,
-            size.intValue > maxLogBytes
-        else { return }
-
-        try? manager.removeItem(atPath: logArchivePath)
-        try? manager.moveItem(atPath: logPath, toPath: logArchivePath)
-    }
-}
-
-enum WebServiceError: LocalizedError {
-    case invalidHostname
-    case invalidRequestBody
-    case invalidResponse
-    case invalidMimeType(String?)
-    case httpStatus(code: Int, message: String?)
-    case decodingError(Error)
-    case networkError(Error)
-    case fileTooLarge(size: Int64, limit: Int64)
-    case fileReadError(Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidHostname:
-            return "Invalid hostname."
-        case .invalidRequestBody:
-            return "Failed to serialize request body."
-        case .invalidResponse:
-            return "No valid HTTP response received."
-        case .invalidMimeType(let mime):
-            return "Invalid MIME type: \(mime ?? "unknown")."
-        case .httpStatus(let code, let message):
-            if let message = message, !message.isEmpty {
-                return "\(message) (HTTP \(code))"
-            }
-            return "Invalid status code: \(code)"
-        case .decodingError(let error):
-            return "Failed to decode server response: \(error.localizedDescription)"
-        case .networkError(let error):
-            return "Network error: \(error.localizedDescription)"
-        case .fileTooLarge(let size, let limit):
-            return
-                "\(AttachmentUploadPolicy.formattedBytes(size)) exceeds the \(AttachmentUploadPolicy.formattedBytes(limit)) limit."
-        case .fileReadError(let error):
-            return "Could not read the file: \(error.localizedDescription)"
-        }
-    }
-}
-
-/// Bridges `URLSession` upload progress callbacks onto a small sendable closure.
-private final class UploadProgressObserver: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    private let onProgress: @Sendable (Int64, Int64) -> Void
-
-    init(onProgress: @escaping @Sendable (Int64, Int64) -> Void) {
-        self.onProgress = onProgress
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didSendBodyData bytesSent: Int64,
-        totalBytesSent: Int64,
-        totalBytesExpectedToSend: Int64
-    ) {
-        onProgress(totalBytesSent, totalBytesExpectedToSend)
-    }
-}
-
-struct MMTeam: Codable {
-    let id: String
-    let create_at: Int64?
-    let update_at: Int64?
-    let delete_at: Int64?
-    let display_name: String
-    let name: String
-    let description: String?
-    let email: String?
-    let type: String?
-    let company_name: String?
-    let allowed_domains: String?
-    let invite_id: String?
-    let allow_open_invite: Bool?
-}
-
-struct MMTeamUnread: Codable {
-    let team_id: String
-    let msg_count: Int
-    let mention_count: Int
-}
-
-struct MMTeamMember: Codable {
-    let team_id: String
-    let user_id: String
-    let roles: String?
-    let delete_at: Int64?
-    let scheme_guest: Bool?
-    let scheme_user: Bool?
-    let scheme_admin: Bool?
-    let explicit_roles: String?
-}
-
-struct MMChannel: Codable {
-    let id: String
-    let create_at: Int64?
-    let update_at: Int64?
-    let delete_at: Int64?
-    let team_id: String?
-    let type: String
-    let display_name: String
-    let name: String
-    let header: String?
-    let purpose: String?
-    let last_post_at: Int64?
-    let total_msg_count: Int64?
-    let creator_id: String?
-}
-
-struct MMSidebarCategory: Codable {
-    let id: String
-    let user_id: String?
-    let team_id: String?
-    let sort_order: Int?
-    let sorting: String?
-    let type: String
-    let display_name: String
-    let muted: Bool?
-    let collapsed: Bool?
-    let channel_ids: [String]
-}
-
-struct MMSidebarCategoriesResponse: Codable {
-    let categories: [MMSidebarCategory]
-    let order: [String]
-}
-
-struct MMFileInfo: Codable {
-    let id: String
-    let name: String?
-    let `extension`: String?
-    let mime_type: String?
-    let size: Int64?
-    let width: Int?
-    let height: Int?
-    // Present on file-search results but absent from post metadata.
-    let user_id: String?
-    let post_id: String?
-    let channel_id: String?
-    let create_at: Int64?
-    let has_preview_image: Bool?
-}
-
-struct MMFileSearchResult: Decodable {
-    let order: [String]
-    let file_infos: [String: MMFileInfo]
-    let next_file_info_id: String?
-    let prev_file_info_id: String?
-}
-
-struct MMEmoji: Decodable {
-    let id: String
-    let name: String
-    let creator_id: String?
-}
-
-struct MMReaction: Codable {
-    let user_id: String?
-    let post_id: String?
-    let emoji_name: String?
-    let create_at: Int64?
-}
-
-struct MMPostMetadata: Codable {
-    let files: [MMFileInfo]?
-    let reactions: [MMReaction]?
-}
-
-struct MMLinkMetadata: Codable {
-    let url: String?
-    let title: String?
-    let description: String?
-    let image_url: String?
-    let site_name: String?
-}
-
-struct MMPostProps: Codable {
-    var username: String? = nil
-    var channel_display_name: String? = nil
-    var team_display_name: String? = nil
-    var addedUsername: String? = nil
-    var removedUsername: String? = nil
-    var new_header: String? = nil
-    var old_header: String? = nil
-    var new_purpose: String? = nil
-    var old_purpose: String? = nil
-    var new_displayname: String? = nil
-    var old_displayname: String? = nil
-}
-
-struct MMPost: Codable {
-    let id: String
-    let create_at: Int64
-    let update_at: Int64?
-    let edit_at: Int64?
-    let delete_at: Int64?
-    let is_pinned: Bool?
-    let user_id: String
-    let channel_id: String
-    let root_id: String?
-    let original_id: String?
-    let message: String
-    let type: String?
-    var file_ids: [String]? = nil
-    var metadata: MMPostMetadata? = nil
-    var reply_count: Int? = nil
-    var props: MMPostProps? = nil
-}
-
-extension MMPost: Equatable {
-    static func == (lhs: MMPost, rhs: MMPost) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-struct MMThreadParticipant: Decodable {
-    let id: String?
-    let username: String?
-}
-
-struct MMThread: Decodable {
-    let id: String
-    let reply_count: Int?
-    let last_reply_at: Int64?
-    let last_viewed_at: Int64?
-    let participants: [MMThreadParticipant]?
-    let post: MMPost?
-}
-
-struct MMThreadsResponse: Decodable {
-    let threads: [MMThread]
-    let total: Int?
-    let total_unread_threads: Int?
-    let total_unread_mentions: Int?
-}
-
-struct MMChannelMembership: Decodable {
-    struct NotifyProps: Decodable {
-        let desktop: String?
-        let mark_unread: String?
-        let ignore_channel_mentions: String?
-    }
-
-    let channel_id: String
-    let msg_count: Int?
-    let mention_count: Int?
-    let last_viewed_at: Int64?
-    let last_update_at: Int64?
-    let notify_props: NotifyProps?
-}
-
-struct MMChannelMember: Decodable {
-    let user_id: String
-    let channel_id: String
-    let roles: String?
-}
-
-struct MMPostList: Codable {
-    let order: [String]
-    let posts: [String: MMPost]
-    let next_post_id: String?
-    let prev_post_id: String?
-    
-    var chronologicalPosts: [MMPost] {
-        return order.reversed().compactMap { posts[$0] }
-    }
-}
-
-struct MMUserStatus: Codable {
-    let user_id: String
-    let status: String
-    let manual: Bool?
-    let last_activity_at: Int64?
-    let active_channel: String?
-    let dnd_end_time: Int64?
-}
-
-enum MMWebSocketEvent {
-    case hello
-    case posted(post: MMPost, senderName: String?, channelDisplayName: String?, channelName: String?, teamId: String?)
-    case postEdited(post: MMPost)
-    case postDeleted(postId: String, channelId: String)
-    case postUnread(channelId: String)
-    case channelViewed(channelId: String)
-    case channelUpdated(channel: MMChannel)
-    case channelMembershipChanged(channelId: String, userId: String)
-    case preferencesChanged(userId: String)
-    case threadUpdated(rootId: String, replyCount: Int?)
-    case emojiAdded
-    case statusChange(userId: String, status: String)
-    case userStatuses(statuses: [String: String])
-    case typing(userId: String, channelId: String, parentId: String?)
-    case updateTeam(team: MMTeam)
-    case addedToTeam(teamId: String, userId: String)
-    case leaveTeam(teamId: String, userId: String)
-    case sidebarCategoriesUpdated
-    case reactionChanged(postId: String)
-    case other(event: String, data: [String: Any])
-}
-
-struct MMUser: Codable {
-    let id: String
-    let create_at: Int64?
-    let update_at: Int64?
-    let delete_at: Int64?
-    let username: String
-    let first_name: String?
-    let last_name: String?
-    let nickname: String?
-    let email: String?
-    let email_verified: Bool?
-    let auth_service: String?
-    let roles: String?
-    let locale: String?
-    let position: String?
-    let is_bot: Bool?
-    let last_password_update: Int64?
-    let remote_id: String?
-    let disable_welcome_email: Bool?
-    
-    let notify_props: NotifyProps?
-    var props: [String: String]? = nil
-    struct NotifyProps: Codable {
-        let channel: String?
-        let comments: String?
-        let desktop: String?
-        let desktop_sound: String?
-        let desktop_threads: String?
-        let email: String?
-        let email_threads: String?
-        let first_name: String?
-        let mention_keys: String?
-        let push: String?
-        let push_status: String?
-        let push_threads: String?
-    }
-    
-    let timezone: MMTimeZone?
-    struct MMTimeZone: Codable {
-        let useAutomaticTimezone: String?
-        let manualTimezone: String?
-        let automaticTimezone: String?
-    }
-    
-    let auth_data: String?
-}
-
-
-/// All REST and WebSocket state (`mToken`, the socket task, ping/reconnect
-/// timers and event callbacks) is main-actor isolated. Network work still runs
-/// off the main thread inside URLSession; callbacks hop back explicitly.
+/// Unified facade coordinating REST API requests, WebSocket real-time communication,
+/// and file transfer operations.
+/// All state and callbacks are main-actor isolated.
 @MainActor
-final class WebService: NSObject {
-    var mHost: String = ""
-    var mPort: UInt16 = 0
-    var mToken: String = ""
-    var mConnected: Bool = false
-    var currentUserId: String = UserDefaults.standard.string(forKey: "currentUserId") ?? ""
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "mattermost.client", category: "WebService")
+final class WebService: NSObject, APIClientProtocol, WebSocketClientProtocol, FileTransferProtocol {
+    let apiClient: APIClient
+    let webSocketClient: WebSocketClient
+    let fileTransfer: FileTransfer
 
-    override init() {
-        super.init()
-    }
-    
-    init(host: String, port: UInt16) {
-        super.init()
-        
-        self.mHost = host
-        self.mPort = port
+    // MARK: - Properties & Backward Compatibility
+
+    var host: String {
+        get { apiClient.host }
+        set { apiClient.host = newValue }
     }
 
-    func token() -> String? {
-        return mToken
+    var port: UInt16 {
+        get { apiClient.port }
+        set { apiClient.port = newValue }
     }
-    
-    private func updateToken(token: String) {
-        mToken = token
-        mConnected = !mToken.isEmpty
+
+    var authToken: String {
+        get { apiClient.authToken }
+        set { apiClient.authToken = newValue }
     }
-    
-    func isLogged() -> Bool {
-        return !mToken.isEmpty
+
+    var mHost: String {
+        get { apiClient.host }
+        set { apiClient.host = newValue }
+    }
+
+    var mPort: UInt16 {
+        get { apiClient.port }
+        set { apiClient.port = newValue }
+    }
+
+    var mToken: String {
+        get { apiClient.authToken }
+        set { apiClient.authToken = newValue }
+    }
+
+    var mConnected: Bool {
+        get { apiClient.isLogged() }
+        set {
+            if !newValue {
+                apiClient.authToken = ""
+            }
+        }
+    }
+
+    var currentUserId: String {
+        get { apiClient.currentUserId }
+        set { apiClient.currentUserId = newValue }
+    }
+
+    var isConnected: Bool {
+        webSocketClient.isConnected
+    }
+
+    var isWebSocketConnected: Bool {
+        webSocketClient.isConnected
     }
 
     var webSocketURL: URL? {
-        buildURL(path: "/api/v4/websocket", isWebSocket: true)
-    }
-    
-    func buildURL(path: String, queryItems: [URLQueryItem]? = nil, isWebSocket: Bool = false) -> URL? {
-        var cleanHost = mHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        while cleanHost.hasSuffix("/") {
-            cleanHost.removeLast()
-        }
-        guard !cleanHost.isEmpty else { return nil }
-        
-        // HTTPS is the default. Cleartext HTTP must be opted into explicitly by
-        // typing an http:// host (and is limited to local networks by ATS).
-        if !cleanHost.contains("://") {
-            cleanHost = "https://" + cleanHost
-        }
-        
-        guard var components = URLComponents(string: cleanHost),
-              let host = components.host, !host.isEmpty,
-              let scheme = components.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            return nil
-        }
-        
-        if isWebSocket {
-            components.scheme = scheme == "https" ? "wss" : "ws"
-        }
-        // Prefer a port embedded in the host; otherwise use the configured port.
-        // With no configured port the scheme default applies (443/80).
-        if components.port == nil, mPort > 0 {
-            components.port = Int(mPort)
-        }
-        // Preserve a reverse-proxy/subpath deployment (https://host/mattermost)
-        // instead of replacing it with the API path.
-        var basePath = components.path
-        if basePath.hasSuffix("/") { basePath.removeLast() }
-        let normalizedPath = path.hasPrefix("/") ? path : "/" + path
-        components.path = basePath + normalizedPath
-        if let queryItems = queryItems, !queryItems.isEmpty {
-            components.queryItems = queryItems
-        }
-        return components.url
-    }
-    
-    /// How a request should authenticate.
-    private enum RequestAuth {
-        case none
-        case optionalToken
-        case requiredToken
-        case bearer(String)
+        apiClient.webSocketURL
     }
 
-    /// Builds a URLRequest for the REST API with shared auth/header/body handling.
-    private func makeRequest(
-        path: String,
-        method: String = "GET",
-        queryItems: [URLQueryItem]? = nil,
-        jsonBody: Any? = nil,
-        rawBody: Data? = nil,
-        auth: RequestAuth = .requiredToken,
-        accept: String? = "application/json",
-        contentType: String? = nil
-    ) throws -> URLRequest {
-        guard let url = buildURL(path: path, queryItems: queryItems) else {
-            throw WebServiceError.invalidHostname
-        }
+    // MARK: - WebSocket Callbacks
 
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-
-        let token: String?
-        switch auth {
-        case .none:
-            token = nil
-        case .optionalToken:
-            token = mToken.isEmpty ? nil : mToken
-        case .requiredToken:
-            token = mToken
-        case .bearer(let value):
-            token = value
-        }
-        if let token = token, !token.isEmpty {
-            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
-        }
-        if let accept = accept {
-            request.setValue(accept, forHTTPHeaderField: "Accept")
-        }
-        if let contentType = contentType {
-            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        }
-        if let jsonBody = jsonBody {
-            do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: jsonBody)
-                if contentType == nil {
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                }
-            } catch {
-                throw WebServiceError.invalidRequestBody
-            }
-        } else if let rawBody = rawBody {
-            request.httpBody = rawBody
-        }
-        return request
+    var onWebSocketMessage: ((String) -> Void)? {
+        get { webSocketClient.onWebSocketMessage }
+        set { webSocketClient.onWebSocketMessage = newValue }
     }
 
-    /// Runs a request and applies the shared network/status/error handling.
+    var onWebSocketStateChanged: ((Bool, String) -> Void)? {
+        get { webSocketClient.onWebSocketStateChanged }
+        set { webSocketClient.onWebSocketStateChanged = newValue }
+    }
+
+    var onWebSocketConnected: (() -> Void)? {
+        get { webSocketClient.onWebSocketConnected }
+        set { webSocketClient.onWebSocketConnected = newValue }
+    }
+
+    var onWebSocketDisconnected: ((Error?) -> Void)? {
+        get { webSocketClient.onWebSocketDisconnected }
+        set { webSocketClient.onWebSocketDisconnected = newValue }
+    }
+
+    var onWebSocketEvent: ((MMWebSocketEvent) -> Void)? {
+        get { webSocketClient.onWebSocketEvent }
+        set { webSocketClient.onWebSocketEvent = newValue }
+    }
+
+    var onPostReceived: ((MMPost, String?) -> Void)? {
+        get { webSocketClient.onPostReceived }
+        set { webSocketClient.onPostReceived = newValue }
+    }
+
+    var onStatusChanged: ((String, String) -> Void)? {
+        get { webSocketClient.onStatusChanged }
+        set { webSocketClient.onStatusChanged = newValue }
+    }
+
+    var onMultipleStatusesReceived: (([String: String]) -> Void)? {
+        get { webSocketClient.onMultipleStatusesReceived }
+        set { webSocketClient.onMultipleStatusesReceived = newValue }
+    }
+
+    var onUserTyping: ((String, String, String?) -> Void)? {
+        get { webSocketClient.onUserTyping }
+        set { webSocketClient.onUserTyping = newValue }
+    }
+
+    var onTeamUpdated: ((MMTeam) -> Void)? {
+        get { webSocketClient.onTeamUpdated }
+        set { webSocketClient.onTeamUpdated = newValue }
+    }
+
+    var onUserTeamsChanged: (() -> Void)? {
+        get { webSocketClient.onUserTeamsChanged }
+        set { webSocketClient.onUserTeamsChanged = newValue }
+    }
+
+    var onSidebarCategoriesUpdated: (() -> Void)? {
+        get { webSocketClient.onSidebarCategoriesUpdated }
+        set { webSocketClient.onSidebarCategoriesUpdated = newValue }
+    }
+
+    var onReactionChanged: ((String) -> Void)? {
+        get { webSocketClient.onReactionChanged }
+        set { webSocketClient.onReactionChanged = newValue }
+    }
+
+    // MARK: - Initializers
+
+    override init() {
+        let api = APIClient()
+        self.apiClient = api
+        self.webSocketClient = WebSocketClient(apiClient: api)
+        self.fileTransfer = FileTransfer(apiClient: api)
+        super.init()
+    }
+
+    init(host: String, port: UInt16) {
+        let api = APIClient(host: host, port: port)
+        self.apiClient = api
+        self.webSocketClient = WebSocketClient(apiClient: api)
+        self.fileTransfer = FileTransfer(apiClient: api)
+        super.init()
+    }
+
+    init(apiClient: APIClient, webSocketClient: WebSocketClient? = nil, fileTransfer: FileTransfer? = nil) {
+        self.apiClient = apiClient
+        self.webSocketClient = webSocketClient ?? WebSocketClient(apiClient: apiClient)
+        self.fileTransfer = fileTransfer ?? FileTransfer(apiClient: apiClient)
+        super.init()
+    }
+
+    // MARK: - Static Utilities
+
     static func isAuthenticationFailure(_ error: Error) -> Bool {
-        guard let wsError = error as? WebServiceError,
-              case .httpStatus(let code, _) = wsError else { return false }
-        return code == 401 || code == 403
+        APIClient.isAuthenticationFailure(error)
     }
 
     static func reconnectDelay(attempt: Int, jitter: Double = 0) -> TimeInterval {
-        min(30.0, pow(2.0, Double(max(0, attempt)))) + jitter
+        WebSocketClient.reconnectDelay(attempt: attempt, jitter: jitter)
     }
 
     static func sanitizedMultipartFilename(_ filename: String) -> String {
-        (filename as NSString).lastPathComponent
-            .components(separatedBy: CharacterSet(charactersIn: "\r\n\"\\"))
-            .joined(separator: "_")
+        FileTransfer.sanitizedMultipartFilename(filename)
     }
 
     static func sanitizedMultipartMimeType(_ mimeType: String) -> String {
-        mimeType
-            .components(separatedBy: CharacterSet(charactersIn: "\r\n"))
-            .joined(separator: " ")
+        FileTransfer.sanitizedMultipartMimeType(mimeType)
     }
 
     static func multipartHeader(boundary: String, filename: String, mimeType: String) -> Data {
-        let safeFilename = sanitizedMultipartFilename(filename)
-        let safeMimeType = sanitizedMultipartMimeType(mimeType)
-        var header = Data()
-        func append(_ text: String) { header.append(Data(text.utf8)) }
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"files\"; filename=\"\(safeFilename)\"\r\n")
-        append("Content-Type: \(safeMimeType)\r\n\r\n")
-        return header
+        FileTransfer.multipartHeader(boundary: boundary, filename: filename, mimeType: mimeType)
     }
 
     static func multipartFooter(boundary: String) -> Data {
-        Data("\r\n--\(boundary)--\r\n".utf8)
+        FileTransfer.multipartFooter(boundary: boundary)
     }
 
-    static func multipartBody(
-        boundary: String,
-        filename: String,
-        mimeType: String,
-        data: Data
-    ) -> Data {
-        var body = multipartHeader(boundary: boundary, filename: filename, mimeType: mimeType)
-        body.append(data)
-        body.append(multipartFooter(boundary: boundary))
-        return body
+    static func multipartBody(boundary: String, filename: String, mimeType: String, data: Data) -> Data {
+        FileTransfer.multipartBody(boundary: boundary, filename: filename, mimeType: mimeType, data: data)
     }
 
-    /// Streams a file into a temporary multipart body so uploads do not have to
-    /// hold the whole attachment in memory. The caller owns `destinationURL`.
     static func writeMultipartFile(
         sourceURL: URL,
         destinationURL: URL,
@@ -682,64 +201,55 @@ final class WebService: NSObject {
         filename: String,
         mimeType: String
     ) throws {
-        let manager = FileManager.default
-        guard manager.createFile(atPath: destinationURL.path, contents: nil) else {
-            throw WebServiceError.fileReadError(
-                CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: destinationURL.path])
-            )
-        }
-        let output = try FileHandle(forWritingTo: destinationURL)
-        defer { try? output.close() }
-        try output.write(
-            contentsOf: multipartHeader(boundary: boundary, filename: filename, mimeType: mimeType)
+        try FileTransfer.writeMultipartFile(
+            sourceURL: sourceURL,
+            destinationURL: destinationURL,
+            boundary: boundary,
+            filename: filename,
+            mimeType: mimeType
         )
-
-        let input = try FileHandle(forReadingFrom: sourceURL)
-        defer { try? input.close() }
-        while let chunk = try input.read(upToCount: AttachmentUploadPolicy.chunkSize), !chunk.isEmpty {
-            try output.write(contentsOf: chunk)
-        }
-        try output.write(contentsOf: multipartFooter(boundary: boundary))
     }
 
-    /// Reads the server-configured attachment limit from `/config/client`.
-    /// Mattermost exposes it as `FileSettings.MaxFileSize` in the old config format.
     static func maxFileSize(fromClientConfig data: Data) -> Int64? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
-        let candidates: [Any?] = [
-            (json["FileSettings"] as? [String: Any])?["MaxFileSize"],
-            json["MaxFileSize"],
-        ]
-        for candidate in candidates {
-            if let number = candidate as? NSNumber {
-                let value = number.int64Value
-                return value == 0 ? 0 : max(0, value)
-            }
-        }
-        return nil
+        FileTransfer.maxFileSize(fromClientConfig: data)
     }
 
     @discardableResult
     static func decodeLogin(_ data: Data) -> MMUser? {
-        try? JSONDecoder().decode(MMUser.self, from: data)
+        APIClient.decodeLogin(data)
     }
 
-    private func performRequest(
+    // MARK: - URL Building
+
+    func token() -> String? {
+        apiClient.token()
+    }
+
+    func isLogged() -> Bool {
+        apiClient.isLogged()
+    }
+
+    func buildURL(path: String, queryItems: [URLQueryItem]? = nil, isWebSocket: Bool = false) -> URL? {
+        apiClient.buildURL(path: path, queryItems: queryItems, isWebSocket: isWebSocket)
+    }
+
+    func teamInviteURL(team: MMTeam) -> URL? {
+        apiClient.teamInviteURL(team: team)
+    }
+
+    // MARK: - Request Execution
+
+    func makeRequest(
         path: String,
         method: String = "GET",
         queryItems: [URLQueryItem]? = nil,
         jsonBody: Any? = nil,
         rawBody: Data? = nil,
-        auth: RequestAuth = .requiredToken,
+        auth: APIRequestAuth = .requiredToken,
         accept: String? = "application/json",
-        contentType: String? = nil,
-        acceptableStatus: ClosedRange<Int> = 200...299,
-        requireJSONMime: Bool = false,
-        logPayload: Bool = true
-    ) async throws -> (Data, HTTPURLResponse) {
-        let request = try makeRequest(
+        contentType: String? = nil
+    ) throws -> URLRequest {
+        try apiClient.makeRequest(
             path: path,
             method: method,
             queryItems: queryItems,
@@ -749,704 +259,189 @@ final class WebService: NSObject {
             accept: accept,
             contentType: contentType
         )
-
-        let logStatusPath = logPayload && path.contains("status")
-        if logStatusPath {
-            DebugLog.logSensitive("HTTP \(method) \(path) sending body=\(String(describing: jsonBody))")
-        }
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            if logStatusPath {
-                DebugLog.error("HTTP \(method) \(path) network error: \(error.localizedDescription)")
-            }
-            throw WebServiceError.networkError(error)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw WebServiceError.invalidResponse
-        }
-
-        if logStatusPath {
-            DebugLog.logSensitive("HTTP \(method) \(path) status=\(httpResponse.statusCode), body=\(String(decoding: data, as: UTF8.self))")
-        }
-
-        guard acceptableStatus.contains(httpResponse.statusCode) else {
-            var serverMsg: String?
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let msg = json["message"] as? String, !msg.isEmpty {
-                serverMsg = msg
-            }
-            throw WebServiceError.httpStatus(code: httpResponse.statusCode, message: serverMsg)
-        }
-
-        if requireJSONMime, response.mimeType != "application/json" {
-            throw WebServiceError.invalidMimeType(response.mimeType)
-        }
-
-        return (data, httpResponse)
     }
 
-    private func performAuthenticatedRequest<T: Decodable>(
+    func performRequest(
+        path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem]? = nil,
+        jsonBody: Any? = nil,
+        rawBody: Data? = nil,
+        auth: APIRequestAuth = .requiredToken,
+        accept: String? = "application/json",
+        contentType: String? = nil,
+        acceptableStatus: ClosedRange<Int> = 200...299,
+        requireJSONMime: Bool = false,
+        logPayload: Bool = true
+    ) async throws -> (Data, HTTPURLResponse) {
+        try await apiClient.performRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            jsonBody: jsonBody,
+            rawBody: rawBody,
+            auth: auth,
+            accept: accept,
+            contentType: contentType,
+            acceptableStatus: acceptableStatus,
+            requireJSONMime: requireJSONMime,
+            logPayload: logPayload
+        )
+    }
+
+    func performAuthenticatedRequest<T: Decodable>(
         path: String,
         method: String = "GET",
         queryItems: [URLQueryItem]? = nil,
         body: Any? = nil
     ) async throws -> T {
-        let (data, _) = try await performRequest(
+        try await apiClient.performAuthenticatedRequest(
             path: path,
             method: method,
             queryItems: queryItems,
-            jsonBody: body
-        )
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw WebServiceError.decodingError(error)
-        }
-    }
-
-    @discardableResult
-    func login(username: String, password: String, mfaToken: String? = nil) async throws -> MMUser {
-        var body: [String: Any] = [
-            "login_id": username,
-            "password": password
-        ]
-        if let mfaToken = mfaToken, !mfaToken.isEmpty {
-            body["token"] = mfaToken
-        }
-        let (data, response) = try await performRequest(
-            path: "/api/v4/users/login",
-            method: "POST",
-            jsonBody: body,
-            auth: .none,
-            acceptableStatus: 200...200,
-            requireJSONMime: true,
-            logPayload: false
-        )
-
-        updateToken(token: response.value(forHTTPHeaderField: "Token") ?? "")
-
-        do {
-            let user = try JSONDecoder().decode(MMUser.self, from: data)
-            self.currentUserId = user.id
-            UserDefaults.standard.set(user.id, forKey: "currentUserId")
-            return user
-        } catch {
-            throw WebServiceError.decodingError(error)
-        }
-    }
-
-    /// Adopts a session token obtained from browser/SSO authentication and
-    /// verifies it against `/users/me` before the caller persists it.
-    @discardableResult
-    func loginWithSessionToken(_ token: String) async throws -> MMUser {
-        updateToken(token: token)
-        do {
-            let user: MMUser = try await performAuthenticatedRequest(path: "/api/v4/users/me")
-            self.currentUserId = user.id
-            UserDefaults.standard.set(user.id, forKey: "currentUserId")
-            return user
-        } catch {
-            updateToken(token: "")
-            throw error
-        }
-    }
-
-    /// Fetches the public client configuration used to discover enabled SSO
-    /// providers before the user has a session.
-    func fetchClientConfigData() async -> Data? {
-        try? await performRequest(
-            path: "/api/v4/config/client",
-            queryItems: [URLQueryItem(name: "format", value: "old")],
-            auth: .none,
-            accept: "application/json",
-            logPayload: false
-        ).0
-    }
-
-    /// Asks the Mattermost server for Open Graph metadata. The server performs
-    /// the outbound request, which keeps link previews private by default.
-    func fetchLinkMetadata(url: URL) async -> MMLinkMetadata? {
-        guard let (data, _) = try? await performRequest(
-            path: "/api/v4/link_metadata",
-            method: "POST",
-            jsonBody: ["url": url.absoluteString],
-            accept: "application/json",
-            logPayload: false
-        ) else { return nil }
-        return try? JSONDecoder().decode(MMLinkMetadata.self, from: data)
-    }
-
-    func checkToken(token: String) async -> Bool {
-        do {
-            let (data, _) = try await performRequest(
-                path: "/api/v4/users/me",
-                auth: .bearer(token),
-                acceptableStatus: 200...200,
-                requireJSONMime: true,
-                logPayload: false
-            )
-            updateToken(token: token)
-            if let user = try? JSONDecoder().decode(MMUser.self, from: data) {
-                self.currentUserId = user.id
-                UserDefaults.standard.set(user.id, forKey: "currentUserId")
-            }
-            logger.info("checkToken succeeded")
-            return true
-        } catch {
-            logger.error("checkToken failed: \(error.localizedDescription)")
-            if Self.isAuthenticationFailure(error) {
-                return false
-            }
-            // Offline/DNS/timeout/5xx must not destroy the session. Keep the
-            // token and let the workspace open in its reconnecting state.
-            updateToken(token: token)
-            return true
-        }
-    }
-
-    // MARK: - Users, Teams, Channels, Categories & Posts REST API
-    
-    func fetchCurrentUser() async throws -> MMUser {
-        let user: MMUser = try await performAuthenticatedRequest(path: "/api/v4/users/me")
-        self.currentUserId = user.id
-        UserDefaults.standard.set(user.id, forKey: "currentUserId")
-        return user
-    }
-    
-    func fetchUsersByIds(_ userIds: [String]) async throws -> [MMUser] {
-        guard !userIds.isEmpty else { return [] }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/ids",
-            method: "POST",
-            body: userIds
-        )
-    }
-
-    func updateUserNotifyProps(userId: String, props: [String: String]) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/notify_props",
-            method: "PUT",
-            jsonBody: props,
-            accept: "application/json"
-        )
-    }
-    
-    private func encodedPathComponent(_ value: String) -> String {
-        var allowed = CharacterSet.urlPathAllowed
-        allowed.remove(charactersIn: "/?#")
-        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
-    }
-
-    func fetchUser(userId: String) async throws -> MMUser {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/\(encodedPathComponent(userId))")
-    }
-
-    func fetchUserByUsername(_ username: String) async throws -> MMUser {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/username/\(encodedPathComponent(username))")
-    }
-
-    /// Team members used by the Direct Message picker.
-    func fetchTeamUsers(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMUser] {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users",
-            queryItems: [
-                URLQueryItem(name: "in_team", value: teamId),
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage)),
-                URLQueryItem(name: "active", value: "true")
-            ]
-        )
-    }
-
-    /// Creates (or returns) the direct channel between the current user and `userId`.
-    func createDirectChannel(userId: String) async throws -> MMChannel {
-        let myId = currentUserId.isEmpty
-            ? (UserDefaults.standard.string(forKey: "currentUserId") ?? "")
-            : currentUserId
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/channels/direct",
-            method: "POST",
-            body: [myId, userId]
-        )
-    }
-
-    /// Creates (or returns) the group message channel between the current user and multiple users (`POST /api/v4/channels/group`).
-    func createGroupChannel(userIds: [String]) async throws -> MMChannel {
-        let myId = currentUserId.isEmpty
-            ? (UserDefaults.standard.string(forKey: "currentUserId") ?? "")
-            : currentUserId
-        var allIds = userIds
-        if !myId.isEmpty && !allIds.contains(myId) {
-            allIds.append(myId)
-        }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/channels/group",
-            method: "POST",
-            body: allIds
-        )
-    }
-
-    /// Searches users across a team or globally (`POST /api/v4/users/search`).
-    func searchUsers(term: String, teamId: String? = nil) async throws -> [MMUser] {
-        var body: [String: Any] = [
-            "term": term,
-            "allow_inactive": false
-        ]
-        if let teamId = teamId, !teamId.isEmpty {
-            body["team_id"] = teamId
-            body["in_team_id"] = teamId
-        }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/search",
-            method: "POST",
             body: body
         )
     }
-    
+
+    // MARK: - Authentication & Configuration
+
+    @discardableResult
+    func login(username: String, password: String, mfaToken: String? = nil) async throws -> MMUser {
+        try await apiClient.login(username: username, password: password, mfaToken: mfaToken)
+    }
+
+    @discardableResult
+    func loginWithSessionToken(_ token: String) async throws -> MMUser {
+        try await apiClient.loginWithSessionToken(token)
+    }
+
+    func fetchClientConfigData() async -> Data? {
+        await apiClient.fetchClientConfigData()
+    }
+
+    func fetchLinkMetadata(url: URL) async -> MMLinkMetadata? {
+        await apiClient.fetchLinkMetadata(url: url)
+    }
+
+    func checkToken(token: String) async -> Bool {
+        await apiClient.checkToken(token: token)
+    }
+
+    // MARK: - Users
+
+    func fetchCurrentUser() async throws -> MMUser {
+        try await apiClient.fetchCurrentUser()
+    }
+
+    func fetchUsersByIds(_ userIds: [String]) async throws -> [MMUser] {
+        try await apiClient.fetchUsersByIds(userIds)
+    }
+
+    func updateUserNotifyProps(userId: String, props: [String: String]) async throws {
+        try await apiClient.updateUserNotifyProps(userId: userId, props: props)
+    }
+
+    func fetchUser(userId: String) async throws -> MMUser {
+        try await apiClient.fetchUser(userId: userId)
+    }
+
+    func fetchUserByUsername(_ username: String) async throws -> MMUser {
+        try await apiClient.fetchUserByUsername(username)
+    }
+
+    func fetchTeamUsers(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMUser] {
+        try await apiClient.fetchTeamUsers(teamId: teamId, page: page, perPage: perPage)
+    }
+
+    func createDirectChannel(userId: String) async throws -> MMChannel {
+        try await apiClient.createDirectChannel(userId: userId)
+    }
+
+    func createGroupChannel(userIds: [String]) async throws -> MMChannel {
+        try await apiClient.createGroupChannel(userIds: userIds)
+    }
+
+    func searchUsers(term: String, teamId: String? = nil) async throws -> [MMUser] {
+        try await apiClient.searchUsers(term: term, teamId: teamId)
+    }
+
     func fetchUserImage(userId: String) async throws -> Data {
-        guard !userId.isEmpty else {
-            throw WebServiceError.invalidRequestBody
-        }
-        let (data, _) = try await performRequest(
-            path: "/api/v4/users/\(userId)/image",
-            auth: .optionalToken,
-            accept: nil,
-            logPayload: false
-        )
-        return data
+        try await apiClient.fetchUserImage(userId: userId)
     }
 
     @discardableResult
     func updateUserStatus(userId: String = "", status: String, dndEndTime: Int64? = nil) async throws -> MMUserStatus {
-        var resolvedUserId = userId
-        if resolvedUserId.isEmpty || resolvedUserId == "me" || resolvedUserId == "usr" || resolvedUserId == "sample_usr" {
-            if !currentUserId.isEmpty {
-                resolvedUserId = currentUserId
-            } else if let savedId = UserDefaults.standard.string(forKey: "currentUserId"), !savedId.isEmpty {
-                resolvedUserId = savedId
-            } else {
-                let me = try await fetchCurrentUser()
-                resolvedUserId = me.id
-            }
-        }
-        guard !resolvedUserId.isEmpty else {
-            throw WebServiceError.invalidRequestBody
-        }
-        var payload: [String: Any] = [
-            "user_id": resolvedUserId,
-            "status": status
-        ]
-        if let dndEndTime = dndEndTime {
-            let seconds = dndEndTime > 10_000_000_000 ? (dndEndTime / 1000) : dndEndTime
-            payload["dnd_end_time"] = seconds
-        }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(resolvedUserId)/status",
-            method: "PUT",
-            body: payload
-        )
+        try await apiClient.updateUserStatus(userId: userId, status: status, dndEndTime: dndEndTime)
     }
-    
+
     func fetchUserStatuses(userIds: [String]) async throws -> [MMUserStatus] {
-        guard !userIds.isEmpty else { return [] }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/status/ids",
-            method: "POST",
-            body: userIds
-        )
-    }
-    
-    func fetchTeams() async throws -> [MMTeam] {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/me/teams")
-    }
-    
-    func fetchChannels(teamId: String) async throws -> [MMChannel] {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/me/teams/\(teamId)/channels")
-    }
-    
-    func fetchAllChannels() async throws -> [MMChannel] {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/me/channels")
-    }
-    
-    func fetchSidebarCategories(teamId: String) async throws -> MMSidebarCategoriesResponse {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/me/teams/\(teamId)/channels/categories")
-    }
-    
-    func searchPosts(teamId: String, terms: String, page: Int = 0, perPage: Int = 50) async throws -> MMPostList {
-        let body: [String: Any] = [
-            "terms": terms,
-            "is_or_search": false,
-            "page": page,
-            "per_page": perPage
-        ]
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/posts/search",
-            method: "POST",
-            body: body
-        )
-    }
-    
-    // MARK: - Sidebar categories
-
-    func createSidebarCategory(
-        teamId: String,
-        displayName: String,
-        userId: String
-    ) async throws -> MMSidebarCategory {
-        try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories",
-            method: "POST",
-            body: [
-                "display_name": displayName,
-                "user_id": userId,
-                "team_id": teamId,
-                "type": "custom",
-            ]
-        )
-    }
-
-    func updateSidebarCategory(
-        teamId: String,
-        userId: String,
-        categoryId: String,
-        displayName: String? = nil,
-        collapsed: Bool? = nil,
-        muted: Bool? = nil
-    ) async throws -> MMSidebarCategory {
-        var body: [String: Any] = [:]
-        if let displayName = displayName { body["display_name"] = displayName }
-        if let collapsed = collapsed { body["collapsed"] = collapsed }
-        if let muted = muted { body["muted"] = muted }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)",
-            method: "PUT",
-            body: body
-        )
-    }
-
-    func deleteSidebarCategory(
-        teamId: String,
-        userId: String,
-        categoryId: String
-    ) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)",
-            method: "DELETE"
-        )
-    }
-
-    func updateSidebarCategoryOrder(
-        teamId: String,
-        userId: String,
-        categoryIds: [String]
-    ) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/order",
-            method: "PUT",
-            jsonBody: categoryIds,
-            accept: nil
-        )
-    }
-
-    func addChannelToSidebarCategory(
-        teamId: String,
-        userId: String,
-        categoryId: String,
-        channelId: String
-    ) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)/channels",
-            method: "POST",
-            jsonBody: ["channel_id": channelId],
-            accept: nil
-        )
-    }
-
-    func removeChannelFromSidebarCategory(
-        teamId: String,
-        userId: String,
-        categoryId: String,
-        channelId: String
-    ) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/categories/\(categoryId)/channels/\(channelId)",
-            method: "DELETE",
-            accept: nil
-        )
+        try await apiClient.fetchUserStatuses(userIds: userIds)
     }
 
     func fetchUserPreferences(userId: String) async throws -> [[String: String]] {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/\(userId)/preferences")
+        try await apiClient.fetchUserPreferences(userId: userId)
     }
-    
+
     func deleteUserPreferences(userId: String, preferences: [[String: String]]) async throws {
-        // Newer servers expose POST /preferences/delete; older ones accept a
-        // DELETE against /preferences with the same body.
-        do {
-            _ = try await performRequest(
-                path: "/api/v4/users/\(userId)/preferences/delete",
-                method: "POST",
-                jsonBody: preferences
-            )
-            return
-        } catch let error as WebServiceError {
-            guard case .httpStatus = error else { throw error }
-        }
-
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/preferences",
-            method: "DELETE",
-            jsonBody: preferences
-        )
+        try await apiClient.deleteUserPreferences(userId: userId, preferences: preferences)
     }
-    
+
     func saveUserPreferences(userId: String, preferences: [[String: String]]) async throws {
-        let _: [[String: String]] = try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/preferences",
-            method: "PUT",
-            body: preferences
-        )
+        try await apiClient.saveUserPreferences(userId: userId, preferences: preferences)
     }
-    
-    func leaveChannel(channelId: String, userId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/channels/\(channelId)/members/\(userId)",
-            method: "DELETE",
-            accept: nil
-        )
-    }
-    
-    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMChannelMember] {
-        // Decoded loosely because member objects carry many optional fields.
-        let (data, _) = try await performRequest(
-            path: "/api/v4/channels/\(channelId)/members",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage))
-            ]
-        )
-        return try JSONDecoder().decode([MMChannelMember].self, from: data)
-    }
-    
-    func fetchPinnedPosts(channelId: String) async throws -> MMPostList {
-        return try await performAuthenticatedRequest(path: "/api/v4/channels/\(channelId)/pinned")
-    }
-    
-    func joinChannel(channelId: String, userId: String) async throws {
-        let _: MMChannelMember = try await performAuthenticatedRequest(
-            path: "/api/v4/channels/\(channelId)/members",
-            method: "POST",
-            body: ["user_id": userId]
-        )
-    }
-    
-    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws -> MMPostList {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/posts/flagged",
-            queryItems: [
-                URLQueryItem(name: "team_id", value: teamId),
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage))
-            ]
-        )
-    }
-    
+
     func setCustomStatus(emoji: String, text: String, duration: String, expiresAt: String?) async throws {
-        var body: [String: Any] = [
-            "emoji": emoji,
-            "text": text,
-            "duration": duration
-        ]
-        if let expiresAt = expiresAt {
-            body["expires_at"] = expiresAt
-        }
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/users/me/status/custom",
-            method: "PUT",
-            body: body
-        )
+        try await apiClient.setCustomStatus(emoji: emoji, text: text, duration: duration, expiresAt: expiresAt)
     }
-    
+
     func clearCustomStatus() async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/me/status/custom",
-            method: "DELETE",
-            accept: nil
-        )
+        try await apiClient.clearCustomStatus()
     }
 
-    /// Marks every channel in a team as read for the current user.
-    func updateChannelNotifyProps(
-        channelId: String,
-        userId: String,
-        props: [String: String]
-    ) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/channels/\(channelId)/members/\(userId)/notify_props",
-            method: "PUT",
-            jsonBody: props,
-            accept: nil
-        )
+    // MARK: - Teams
+
+    func fetchTeams() async throws -> [MMTeam] {
+        try await apiClient.fetchTeams()
     }
 
-    func markAllChannelsRead(userId: String, teamId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/read",
-            method: "PUT",
-            jsonBody: [String: String](),
-            accept: nil
-        )
-    }
-
-    /// Marks a channel unread from a specific post for the current user.
-    func markChannelUnread(userId: String, channelId: String, postId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/channels/\(channelId)/posts/\(postId)/unread",
-            method: "POST",
-            jsonBody: [String: String](),
-            accept: nil
-        )
-    }
-    
-    func fetchChannelMemberships(userId: String, teamId: String, page: Int = 0, perPage: Int = 200) async throws -> [MMChannelMembership] {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/channels/members",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage))
-            ]
-        )
-    }
-    
-    /// Marks a channel as viewed; returns the server's new last_viewed_at.
-    func markChannelViewed(channelId: String) async throws -> Int64? {
-        struct ViewResponse: Decodable { let last_viewed_at_times: [String: Int64]? }
-        let response: ViewResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/channels/members/me/view",
-            method: "POST",
-            body: ["channel_id": channelId, "collapsed_threads_supported": true]
-        )
-        return response.last_viewed_at_times?[channelId]
-    }
-    
-    func fetchFileData(fileId: String, preview: Bool = false) async throws -> Data {
-        let path = preview ? "/api/v4/files/\(fileId)/preview" : "/api/v4/files/\(fileId)"
-        let (data, _) = try await performRequest(path: path, accept: nil, logPayload: false)
-        return data
-    }
-    
-    func fetchPublicChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/channels",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage))
-            ]
-        )
-    }
-
-    func fetchPrivateChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/channels/private",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage))
-            ]
-        )
-    }
-
-    func requestToJoinChannel(channelId: String) async throws {
-        do {
-            _ = try await performRequest(
-                path: "/api/v4/channels/\(channelId)/join_request",
-                method: "POST"
-            )
-        } catch {
-            let myId = currentUserId.isEmpty
-                ? (UserDefaults.standard.string(forKey: "currentUserId") ?? "")
-                : currentUserId
-            _ = try await joinChannel(channelId: channelId, userId: myId)
-        }
-    }
-    
     func createTeam(name: String, displayName: String) async throws -> MMTeam {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams",
-            method: "POST",
-            body: ["name": name, "display_name": displayName, "type": "O"]
-        )
+        try await apiClient.createTeam(name: name, displayName: displayName)
     }
-    
+
     func sendTeamInvite(teamId: String, email: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/teams/\(teamId)/invite/email",
-            method: "POST",
-            jsonBody: ["user_email": email]
-        )
+        try await apiClient.sendTeamInvite(teamId: teamId, email: email)
     }
 
     func fetchTeamsUnread(userId: String) async throws -> [MMTeamUnread] {
-        return try await performAuthenticatedRequest(path: "/api/v4/users/\(userId)/teams/unread")
+        try await apiClient.fetchTeamsUnread(userId: userId)
     }
 
     func leaveTeam(teamId: String, userId: String) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/members/\(userId)",
-            method: "DELETE"
-        )
+        try await apiClient.leaveTeam(teamId: teamId, userId: userId)
     }
 
     func fetchTeamByName(_ name: String) async throws -> MMTeam {
-        return try await performAuthenticatedRequest(path: "/api/v4/teams/name/\(name)")
+        try await apiClient.fetchTeamByName(name)
     }
 
     func addUserToTeam(teamId: String, userId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/teams/\(teamId)/members",
-            method: "POST",
-            jsonBody: ["team_id": teamId, "user_id": userId]
-        )
+        try await apiClient.addUserToTeam(teamId: teamId, userId: userId)
     }
 
     func removeUserFromTeam(teamId: String, userId: String) async throws {
-        try await leaveTeam(teamId: teamId, userId: userId)
+        try await apiClient.removeUserFromTeam(teamId: teamId, userId: userId)
     }
 
-    func fetchTeamMembers(
-        teamId: String,
-        page: Int = 0,
-        perPage: Int = 60
-    ) async throws -> [MMTeamMember] {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/members",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage)),
-            ]
-        )
+    func fetchTeamMembers(teamId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMTeamMember] {
+        try await apiClient.fetchTeamMembers(teamId: teamId, page: page, perPage: perPage)
     }
 
     func fetchTeamMember(teamId: String, userId: String) async throws -> MMTeamMember {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/members/\(userId)"
-        )
+        try await apiClient.fetchTeamMember(teamId: teamId, userId: userId)
     }
 
     func updateTeamMemberRoles(teamId: String, userId: String, roles: String) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/members/\(userId)/roles",
-            method: "PUT",
-            body: ["roles": roles]
-        )
+        try await apiClient.updateTeamMemberRoles(teamId: teamId, userId: userId, roles: roles)
     }
 
     func updateTeam(
@@ -1457,63 +452,235 @@ final class WebService: NSObject {
         allowedDomains: String? = nil,
         allowOpenInvite: Bool? = nil
     ) async throws -> MMTeam {
-        var body: [String: Any] = [
-            "id": teamId,
-            "display_name": displayName,
-        ]
-        if let description = description { body["description"] = description }
-        if let companyName = companyName { body["company_name"] = companyName }
-        if let allowedDomains = allowedDomains { body["allowed_domains"] = allowedDomains }
-        if let allowOpenInvite = allowOpenInvite { body["allow_open_invite"] = allowOpenInvite }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)",
-            method: "PUT",
-            body: body
+        try await apiClient.updateTeam(
+            teamId: teamId,
+            displayName: displayName,
+            description: description,
+            companyName: companyName,
+            allowedDomains: allowedDomains,
+            allowOpenInvite: allowOpenInvite
         )
     }
 
-    func teamInviteURL(team: MMTeam) -> URL? {
-        guard let inviteId = team.invite_id, !inviteId.isEmpty else { return nil }
-        return buildURL(
-            path: "/signup_user_complete/",
-            queryItems: [URLQueryItem(name: "id", value: inviteId)]
+    // MARK: - Channels
+
+    func fetchChannels(teamId: String) async throws -> [MMChannel] {
+        try await apiClient.fetchChannels(teamId: teamId)
+    }
+
+    func fetchAllChannels() async throws -> [MMChannel] {
+        try await apiClient.fetchAllChannels()
+    }
+
+    func fetchPublicChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
+        try await apiClient.fetchPublicChannels(teamId: teamId, page: page, perPage: perPage)
+    }
+
+    func fetchPrivateChannels(teamId: String, page: Int = 0, perPage: Int = 100) async throws -> [MMChannel] {
+        try await apiClient.fetchPrivateChannels(teamId: teamId, page: page, perPage: perPage)
+    }
+
+    func requestToJoinChannel(channelId: String) async throws {
+        try await apiClient.requestToJoinChannel(channelId: channelId)
+    }
+
+    func leaveChannel(channelId: String, userId: String) async throws {
+        try await apiClient.leaveChannel(channelId: channelId, userId: userId)
+    }
+
+    func joinChannel(channelId: String, userId: String) async throws {
+        try await apiClient.joinChannel(channelId: channelId, userId: userId)
+    }
+
+    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMChannelMember] {
+        try await apiClient.fetchChannelMembers(channelId: channelId, page: page, perPage: perPage)
+    }
+
+    func fetchChannelMemberships(userId: String, teamId: String, page: Int = 0, perPage: Int = 200) async throws
+        -> [MMChannelMembership]
+    {
+        try await apiClient.fetchChannelMemberships(userId: userId, teamId: teamId, page: page, perPage: perPage)
+    }
+
+    func updateChannelNotifyProps(channelId: String, userId: String, props: [String: String]) async throws {
+        try await apiClient.updateChannelNotifyProps(channelId: channelId, userId: userId, props: props)
+    }
+
+    func markAllChannelsRead(userId: String, teamId: String) async throws {
+        try await apiClient.markAllChannelsRead(userId: userId, teamId: teamId)
+    }
+
+    func markChannelUnread(userId: String, channelId: String, postId: String) async throws {
+        try await apiClient.markChannelUnread(userId: userId, channelId: channelId, postId: postId)
+    }
+
+    func markChannelViewed(channelId: String) async throws -> Int64? {
+        try await apiClient.markChannelViewed(channelId: channelId)
+    }
+
+    // MARK: - Sidebar Categories
+
+    func fetchSidebarCategories(teamId: String) async throws -> MMSidebarCategoriesResponse {
+        try await apiClient.fetchSidebarCategories(teamId: teamId)
+    }
+
+    func createSidebarCategory(teamId: String, displayName: String, userId: String) async throws -> MMSidebarCategory {
+        try await apiClient.createSidebarCategory(teamId: teamId, displayName: displayName, userId: userId)
+    }
+
+    func updateSidebarCategory(
+        teamId: String,
+        userId: String,
+        categoryId: String,
+        displayName: String? = nil,
+        collapsed: Bool? = nil,
+        muted: Bool? = nil
+    ) async throws -> MMSidebarCategory {
+        try await apiClient.updateSidebarCategory(
+            teamId: teamId,
+            userId: userId,
+            categoryId: categoryId,
+            displayName: displayName,
+            collapsed: collapsed,
+            muted: muted
         )
     }
-    
-    /// Fetches the server's attachment size limit. Returns `nil` when the
-    /// endpoint is unavailable so callers can fall back to the default limit.
+
+    func deleteSidebarCategory(teamId: String, userId: String, categoryId: String) async throws {
+        try await apiClient.deleteSidebarCategory(teamId: teamId, userId: userId, categoryId: categoryId)
+    }
+
+    func updateSidebarCategoryOrder(teamId: String, userId: String, categoryIds: [String]) async throws {
+        try await apiClient.updateSidebarCategoryOrder(teamId: teamId, userId: userId, categoryIds: categoryIds)
+    }
+
+    func addChannelToSidebarCategory(teamId: String, userId: String, categoryId: String, channelId: String) async throws
+    {
+        try await apiClient.addChannelToSidebarCategory(
+            teamId: teamId, userId: userId, categoryId: categoryId, channelId: channelId)
+    }
+
+    func removeChannelFromSidebarCategory(teamId: String, userId: String, categoryId: String, channelId: String)
+        async throws
+    {
+        try await apiClient.removeChannelFromSidebarCategory(
+            teamId: teamId, userId: userId, categoryId: categoryId, channelId: channelId)
+    }
+
+    // MARK: - Posts
+
+    func fetchChannelPosts(
+        channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize, before: String? = nil
+    ) async throws -> MMPostList {
+        try await apiClient.fetchChannelPosts(channelId: channelId, page: page, perPage: perPage, before: before)
+    }
+
+    func searchPosts(teamId: String, terms: String, page: Int = 0, perPage: Int = 50) async throws -> MMPostList {
+        try await apiClient.searchPosts(teamId: teamId, terms: terms, page: page, perPage: perPage)
+    }
+
+    func fetchPinnedPosts(channelId: String) async throws -> MMPostList {
+        try await apiClient.fetchPinnedPosts(channelId: channelId)
+    }
+
+    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws -> MMPostList
+    {
+        try await apiClient.fetchFlaggedPosts(userId: userId, teamId: teamId, page: page, perPage: perPage)
+    }
+
+    @discardableResult
+    func createPost(channelId: String, message: String, rootId: String? = nil, fileIds: [String] = []) async throws
+        -> MMPost
+    {
+        try await apiClient.createPost(channelId: channelId, message: message, rootId: rootId, fileIds: fileIds)
+    }
+
+    @discardableResult
+    func patchPost(postId: String, message: String) async throws -> MMPost {
+        try await apiClient.patchPost(postId: postId, message: message)
+    }
+
+    func fetchPost(postId: String) async throws -> MMPost {
+        try await apiClient.fetchPost(postId: postId)
+    }
+
+    func fetchPostThread(postId: String) async throws -> MMPostList {
+        try await apiClient.fetchPostThread(postId: postId)
+    }
+
+    func pinPost(postId: String) async throws {
+        try await apiClient.pinPost(postId: postId)
+    }
+
+    func unpinPost(postId: String) async throws {
+        try await apiClient.unpinPost(postId: postId)
+    }
+
+    func savePost(userId: String, postId: String) async throws {
+        try await apiClient.savePost(userId: userId, postId: postId)
+    }
+
+    func unsavePost(userId: String, postId: String) async throws {
+        try await apiClient.unsavePost(userId: userId, postId: postId)
+    }
+
+    func deletePost(postId: String) async throws {
+        try await apiClient.deletePost(postId: postId)
+    }
+
+    // MARK: - Reactions
+
+    @discardableResult
+    func addReaction(userId: String, postId: String, emojiName: String) async throws -> MMReaction {
+        try await apiClient.addReaction(userId: userId, postId: postId, emojiName: emojiName)
+    }
+
+    func removeReaction(userId: String, postId: String, emojiName: String) async throws {
+        try await apiClient.removeReaction(userId: userId, postId: postId, emojiName: emojiName)
+    }
+
+    // MARK: - Threads
+
+    func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
+        try await apiClient.fetchThreads(userId: userId, teamId: teamId, perPage: perPage)
+    }
+
+    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws
+        -> MMThreadsResponse
+    {
+        try await apiClient.fetchThreadsPage(userId: userId, teamId: teamId, page: page, perPage: perPage)
+    }
+
+    func markThreadRead(teamId: String, threadId: String) async throws {
+        try await apiClient.markThreadRead(teamId: teamId, threadId: threadId)
+    }
+
+    // MARK: - Custom Emojis
+
+    func fetchCustomEmojis(page: Int = 0, perPage: Int = 200) async throws -> [MMEmoji] {
+        try await apiClient.fetchCustomEmojis(page: page, perPage: perPage)
+    }
+
+    func fetchEmojiImage(emojiId: String) async throws -> Data {
+        try await apiClient.fetchEmojiImage(emojiId: emojiId)
+    }
+
+    // MARK: - Plugins
+
+    func fetchActivePluginIds() async throws -> [String] {
+        try await apiClient.fetchActivePluginIds()
+    }
+
+    // MARK: - File Transfer
+
     func fetchMaxFileSize() async -> Int64? {
-        guard let (data, _) = try? await performRequest(
-            path: "/api/v4/config/client",
-            queryItems: [URLQueryItem(name: "format", value: "old")],
-            auth: .optionalToken,
-            accept: "application/json",
-            logPayload: false
-        ) else { return nil }
-        return Self.maxFileSize(fromClientConfig: data)
+        await fileTransfer.fetchMaxFileSize()
     }
 
     func uploadFile(channelId: String, data: Data, filename: String, mimeType: String) async throws -> String {
-        let boundary = "Boundary-\(UUID().uuidString)"
-        let body = Self.multipartBody(
-            boundary: boundary,
-            filename: filename,
-            mimeType: mimeType,
-            data: data
-        )
-        let (responseData, _) = try await performRequest(
-            path: "/api/v4/files",
-            method: "POST",
-            queryItems: [URLQueryItem(name: "channel_id", value: channelId)],
-            rawBody: body,
-            contentType: "multipart/form-data; boundary=\(boundary)"
-        )
-        return try Self.fileId(fromUploadResponse: responseData)
+        try await fileTransfer.uploadFile(channelId: channelId, data: data, filename: filename, mimeType: mimeType)
     }
 
-    /// Streams a file from disk as a multipart upload and reports progress.
-    /// The file is copied to a temporary multipart body so a large attachment
-    /// never has to be held in memory.
     func uploadFile(
         channelId: String,
         fileURL: URL,
@@ -1522,766 +689,61 @@ final class WebService: NSObject {
         maxBytes: Int64? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> String {
-        let size =
-            (try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init)
-            ?? 0
-        if let maxBytes = maxBytes, AttachmentUploadPolicy.exceedsLimit(size: size, limit: maxBytes) {
-            throw WebServiceError.fileTooLarge(size: size, limit: maxBytes)
-        }
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        let multipartURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("mattermost-upload-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: multipartURL) }
-        do {
-            try Self.writeMultipartFile(
-                sourceURL: fileURL,
-                destinationURL: multipartURL,
-                boundary: boundary,
-                filename: filename,
-                mimeType: mimeType
-            )
-        } catch let error as WebServiceError {
-            throw error
-        } catch {
-            throw WebServiceError.fileReadError(error)
-        }
-
-        let request = try makeRequest(
-            path: "/api/v4/files",
-            method: "POST",
-            queryItems: [URLQueryItem(name: "channel_id", value: channelId)],
-            contentType: "multipart/form-data; boundary=\(boundary)"
-        )
-
-        let observer = UploadProgressObserver { sent, total in
-            guard total > 0 else { return }
-            progress?(AttachmentUploadPolicy.progress(sent: sent, total: total))
-        }
-        let configuration = URLSessionConfiguration.ephemeral
-        let session = URLSession(configuration: configuration, delegate: observer, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.upload(for: request, fromFile: multipartURL)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as URLError where error.code == .cancelled {
-            throw CancellationError()
-        } catch {
-            throw WebServiceError.networkError(error)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw WebServiceError.invalidResponse
-        }
-        guard (200...299).contains(httpResponse.statusCode) else {
-            var serverMsg: String?
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let msg = json["message"] as? String, !msg.isEmpty {
-                serverMsg = msg
-            }
-            throw WebServiceError.httpStatus(code: httpResponse.statusCode, message: serverMsg)
-        }
-        progress?(1)
-        return try Self.fileId(fromUploadResponse: data)
-    }
-
-    private static func fileId(fromUploadResponse data: Data) throws -> String {
-        struct UploadResponse: Decodable {
-            struct FileInfo: Decodable { let id: String }
-            let file_infos: [FileInfo]
-        }
-        let decoded: UploadResponse
-        do {
-            decoded = try JSONDecoder().decode(UploadResponse.self, from: data)
-        } catch {
-            throw WebServiceError.decodingError(error)
-        }
-        guard let fileId = decoded.file_infos.first?.id else {
-            throw WebServiceError.invalidResponse
-        }
-        return fileId
-    }
-    
-    func fetchActivePluginIds() async throws -> [String] {
-        struct PluginsResponse: Decodable {
-            struct Plugin: Decodable { let id: String }
-            let active: [Plugin]
-        }
-        let response: PluginsResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/plugins",
-            queryItems: [URLQueryItem(name: "filter", value: "activated")]
-        )
-        return response.active.map { $0.id }
-    }
-    
-    func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
-        try await fetchThreadsPage(userId: userId, teamId: teamId, perPage: perPage).threads
-    }
-
-    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws -> MMThreadsResponse {
-        try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/teams/\(teamId)/threads",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage))
-            ]
+        try await fileTransfer.uploadFile(
+            channelId: channelId,
+            fileURL: fileURL,
+            filename: filename,
+            mimeType: mimeType,
+            maxBytes: maxBytes,
+            progress: progress
         )
     }
 
-    func markThreadRead(teamId: String, threadId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/me/teams/\(teamId)/threads/\(threadId)/read",
-            method: "PUT",
-            jsonBody: [String: String](),
-            accept: nil
-        )
-    }
-    
-    func fetchChannelPosts(channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize, before: String? = nil) async throws -> MMPostList {
-        var queryItems = [
-            URLQueryItem(name: "page", value: String(page)),
-            URLQueryItem(name: "per_page", value: String(perPage))
-        ]
-        if let before = before, !before.isEmpty {
-            queryItems.append(URLQueryItem(name: "before", value: before))
-        }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/channels/\(channelId)/posts",
-            queryItems: queryItems
-        )
-    }
-    
-    @discardableResult
-    func createPost(channelId: String, message: String, rootId: String? = nil, fileIds: [String] = []) async throws -> MMPost {
-        var payload: [String: Any] = [
-            "channel_id": channelId,
-            "message": message
-        ]
-        if let rootId = rootId, !rootId.isEmpty {
-            payload["root_id"] = rootId
-        }
-        if !fileIds.isEmpty {
-            payload["file_ids"] = fileIds
-        }
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/posts",
-            method: "POST",
-            body: payload
-        )
+    func fetchFileData(fileId: String, preview: Bool = false) async throws -> Data {
+        try await fileTransfer.fetchFileData(fileId: fileId, preview: preview)
     }
 
-    @discardableResult
-    func patchPost(postId: String, message: String) async throws -> MMPost {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/posts/\(postId)/patch",
-            method: "PUT",
-            body: ["message": message]
-        )
+    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = 60) async throws
+        -> [MMFileInfo]
+    {
+        try await fileTransfer.searchChannelFiles(teamId: teamId, channelId: channelId, page: page, perPage: perPage)
     }
 
-    func fetchPost(postId: String) async throws -> MMPost {
-        return try await performAuthenticatedRequest(path: "/api/v4/posts/\(postId)")
-    }
-
-    /// Returns the root post plus every reply of a thread.
-    func fetchPostThread(postId: String) async throws -> MMPostList {
-        return try await performAuthenticatedRequest(path: "/api/v4/posts/\(postId)/thread")
-    }
-
-    /// Recent files in a channel, using the same search the web RHS uses.
-    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMFileInfo] {
-        let result: MMFileSearchResult = try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/files/search",
-            method: "POST",
-            body: [
-                "terms": "channel:\(channelId)",
-                "is_or_search": false,
-                "page": page,
-                "per_page": perPage,
-                "time_zone_offset": 0
-            ]
-        )
-        return result.order.compactMap { result.file_infos[$0] }
-    }
-
-    /// Searches files across the whole team (the global Search → Files tab).
     func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = 60) async throws -> [MMFileInfo] {
-        let result: MMFileSearchResult = try await performAuthenticatedRequest(
-            path: "/api/v4/teams/\(teamId)/files/search",
-            method: "POST",
-            body: [
-                "terms": terms,
-                "is_or_search": false,
-                "page": page,
-                "per_page": perPage,
-                "time_zone_offset": 0
-            ]
-        )
-        return result.order.compactMap { result.file_infos[$0] }
+        try await fileTransfer.searchTeamFiles(teamId: teamId, terms: terms, page: page, perPage: perPage)
     }
 
-    /// Custom emoji uploaded to the server.
-    func fetchCustomEmojis(page: Int = 0, perPage: Int = 200) async throws -> [MMEmoji] {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/emoji",
-            queryItems: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "per_page", value: String(perPage)),
-                URLQueryItem(name: "sort", value: "name")
-            ]
-        )
-    }
-
-    func fetchEmojiImage(emojiId: String) async throws -> Data {
-        let (data, _) = try await performRequest(
-            path: "/api/v4/emoji/\(emojiId)/image",
-            accept: nil,
-            logPayload: false
-        )
-        return data
-    }
-
-    // MARK: - Reactions
-
-    @discardableResult
-    func addReaction(userId: String, postId: String, emojiName: String) async throws -> MMReaction {
-        return try await performAuthenticatedRequest(
-            path: "/api/v4/reactions",
-            method: "POST",
-            body: [
-                "user_id": userId,
-                "post_id": postId,
-                "emoji_name": emojiName,
-                "create_at": 0
-            ]
-        )
-    }
-
-    func removeReaction(userId: String, postId: String, emojiName: String) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/users/\(userId)/posts/\(postId)/reactions/\(encodedPathComponent(emojiName))",
-            method: "DELETE"
-        )
-    }
-
-    // MARK: - Post actions
-
-    func pinPost(postId: String) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/posts/\(postId)/pin",
-            method: "POST"
-        )
-    }
-
-    func unpinPost(postId: String) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/posts/\(postId)/unpin",
-            method: "POST"
-        )
-    }
-
-    func savePost(userId: String, postId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/posts/\(postId)/flag",
-            method: "POST",
-            accept: nil
-        )
-    }
-
-    func unsavePost(userId: String, postId: String) async throws {
-        _ = try await performRequest(
-            path: "/api/v4/users/\(userId)/posts/\(postId)/flag",
-            method: "DELETE",
-            accept: nil
-        )
-    }
-
-    func deletePost(postId: String) async throws {
-        struct StatusResponse: Decodable { let status: String? }
-        let _: StatusResponse = try await performAuthenticatedRequest(
-            path: "/api/v4/posts/\(postId)",
-            method: "DELETE"
-        )
-    }
-    
     // MARK: - WebSocket Logic
-    
-    private var webSocketTask: URLSessionWebSocketTask?
-    private var wsSequence: Int = 1
-    private var pingTimer: Timer?
-    private var reconnectTimer: Timer?
-    private var reconnectAttempts = 0
-    
-    // Callbacks for WebSocket events
-    var onWebSocketMessage: ((String) -> Void)?
-    private(set) var isWebSocketConnected = false
-    var onWebSocketStateChanged: ((Bool, String) -> Void)?
-    var onWebSocketConnected: (() -> Void)?
-    var onWebSocketDisconnected: ((Error?) -> Void)?
-    var onWebSocketEvent: ((MMWebSocketEvent) -> Void)?
-    var onPostReceived: ((MMPost, String?) -> Void)?
-    var onStatusChanged: ((String, String) -> Void)?
-    var onMultipleStatusesReceived: (([String: String]) -> Void)?
-    var onUserTyping: ((String, String, String?) -> Void)?
-    var onTeamUpdated: ((MMTeam) -> Void)?
-    var onUserTeamsChanged: (() -> Void)?
-    var onSidebarCategoriesUpdated: (() -> Void)?
-    var onReactionChanged: ((String) -> Void)?
-    
-    private func notifySocketState(_ connected: Bool, _ message: String) {
-        DebugLog.info("WS STATE notify connected=\(connected) msg=\(message)")
-        isWebSocketConnected = connected
-        DispatchQueue.main.async { [weak self] in
-            self?.onWebSocketStateChanged?(connected, message)
-        }
-    }
-    
+
     func connectWebSocket() {
-        guard !mToken.isEmpty else { return }
-        
-        guard let url = buildURL(path: "/api/v4/websocket", isWebSocket: true) else {
-            logger.error("Invalid WebSocket URL")
-            return
-        }
-        
-        disconnectWebSocket()
-        wsSequence = 1
-        
-        var request = URLRequest(url: url)
-        request.setValue("Bearer " + mToken, forHTTPHeaderField: "Authorization")
-        
-        let task = URLSession.shared.webSocketTask(with: request)
-        webSocketTask = task
-        task.resume()
-        notifySocketState(false, "Connecting to Mattermost…")
-        
-        receiveWebSocketMessage(from: task)
-        sendWebSocketAuthentication(token: mToken)
-        startPingTimer()
+        webSocketClient.connectWebSocket()
     }
-    
+
     func disconnectWebSocket() {
-        stopPingTimer()
-        reconnectTimer?.invalidate()
-        reconnectTimer = nil
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-        notifySocketState(false, "Disconnected from Mattermost")
+        webSocketClient.disconnectWebSocket()
     }
-    
-    private func startPingTimer() {
-        stopPingTimer()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 25.0, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self = self, let task = self.webSocketTask, task.state == .running else { return }
-                task.sendPing { [weak self] error in
-                    guard let error = error else { return }
-                    Task { @MainActor in
-                        self?.logger.error("WebSocket ping failed: \(error.localizedDescription)")
-                        self?.scheduleReconnect()
-                    }
-                }
-            }
-        }
-    }
-    
-    private func stopPingTimer() {
-        pingTimer?.invalidate()
-        pingTimer = nil
-    }
-    
-    private func scheduleReconnect() {
-        guard isLogged(), reconnectTimer == nil else { return }
-        stopPingTimer()
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-        
-        // Exponential backoff with jitter: 1s, 2s, 4s … capped at 30s.
-        let delay = Self.reconnectDelay(
-            attempt: reconnectAttempts,
-            jitter: Double.random(in: 0...1)
-        )
-        reconnectAttempts += 1
-        DebugLog.warning("WS RECONNECT in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempts))")
-        
-        reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self = self else { return }
-                self.reconnectTimer = nil
-                self.connectWebSocket()
-            }
-        }
-    }
-    
-    /// Reconnects immediately when the machine wakes or the network returns.
+
     func reconnectIfNeeded() {
-        guard isLogged() else { return }
-        if let task = webSocketTask, task.state == .running { return }
-        reconnectTimer?.invalidate()
-        reconnectTimer = nil
-        connectWebSocket()
+        webSocketClient.reconnectIfNeeded()
     }
-    
+
     func sendWebSocketMessage(action: String, data: [String: Any]) {
-        let message: [String: Any] = [
-            "seq": wsSequence,
-            "action": action,
-            "data": data
-        ]
-        let currentSeq = wsSequence
-        wsSequence += 1
-        
-        do {
-            let jsonData = try JSONSerialization.data(withJSONObject: message)
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                DebugLog.logSensitive("WS SEND [seq=\(currentSeq)]: action=\(action) payload=\(jsonString)")
-                let wsMessage = URLSessionWebSocketTask.Message.string(jsonString)
-                webSocketTask?.send(wsMessage) { [weak self] error in
-                    if let error = error {
-                        DebugLog.error("WS SEND ERROR [seq=\(currentSeq)]: \(error.localizedDescription)")
-                        self?.logger.error("WebSocket send error: \(error.localizedDescription)")
-                    }
-                }
-            }
-        } catch {
-            DebugLog.error("WS SEND SERIALIZATION ERROR for action=\(action)")
-            logger.error("Failed to serialize WebSocket message")
-        }
+        webSocketClient.sendWebSocketMessage(action: action, data: data)
     }
-    
+
     func requestStatuses() {
-        sendWebSocketMessage(action: "get_statuses", data: [:])
+        webSocketClient.requestStatuses()
     }
-    
+
     func requestStatusesByIds(_ userIds: [String]) {
-        guard !userIds.isEmpty else { return }
-        sendWebSocketMessage(action: "get_statuses_by_ids", data: ["user_ids": userIds])
+        webSocketClient.requestStatusesByIds(userIds)
     }
-    
+
     func sendUserTyping(channelId: String, parentId: String = "") {
-        sendWebSocketMessage(
-            action: "user_typing",
-            data: [
-                "channel_id": channelId,
-                "parent_id": parentId
-            ]
-        )
-    }
-    
-    private func sendWebSocketAuthentication(token: String) {
-        sendWebSocketMessage(action: "authentication_challenge", data: ["token": token])
-    }
-    
-    private nonisolated func receiveWebSocketMessage(from task: URLSessionWebSocketTask) {
-        task.receive { result in
-            // URLSession delivers this on a background queue, so hand the
-            // Sendable text/error back to the main actor before touching state.
-            switch result {
-            case .failure(let error):
-                Task { @MainActor in
-                    self.handleWebSocketFailure(error, task: task)
-                }
-            case .success(let message):
-                let text: String?
-                switch message {
-                case .string(let value):
-                    text = value
-                case .data(let data):
-                    text = String(data: data, encoding: .utf8)
-                @unknown default:
-                    text = nil
-                }
-                Task { @MainActor in
-                    self.handleWebSocketText(text, task: task)
-                }
-            }
-        }
-    }
-
-    private func handleWebSocketText(_ text: String?, task: URLSessionWebSocketTask) {
-        guard task === webSocketTask else { return }
-        if let text = text {
-            DebugLog.logSensitive("WS RECV: \(text)")
-            handleIncomingWebSocketMessage(text)
-        }
-        if webSocketTask != nil {
-            receiveWebSocketMessage(from: task)
-        }
-    }
-
-    private func handleWebSocketFailure(_ error: Error, task: URLSessionWebSocketTask) {
-        guard task === webSocketTask else { return }
-        DebugLog.error("WS RECV FAILURE: \(error.localizedDescription)")
-        logger.error("WebSocket receive error: \(error.localizedDescription)")
-        onWebSocketDisconnected?(error)
-        notifySocketState(false, "Reconnecting to Mattermost…")
-        scheduleReconnect()
-    }
-    
-    private func decodeWebSocketPost(_ value: Any?) -> MMPost? {
-        if let postJSONString = value as? String,
-           let postData = postJSONString.data(using: .utf8) {
-            return try? JSONDecoder().decode(MMPost.self, from: postData)
-        }
-        if let postDict = value as? [String: Any],
-           let postData = try? JSONSerialization.data(withJSONObject: postDict) {
-            return try? JSONDecoder().decode(MMPost.self, from: postData)
-        }
-        return nil
+        webSocketClient.sendUserTyping(channelId: channelId, parentId: parentId)
     }
 
     func parseWebSocketMessage(_ text: String) -> (didConnect: Bool, event: MMWebSocketEvent?) {
-        var didConnect = false
-        var parsedEvent: MMWebSocketEvent?
-        
-        if let data = text.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            
-            if let status = json["status"] as? String, status == "OK" {
-                if let seqReply = json["seq_reply"] as? Int, seqReply == 1 {
-                    didConnect = true
-                }
-                if let statuses = json["data"] as? [String: String] {
-                    parsedEvent = .userStatuses(statuses: statuses)
-                } else if let statusesDict = json["data"] as? [String: Any] {
-                    var strStatuses: [String: String] = [:]
-                    for (k, v) in statusesDict {
-                        if let s = v as? String {
-                            strStatuses[k] = s
-                        }
-                    }
-                    if !strStatuses.isEmpty {
-                        parsedEvent = .userStatuses(statuses: strStatuses)
-                    }
-                }
-            }
-            
-            if let eventName = json["event"] as? String {
-                if eventName == "hello" {
-                    didConnect = true
-                    parsedEvent = .hello
-                }
-                
-                var eventData: [String: Any] = [:]
-                if let dict = json["data"] as? [String: Any] {
-                    eventData = dict
-                } else if let str = json["data"] as? String,
-                          let strData = str.data(using: .utf8),
-                          let dict = try? JSONSerialization.jsonObject(with: strData) as? [String: Any] {
-                    eventData = dict
-                }
-                
-                let broadcast = (json["broadcast"] as? [String: Any]) ?? [:]
-                
-                switch eventName {
-                case "hello":
-                    parsedEvent = .hello
-                case "posted":
-                    if let post = decodeWebSocketPost(eventData["post"]) {
-                        let senderName = eventData["sender_name"] as? String
-                        let channelDisplayName = eventData["channel_display_name"] as? String
-                        let channelName = eventData["channel_name"] as? String
-                        let teamId = (eventData["team_id"] as? String) ?? (broadcast["team_id"] as? String)
-                        parsedEvent = .posted(
-                            post: post,
-                            senderName: senderName,
-                            channelDisplayName: channelDisplayName,
-                            channelName: channelName,
-                            teamId: teamId
-                        )
-                    }
-                case "post_edited":
-                    if let post = decodeWebSocketPost(eventData["post"]) {
-                        parsedEvent = .postEdited(post: post)
-                    }
-                case "post_deleted", "post_deleted_by_admin":
-                    let deletedPost = decodeWebSocketPost(eventData["post"])
-                    let postId = deletedPost?.id
-                        ?? (eventData["post_id"] as? String)
-                        ?? (broadcast["post_id"] as? String)
-                        ?? ""
-                    let channelId = deletedPost?.channel_id
-                        ?? (broadcast["channel_id"] as? String)
-                        ?? (eventData["channel_id"] as? String)
-                        ?? ""
-                    if !postId.isEmpty {
-                        parsedEvent = .postDeleted(postId: postId, channelId: channelId)
-                    }
-                case "post_unread":
-                    let channelId = (eventData["channel_id"] as? String)
-                        ?? (broadcast["channel_id"] as? String)
-                        ?? ""
-                    if !channelId.isEmpty {
-                        parsedEvent = .postUnread(channelId: channelId)
-                    }
-                case "user_added", "user_removed":
-                    let userId = (eventData["user_id"] as? String)
-                        ?? (broadcast["user_id"] as? String)
-                        ?? ""
-                    let channelId = (broadcast["channel_id"] as? String)
-                        ?? (eventData["channel_id"] as? String)
-                        ?? ""
-                    if !userId.isEmpty {
-                        parsedEvent = .channelMembershipChanged(channelId: channelId, userId: userId)
-                    }
-                case "emoji_added":
-                    parsedEvent = .emojiAdded
-                case "channel_viewed":
-                    let channelId = (eventData["channel_id"] as? String)
-                        ?? (broadcast["channel_id"] as? String)
-                        ?? ""
-                    if !channelId.isEmpty {
-                        parsedEvent = .channelViewed(channelId: channelId)
-                    }
-                case "multiple_channels_viewed":
-                    let channelIds = (eventData["channel_ids"] as? [String]) ?? []
-                    if let first = channelIds.first {
-                        parsedEvent = .channelViewed(channelId: first)
-                        for channelId in channelIds.dropFirst() {
-                            onWebSocketEvent?(.channelViewed(channelId: channelId))
-                        }
-                    }
-                case "channel_updated":
-                    if let channelJSONString = eventData["channel"] as? String,
-                       let channelData = channelJSONString.data(using: .utf8),
-                       let channel = try? JSONDecoder().decode(MMChannel.self, from: channelData) {
-                        parsedEvent = .channelUpdated(channel: channel)
-                    } else if let channelDict = eventData["channel"] as? [String: Any],
-                              let channelData = try? JSONSerialization.data(withJSONObject: channelDict),
-                              let channel = try? JSONDecoder().decode(MMChannel.self, from: channelData) {
-                        parsedEvent = .channelUpdated(channel: channel)
-                    }
-                case "preferences_changed":
-                    let userId = (eventData["user_id"] as? String)
-                        ?? (broadcast["user_id"] as? String)
-                        ?? ""
-                    if !userId.isEmpty {
-                        parsedEvent = .preferencesChanged(userId: userId)
-                    }
-                case "thread_updated":
-                    let rootId = (eventData["thread_id"] as? String)
-                        ?? (eventData["root_id"] as? String)
-                        ?? (broadcast["thread_id"] as? String)
-                        ?? ""
-                    if !rootId.isEmpty {
-                        let replyCount = (eventData["reply_count"] as? NSNumber)?.intValue
-                            ?? (eventData["reply_count"] as? String).flatMap(Int.init)
-                            ?? (eventData["reply_count"] as? Int)
-                        parsedEvent = .threadUpdated(rootId: rootId, replyCount: replyCount)
-                    }
-                case "status_change":
-                    let userId = (eventData["user_id"] as? String) ?? (broadcast["user_id"] as? String) ?? ""
-                    let status = (eventData["status"] as? String) ?? ""
-                    if !userId.isEmpty && !status.isEmpty {
-                        parsedEvent = .statusChange(userId: userId, status: status)
-                    }
-                case "typing":
-                    let userId = (eventData["user_id"] as? String) ?? (broadcast["user_id"] as? String) ?? ""
-                    let channelId = (broadcast["channel_id"] as? String) ?? (eventData["channel_id"] as? String) ?? ""
-                    let parentId = eventData["parent_id"] as? String
-                    if !userId.isEmpty && !channelId.isEmpty {
-                        parsedEvent = .typing(userId: userId, channelId: channelId, parentId: parentId)
-                    }
-                case "update_team":
-                    if let teamJSONString = eventData["team"] as? String,
-                       let teamData = teamJSONString.data(using: .utf8),
-                       let team = try? JSONDecoder().decode(MMTeam.self, from: teamData) {
-                        parsedEvent = .updateTeam(team: team)
-                    } else if let teamDict = eventData["team"] as? [String: Any],
-                              let teamData = try? JSONSerialization.data(withJSONObject: teamDict),
-                              let team = try? JSONDecoder().decode(MMTeam.self, from: teamData) {
-                        parsedEvent = .updateTeam(team: team)
-                    }
-                case "added_to_team":
-                    let teamId = (eventData["team_id"] as? String) ?? (broadcast["team_id"] as? String) ?? ""
-                    let userId = (eventData["user_id"] as? String) ?? (broadcast["user_id"] as? String) ?? ""
-                    parsedEvent = .addedToTeam(teamId: teamId, userId: userId)
-                case "leave_team":
-                    let teamId = (eventData["team_id"] as? String) ?? (broadcast["team_id"] as? String) ?? ""
-                    let userId = (eventData["user_id"] as? String) ?? (broadcast["user_id"] as? String) ?? ""
-                    parsedEvent = .leaveTeam(teamId: teamId, userId: userId)
-                case "sidebar_category_updated", "sidebar_category_created", "sidebar_category_deleted", "sidebar_category_order_updated":
-                    parsedEvent = .sidebarCategoriesUpdated
-                case "reaction_added", "reaction_removed":
-                    var postId = (eventData["post_id"] as? String) ?? ""
-                    if postId.isEmpty {
-                        if let reactionString = eventData["reaction"] as? String,
-                           let reactionData = reactionString.data(using: .utf8),
-                           let object = try? JSONSerialization.jsonObject(with: reactionData),
-                           let reaction = object as? [String: Any],
-                           let parsedPostId = reaction["post_id"] as? String {
-                            postId = parsedPostId
-                        } else if let reaction = eventData["reaction"] as? [String: Any],
-                                  let parsedPostId = reaction["post_id"] as? String {
-                            postId = parsedPostId
-                        }
-                    }
-                    if postId.isEmpty {
-                        postId = (broadcast["post_id"] as? String) ?? ""
-                    }
-                    if !postId.isEmpty {
-                        parsedEvent = .reactionChanged(postId: postId)
-                    }
-                default:
-                    parsedEvent = .other(event: eventName, data: eventData)
-                }
-            }
-        }
-        return (didConnect, parsedEvent)
-    }
-    
-    private func handleIncomingWebSocketMessage(_ text: String) {
-        let (didConnect, parsedEvent) = parseWebSocketMessage(text)
-        if let event = parsedEvent {
-            DebugLog.logSensitive("WS DISPATCH EVENT: \(event)")
-        } else if !didConnect {
-            DebugLog.warning("WS UNPARSED MSG: \(text)")
-        }
-        
-        if didConnect {
-            reconnectAttempts = 0
-            notifySocketState(true, "Connected")
-            onWebSocketConnected?()
-            requestStatuses()
-        }
-        if let event = parsedEvent {
-            onWebSocketEvent?(event)
-            switch event {
-            case .hello:
-                break
-            case .posted(let post, let senderName, _, _, _):
-                onPostReceived?(post, senderName)
-            case .statusChange(let userId, let status):
-                onStatusChanged?(userId, status)
-            case .userStatuses(let statuses):
-                onMultipleStatusesReceived?(statuses)
-                for (userId, status) in statuses {
-                    onStatusChanged?(userId, status)
-                }
-            case .typing(let userId, let channelId, let parentId):
-                onUserTyping?(userId, channelId, parentId)
-            case .updateTeam(let team):
-                onTeamUpdated?(team)
-            case .addedToTeam, .leaveTeam:
-                onUserTeamsChanged?()
-            case .sidebarCategoriesUpdated:
-                onSidebarCategoriesUpdated?()
-            case .reactionChanged(let postId):
-                onReactionChanged?(postId)
-            case .postEdited, .postDeleted, .postUnread, .channelViewed, .channelUpdated,
-                 .channelMembershipChanged, .preferencesChanged, .threadUpdated, .emojiAdded:
-                break
-            case .other:
-                break
-            }
-        }
-        onWebSocketMessage?(text)
+        webSocketClient.parseWebSocketMessage(text)
     }
 }

@@ -13,13 +13,16 @@ FILES=(
     mattermost.client/WindowZoomController.swift
     mattermost.client/ZoomManager.swift
     mattermost.client/ZoomHUD.swift
+    mattermost.clientTests/APIClientTests.swift
     mattermost.clientTests/ChatViewModelTests.swift
     mattermost.clientTests/DebugLogTests.swift
+    mattermost.clientTests/FileTransferTests.swift
     mattermost.clientTests/KeychainHelperTests.swift
     mattermost.clientTests/ThemeTests.swift
     mattermost.clientTests/TimelineSupportTests.swift
     mattermost.clientTests/WebServiceErrorTests.swift
     mattermost.clientTests/WebServiceTests.swift
+    mattermost.clientTests/WebSocketClientTests.swift
     mattermost.clientTests/ZoomTests.swift
     tools/hud_measure.swift
 )
