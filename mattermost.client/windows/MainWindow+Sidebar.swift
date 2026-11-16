@@ -493,62 +493,23 @@ extension MainWindow {
     }
 
     func isLikelyMattermostId(_ str: String) -> Bool {
-        return str.count == 26 && str.allSatisfy { ($0 >= "a" && $0 <= "z") || ($0 >= "0" && $0 <= "9") }
+        WorkspaceRepository.isLikelyMattermostId(str)
     }
 
     func isRawDMNameOrId(_ str: String) -> Bool {
-        if str.contains("__") { return true }
-        return isLikelyMattermostId(str)
+        WorkspaceRepository.isRawDMNameOrId(str)
     }
 
     func resolveDMTargetUserId(for channel: MMChannel) -> String? {
-        guard channel.type == "D" else { return nil }
-        let myId = currentUser?.id ?? ""
-        if channel.name.contains("__") {
-            let parts = channel.name.components(separatedBy: "__")
-            if parts.count >= 2 {
-                if !myId.isEmpty {
-                    if parts[0] == myId && parts[1] == myId {
-                        return myId
-                    } else if parts[0] == myId {
-                        return parts[1]
-                    } else if parts[1] == myId {
-                        return parts[0]
-                    }
-                }
-                return (parts[0] == myId && parts.count > 1) ? parts[1] : parts[0]
-            }
-        }
-        if !channel.name.isEmpty {
-            return channel.name
-        }
-        return nil
+        repository.resolveDMTargetUserId(for: channel)
     }
 
     func channelDisplayName(for channel: MMChannel) -> String {
-        if channel.type == "D" {
-            if let targetId = resolveDMTargetUserId(for: channel),
-               let user = usersById[targetId] {
-                return (user.id == currentUser?.id) ? "\(user.username) (you)" : user.username
-            }
-            if !channel.display_name.isEmpty && !isRawDMNameOrId(channel.display_name) {
-                return channel.display_name
-            }
-            if let targetId = resolveDMTargetUserId(for: channel), !isLikelyMattermostId(targetId) {
-                return targetId
-            }
-        }
-        return channel.display_name.isEmpty ? channel.name : channel.display_name
+        repository.channelDisplayName(for: channel)
     }
 
     func isChannelBot(for channel: MMChannel) -> Bool {
-        guard channel.type == "D" else { return false }
-        if let targetId = resolveDMTargetUserId(for: channel),
-           let user = usersById[targetId],
-           isBotAccount(user) {
-            return true
-        }
-        return channelDisplayName(for: channel).lowercased() == "system-bot"
+        repository.isChannelBot(for: channel)
     }
 
     func isCurrentChannelBot() -> Bool {

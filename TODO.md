@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **213/213 pass** |
+| `./test.sh` | **232/232 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,12 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **Live-data glue is still concentrated in `MainWindow+LiveData`** — `M`
-  - `ChatViewModel` is a 44-line state holder; loading, pagination, read state,
-    notification routing and reconciliation live in a 541-line window extension. Move
-    workspace orchestration into a service/repository layer so it is testable without a
-    window and the view components become read-only projections.
 
 - [ ] **`WebService` is a single 1,500-line class** — `M`
   - REST, WebSocket lifecycle, payload parsing, file transfer and debug logging share one

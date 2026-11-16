@@ -3,9 +3,9 @@
 //  mattermost.client
 //
 //  Owns the live workspace data that the window renders: the authenticated user,
-//  teams/channels/members, channel posts and read-state. REST and WebSocket code
-//  updates this model (currently through MainWindow's live-data extension) and the
-//  views read it through MainWindow's forwarding properties.
+//  teams/channels/members, channel posts and read-state. Orchestrated through
+//  WorkspaceRepository so that loading, pagination, read state, and notification
+//  routing are decoupled and unit-testable without an NSWindow.
 //
 
 import Foundation
@@ -41,4 +41,6 @@ final class ChatViewModel {
     var threadItems: [MMThread] = []
     var threadPosts: [MMPost] = []
     var threadRootId: String = ""
+
+    init() {}
 }

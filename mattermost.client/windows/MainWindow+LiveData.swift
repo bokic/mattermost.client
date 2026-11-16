@@ -2,7 +2,9 @@
 //  MainWindow+LiveData.swift
 //  mattermost.client
 //
-//  Split from MainWindow.swift.
+//  View projection layer: binds WorkspaceRepository orchestration events to AppKit UI.
+//  Business logic, pagination, read state, mention parsing and notification routing
+//  are orchestrated by WorkspaceRepository.
 //
 
 import AppKit
@@ -13,11 +15,11 @@ extension MainWindow {
 
     func updateNewMessagesBaseline() {
         guard !activeChannelId.isEmpty else { return }
-        newMessagesBaseline = lastViewedAtByChannel[activeChannelId] ?? 0
+        let result = repository.computeNewMessagesBaseline(for: activeChannelId, posts: currentChannelPosts)
+        newMessagesBaseline = result.baseline
         if newMessagesBaseline > 0 {
-            let unread = currentChannelPosts.filter { $0.create_at > newMessagesBaseline }
-            newMessagesCount = unread.count
-            newMessagesDividerPostId = unread.first?.id
+            newMessagesCount = result.unreadCount
+            newMessagesDividerPostId = result.dividerPostId
             rebuildTimelineContent(scrollToBottom: false)
         }
     }
@@ -29,12 +31,7 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                let viewedAt = try await ws.markChannelViewed(channelId: channelId)
-                self.lastViewedAtByChannel[channelId] = viewedAt
-                // Only clear local badges after the server accepted the view;
-                // otherwise a transient failure would hide real unread state.
-                self.unreadByChannel[channelId] = 0
-                self.mentionsByChannel[channelId] = 0
+                _ = try await self.repository.markChannelViewed(channelId: channelId)
                 self.updateSidebarBadges()
                 (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
             } catch {
@@ -47,18 +44,10 @@ extension MainWindow {
         guard let ws = webService, ws.isLogged(), let team = activeTeam else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
-        let teamChannelIds = Set(channelsById.values.filter {
-            channelBelongsToTeam($0, teamId: team.id)
-        }.map { $0.id })
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                try await ws.markAllChannelsRead(userId: userId, teamId: team.id)
-                for channelId in teamChannelIds {
-                    self.unreadByChannel[channelId] = 0
-                    self.mentionsByChannel[channelId] = 0
-                    self.lastViewedAtByChannel[channelId] = Int64(Date().timeIntervalSince1970 * 1000)
-                }
+                let teamChannelIds = try await self.repository.markAllChannelsRead(teamId: team.id, userId: userId)
                 self.updateSidebarBadges()
                 self.updateNewMessagesBaseline()
                 if let appDelegate = NSApp.delegate as? AppDelegate {
@@ -80,8 +69,7 @@ extension MainWindow {
     func markActiveChannelRead() {
         guard !activeChannelId.isEmpty else { return }
         let channelId = activeChannelId
-        unreadByChannel[channelId] = 0
-        mentionsByChannel[channelId] = 0
+        repository.markChannelReadLocally(channelId: channelId)
         updateSidebarBadges()
         markActiveChannelViewed()
         (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
@@ -97,8 +85,7 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                try await ws.markChannelUnread(userId: userId, channelId: channelId, postId: lastPost.id)
-                self.unreadByChannel[channelId, default: 0] = max(1, self.unreadByChannel[channelId] ?? 0)
+                try await self.repository.markChannelUnread(channelId: channelId, userId: userId, postId: lastPost.id)
                 self.updateSidebarBadges()
             } catch {
                 self.showInfoAlert("Could not mark the channel unread: \(error.localizedDescription)")
@@ -184,9 +171,7 @@ extension MainWindow {
                         self.loadChannelMembers()
                     }
                 case .channelUpdated(let channel):
-                    self.channelsById[channel.id] = channel
-                    self.channelsByName[channel.name.lowercased()] = channel
-                    self.channelsByName[channel.display_name.lowercased()] = channel
+                    self.repository.updateChannel(channel)
                     if channel.id == self.activeChannelId {
                         self.channelTitleLabel.stringValue = self.channelDisplayName(for: channel)
                         self.heroTitleLabel.stringValue = self.channelDisplayName(for: channel)
@@ -270,7 +255,6 @@ extension MainWindow {
             let typer = self.usersById[userId]?.username ?? "Someone"
 
             if let parentId = parentId, !parentId.isEmpty {
-                // Thread typing belongs to its thread composer, not the main one.
                 guard self.rightPanelMode == .thread, self.threadRootId == parentId else { return }
                 self.threadTypingIndicatorWorkItem?.cancel()
                 let typingPlaceholder = "\(typer) is typing…"
@@ -287,7 +271,6 @@ extension MainWindow {
 
             guard channelId == self.activeChannelId else { return }
 
-            // Don't replace a real status (editing/upload/send) with a typing hint.
             let currentStatus = self.composerHelpLabel.stringValue
             guard self.editingPostId == nil,
                   !currentStatus.hasPrefix("Uploading"),
@@ -308,9 +291,7 @@ extension MainWindow {
 
         ws.onTeamUpdated = { [weak self] updatedTeam in
             guard let self = self else { return }
-            if let index = self.userTeams.firstIndex(where: { $0.id == updatedTeam.id }) {
-                self.userTeams[index] = updatedTeam
-            }
+            self.repository.updateTeam(updatedTeam)
             if self.activeTeam?.id == updatedTeam.id {
                 self.updateTeamHeader(with: updatedTeam)
             }
@@ -323,11 +304,9 @@ extension MainWindow {
                 guard let self = self else { return }
                 do {
                     let teams = try await ws.fetchTeams()
-                    self.userTeams = teams
-                    if let active = self.activeTeam, let refreshed = teams.first(where: { $0.id == active.id }) {
-                        self.updateTeamHeader(with: refreshed)
-                    } else if let firstTeam = teams.first {
-                        self.switchActiveTeam(to: firstTeam)
+                    let (_, activeTeam) = self.repository.updateUserTeams(teams, savedTeamId: self.activeTeam?.id)
+                    if let active = activeTeam {
+                        self.updateTeamHeader(with: active)
                     }
                     self.rebuildTeamMenu()
                 } catch {
@@ -364,64 +343,33 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
-                let me = try await ws.fetchCurrentUser()
-                self.currentUser = me
-                self.applyServerCustomStatus(from: me)
-                self.usersById[me.id] = me
-                self.usersByUsername[me.username.lowercased()] = me
-                self.fetchAvatarIfNeeded(for: me.id)
+                let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
+                let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
+                let initial = try await self.repository.loadInitialWorkspaceData(
+                    savedTeamId: savedTeamId,
+                    savedChannelId: savedChannelId,
+                    systemBotArg: CommandLine.arguments.contains("--system-bot")
+                )
+
+                self.applyServerCustomStatus(from: initial.me)
+                self.fetchAvatarIfNeeded(for: initial.me.id)
                 self.loadFavoriteChannels()
 
-                if let statuses = try? await ws.fetchUserStatuses(userIds: [me.id]), let myStatus = statuses.first {
-                    if let end = myStatus.dnd_end_time, end > 0 {
-                        self.dndEndTimeByUser[me.id] = end
-                    }
-                    let status = self.normalizedStatus(myStatus.status, dndEndTime: myStatus.dnd_end_time)
-                    self.userStatusById[me.id] = status
+                if let status = initial.myStatus {
                     self.applyCurrentUserStatus(status)
-                    self.updateChatWidgetUserStatus(userId: me.id, status: status)
+                    self.updateChatWidgetUserStatus(userId: initial.me.id, status: status)
                 }
 
-                let teams = try await ws.fetchTeams()
-                self.userTeams = teams
-                let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
-                guard let team = teams.first(where: { $0.id == savedTeamId }) ?? teams.first else { return }
-                self.updateTeamHeader(with: team)
-                UserDefaults.standard.set(team.id, forKey: "lastTeamId")
+                self.updateTeamHeader(with: initial.activeTeam)
+                UserDefaults.standard.set(initial.activeTeam.id, forKey: "lastTeamId")
 
-                let channels = try await ws.fetchChannels(teamId: team.id)
-                var allChannels = channels
-                if let myChannels = try? await ws.fetchAllChannels() {
-                    var chMap: [String: MMChannel] = [:]
-                    for c in channels { chMap[c.id] = c }
-                    for c in myChannels where self.channelBelongsToTeam(c, teamId: team.id) {
-                        chMap[c.id] = c
-                    }
-                    allChannels = Array(chMap.values)
-                }
-                for ch in allChannels {
-                    self.channelsById[ch.id] = ch
-                    self.channelsByName[ch.name.lowercased()] = ch
-                    self.channelsByName[ch.display_name.lowercased()] = ch
+                await self.preloadDMUsers(for: initial.allChannels)
+
+                if let categoriesResponse = try? await ws.fetchSidebarCategories(teamId: initial.activeTeam.id) {
+                    self.populateSidebarCategories(from: categoriesResponse, channels: initial.allChannels)
                 }
 
-                await self.preloadDMUsers(for: allChannels)
-
-                if let categoriesResponse = try? await ws.fetchSidebarCategories(teamId: team.id) {
-                    self.populateSidebarCategories(from: categoriesResponse, channels: allChannels)
-                }
-
-                let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
-                let savedChannel = savedChannelId.flatMap { self.channelsById[$0] }
-                let botCh = self.channelsByName["system-bot"]
-                    ?? self.channelsByName["system bot"]
-                    ?? allChannels.first(where: { self.isChannelBot(for: $0) })
-                let defaultCh = (CommandLine.arguments.contains("--system-bot") ? botCh : nil)
-                    ?? savedChannel
-                    ?? self.channelsByName["town-square"]
-                    ?? self.channelsByName["town square"]
-                    ?? channels.first
-                if let initialCh = defaultCh {
+                if let initialCh = initial.initialChannel {
                     self.selectedSidebarItemId = initialCh.id
                     self.updateSidebarSelectionAppearance()
                     self.loadChannelPosts(forSidebarItemId: initialCh.id)
@@ -432,21 +380,18 @@ extension MainWindow {
         }
 
         loadCustomEmojis()
-
     }
 
     func loadChannelPosts(forSidebarItemId itemId: String) {
-        let normalized = itemId.lowercased()
-        guard let ch = channelsById[itemId] ?? channelsByName[normalized] else { return }
-        let previousChannelId = activeChannelId
-        let channelChanged = !previousChannelId.isEmpty && previousChannelId != ch.id
+        let (chOpt, channelChanged, previousChannelId) = repository.prepareChannelSwitch(to: itemId)
+        guard let ch = chOpt else { return }
+
         if channelChanged {
             saveComposerDraft(for: previousChannelId)
             saveChannelScrollPosition(for: previousChannelId)
             if rightPanelMode == .thread { saveThreadDraft() }
             clearTimelineRowCache()
         }
-        activeChannelId = ch.id
         UserDefaults.standard.set(ch.id, forKey: "lastChannelId")
         if let teamId = activeTeam?.id { UserDefaults.standard.set(teamId, forKey: "lastTeamId") }
         closeCompletion()
@@ -459,6 +404,7 @@ extension MainWindow {
         refreshFavoriteState()
         markActiveChannelViewed()
         reloadRightPanelIfNeeded()
+
         let resolvedTitle = channelDisplayName(for: ch)
         channelTitleLabel.stringValue = resolvedTitle
         if isRightPanelVisible {
@@ -481,9 +427,6 @@ extension MainWindow {
         }
         layoutRightChatPanel()
         closeSearchResults()
-        isLoadingOlderPosts = false
-        didLoadAllHistory = false
-        currentChannelPosts = []
         rebuildTimelineContent(scrollToBottom: false)
         refreshChannelMemberCount(channelId: ch.id)
         Task { @MainActor [weak self] in
@@ -505,33 +448,22 @@ extension MainWindow {
     func fetchAndRenderPosts(channelId: String) async {
         guard let ws = webService, ws.isLogged() else { return }
         do {
-            let postList = try await ws.fetchChannelPosts(channelId: channelId)
-            var posts = postList.chronologicalPosts
-            if let jumpId = self.pendingJumpPostId,
-               !posts.contains(where: { $0.id == jumpId }),
-               let target = try? await ws.fetchPost(postId: jumpId),
-               target.channel_id == channelId {
-                posts.append(target)
-                posts.sort { $0.create_at < $1.create_at }
-            }
-            for post in posts {
+            let result = try await repository.fetchChannelPosts(channelId: channelId, pageSize: postsPerPage)
+            for post in result.posts {
                 fetchAvatarIfNeeded(for: post.user_id)
             }
-            let missingUserIds = Array(Set(posts.map { $0.user_id }).subtracting(usersById.keys))
-            if !missingUserIds.isEmpty,
-               let fetchedUsers = try? await ws.fetchUsersByIds(missingUserIds) {
+            if !result.missingUserIds.isEmpty,
+               let fetchedUsers = try? await ws.fetchUsersByIds(result.missingUserIds) {
                 for u in fetchedUsers {
                     usersById[u.id] = u
                     usersByUsername[u.username.lowercased()] = u
                     fetchAvatarIfNeeded(for: u.id)
                 }
             }
-            let allUserIds = Array(Set(posts.map { $0.user_id }.filter { $0 != "system" }))
-            let unknownStatusIds = allUserIds.filter { self.userStatusById[$0] == nil && self.isLikelyMattermostId($0) }
-            if !unknownStatusIds.isEmpty {
+            if !result.unknownStatusIds.isEmpty {
                 if ws.isWebSocketConnected {
-                    ws.requestStatusesByIds(unknownStatusIds)
-                } else if let fetchedStatuses = try? await ws.fetchUserStatuses(userIds: unknownStatusIds) {
+                    ws.requestStatusesByIds(result.unknownStatusIds)
+                } else if let fetchedStatuses = try? await ws.fetchUserStatuses(userIds: result.unknownStatusIds) {
                     for st in fetchedStatuses {
                         if let end = st.dnd_end_time, end > 0 {
                             self.dndEndTimeByUser[st.user_id] = end
@@ -540,17 +472,12 @@ extension MainWindow {
                     }
                 }
             }
-            // Discard results for a channel that is no longer open.
             guard self.activeChannelId == channelId else { return }
-            let topLevelPosts = posts.filter { ($0.root_id ?? "").isEmpty }
-            self.didLoadAllHistory = posts.count < self.postsPerPage
-            if self.newMessagesBaseline > 0 {
-                let unread = topLevelPosts.filter { $0.create_at > self.newMessagesBaseline }
-                self.newMessagesCount = unread.count
-                self.newMessagesDividerPostId = unread.first?.id
-            }
+            self.newMessagesBaseline = result.newMessagesBaseline
+            self.newMessagesCount = result.newMessagesCount
+            self.newMessagesDividerPostId = result.newMessagesDividerPostId
             self.newMessagesDividerArmed = false
-            applyPostsToTimeline(topLevelPosts)
+            applyPostsToTimeline(result.posts)
         } catch {
             NSLog("Failed to fetch posts for channel \(channelId): \(error.localizedDescription)")
         }
@@ -615,30 +542,17 @@ extension MainWindow {
 
     func updateThreadReplyCount(rootId: String, replyCount: Int?) {
         guard !rootId.isEmpty else { return }
-        var previous: Int?
-        if let index = currentChannelPosts.firstIndex(where: { $0.id == rootId }) {
-            previous = currentChannelPosts[index].reply_count
-            let next = replyCount ?? ((previous ?? 0) + 1)
-            currentChannelPosts[index].reply_count = next
-        }
-        if let index = threadPosts.firstIndex(where: { $0.id == rootId }) {
-            if previous == nil { previous = threadPosts[index].reply_count }
-            let next = replyCount ?? ((threadPosts[index].reply_count ?? 0) + 1)
-            threadPosts[index].reply_count = next
-        }
-        guard let count = replyCount
-            ?? currentChannelPosts.first(where: { $0.id == rootId })?.reply_count
-        else { return }
+        let (previous, next) = repository.updateThreadReplyCount(rootId: rootId, replyCount: replyCount)
+        guard next > 0 || (previous ?? 0) > 0 else { return }
 
-        if count == 0 {
+        if next == 0 {
             if (previous ?? 0) > 0 {
                 rebuildTimelineContent(scrollToBottom: false)
             }
         } else if (previous ?? 0) == 0 {
-            // The root row did not reserve a footer yet; rebuild it once.
             rebuildTimelineContent(scrollToBottom: false)
         } else {
-            updateThreadReplyFooterLabel(rootId: rootId, count: count)
+            updateThreadReplyFooterLabel(rootId: rootId, count: next)
         }
     }
 
@@ -660,55 +574,45 @@ extension MainWindow {
 
     func appendRealtimePost(_ post: MMPost) {
         guard post.channel_id == activeChannelId else { return }
-        guard !currentChannelPosts.contains(where: { $0.id == post.id }) else { return }
-
-        // Replies belong to threads, not the channel feed.
-        let isReply = !(post.root_id ?? "").isEmpty
-        if isReply, let rootId = post.root_id, !rootId.isEmpty {
-            self.updateThreadReplyCount(rootId: rootId, replyCount: nil)
-        }
         let clip = timelineScrollView.contentView
         let wasNearBottom = clip.bounds.maxY >= (timelineDocView.frame.height - 40)
+        let result = repository.appendRealtimePost(post, isScrolledUp: !wasNearBottom)
 
-        if !isReply {
-            currentChannelPosts.append(post)
-            currentChannelPosts.sort { $0.create_at < $1.create_at }
-            if !wasNearBottom {
+        switch result {
+        case .ignoredNotCurrentChannel, .ignoredDuplicate:
+            return
+        case .threadReply(let rootId, let replyCount):
+            updateThreadReplyFooterLabel(rootId: rootId, count: replyCount)
+            if isRightPanelVisible && rightPanelMode == .thread {
+                loadThread()
+            }
+        case .topLevel(let appendedPost, let isUnread, let missingUserId):
+            fetchAvatarIfNeeded(for: appendedPost.user_id)
+            if wasNearBottom {
+                newMessagesCount = 0
+                newMessagesDividerPostId = nil
+                newMessagesDividerView = nil
+            } else if isUnread {
                 if newMessagesCount == 0 {
-                    newMessagesDividerPostId = post.id
+                    newMessagesDividerPostId = appendedPost.id
                     newMessagesDividerArmed = true
                 }
                 newMessagesCount += 1
             }
-        }
-        fetchAvatarIfNeeded(for: post.user_id)
-        if wasNearBottom {
-            // Reading the live edge clears the divider; only users who are
-            // scrolled up get the floating "N new messages" pill.
-            newMessagesCount = 0
-            newMessagesDividerPostId = nil
-            newMessagesDividerView = nil
-        }
-        if !isReply {
-            if !appendRenderedPostRow(post, wasNearBottom: wasNearBottom) {
+            if !appendRenderedPostRow(appendedPost, wasNearBottom: wasNearBottom) {
                 rebuildTimelineContent(scrollToBottom: wasNearBottom)
             }
-        } else if isRightPanelVisible && rightPanelMode == .thread {
-            loadThread()
-        }
-
-        guard usersById[post.user_id] == nil,
-              let ws = webService else { return }
-        Task { @MainActor [weak self] in
-            guard let self = self else { return }
-            guard let users = try? await ws.fetchUsersByIds([post.user_id]),
-                  let user = users.first else { return }
-            self.usersById[user.id] = user
-            self.usersByUsername[user.username.lowercased()] = user
-            self.fetchAvatarIfNeeded(for: user.id)
-            // The new user's display name was unknown when the row was built;
-            // update in place without full timeline rebuild.
-            self.updateAuthorInfo(for: user.id, username: user.username)
+            if let userId = missingUserId, let ws = webService {
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    if let users = try? await ws.fetchUsersByIds([userId]), let user = users.first {
+                        self.usersById[user.id] = user
+                        self.usersByUsername[user.username.lowercased()] = user
+                        self.fetchAvatarIfNeeded(for: user.id)
+                        self.updateAuthorInfo(for: user.id, username: user.username)
+                    }
+                }
+            }
         }
     }
 
@@ -738,63 +642,38 @@ extension MainWindow {
         }
     }
 
-    /// Mattermost-compatible mention detection: the user's @username, the
-    /// special @here/@channel/@all mentions and any configured mention keys.
-    /// Matching is word-bounded so emails and adjacent text do not count.
     func isCurrentUserMentioned(in post: MMPost) -> Bool {
-        guard let username = currentUser?.username.lowercased(), !username.isEmpty else { return false }
-        let message = post.message.lowercased()
-        var candidates = ["@" + username, "@here", "@channel", "@all"]
-        if let keys = currentUser?.notify_props?.mention_keys {
-            candidates += keys
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                .filter { !$0.isEmpty }
-        }
-        for candidate in candidates {
-            let escaped = NSRegularExpression.escapedPattern(for: candidate)
-            let pattern = "(^|[^a-z0-9_.])" + escaped + "($|[^a-z0-9_])"
-            if message.range(of: pattern, options: .regularExpression) != nil {
-                return true
-            }
-        }
-        return false
+        repository.isCurrentUserMentioned(in: post)
     }
 
     func isChannelMuted(_ channelId: String) -> Bool {
-        if mutedChannelIds.contains(channelId) { return true }
-        if let desktop = channelDesktopNotificationByChannel[channelId] {
-            return desktop.lowercased() == "none"
-        }
-        guard let props = membershipsByChannel[channelId]?.notify_props else { return false }
-        return props.desktop?.lowercased() == "none"
-            || props.mark_unread?.lowercased() == "mention"
+        repository.isChannelMuted(
+            channelId,
+            mutedChannelIds: mutedChannelIds,
+            desktopNotificationOverrides: channelDesktopNotificationByChannel
+        )
     }
 
     func handleRemoteChannelViewed(_ channelId: String) {
         guard !channelId.isEmpty else { return }
-        unreadByChannel[channelId] = 0
-        mentionsByChannel[channelId] = 0
-        lastViewedAtByChannel[channelId] = Int64(Date().timeIntervalSince1970 * 1000)
+        repository.handleRemoteChannelViewed(channelId)
         (NSApp.delegate as? AppDelegate)?.markChannelRead(channelId)
         updateSidebarBadges()
     }
 
     func handleRemoteChannelUnread(_ channelId: String) {
         guard !channelId.isEmpty, channelId != activeChannelId else { return }
-        unreadByChannel[channelId, default: 0] = max(1, unreadByChannel[channelId] ?? 0)
+        repository.handleRemoteChannelUnread(channelId)
         updateSidebarBadges()
     }
 
     func handleRealtimePostDeleted(postId: String, channelId: String) {
-        currentChannelPosts.removeAll { $0.id == postId }
-        threadPosts.removeAll { $0.id == postId }
-        if postId == threadRootId && !threadRootId.isEmpty {
-            threadRootId = ""
+        let result = repository.handleRealtimePostDeleted(postId: postId, channelId: channelId)
+        if result.wasThreadRoot {
             closeRightPanel()
             return
         }
-        if activeChannelId == channelId {
+        if result.isCurrentChannel {
             rebuildTimelineContent(scrollToBottom: false)
         }
         guard isRightPanelVisible else { return }
@@ -811,69 +690,39 @@ extension MainWindow {
     }
 
     func handleIncomingPost(_ post: MMPost) {
-        let isSystemMessage = post.type?.hasPrefix("system_") ?? false
-        let ws = webService
-        let myUserId = currentUser?.id ?? ws?.currentUserId ?? ""
-        let isMine = !myUserId.isEmpty && post.user_id == myUserId
-        guard !isSystemMessage, !isMine else { return }
-
         let isVisible = NSApp.isActive && isKeyWindow && post.channel_id == activeChannelId
-        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
-        if isVisible {
-            appDelegate.markChannelRead(post.channel_id)
-            return
-        }
-
-        // Muted channels do not notify and do not accrue unread/mention badges.
-        guard !isChannelMuted(post.channel_id) else {
-            updateSidebarBadges()
-            return
-        }
-
-        let isMentioned = isCurrentUserMentioned(in: post)
-        unreadByChannel[post.channel_id, default: 0] += 1
-        if isMentioned {
-            mentionsByChannel[post.channel_id, default: 0] += 1
-        }
-        updateSidebarBadges()
-
-        let prefs = currentUser?.notify_props
-        let desktop = prefs?.desktop?.lowercased() ?? "all"
-        let desktopThreads = prefs?.desktop_threads?.lowercased() != "false"
-        let soundEnabled = prefs?.desktop_sound?.lowercased() != "false"
-        let isThreadReply = !(post.root_id ?? "").isEmpty
-        let status = currentUserStatus.lowercased()
-
-        let shouldNotify = status != "dnd"
-            && status != "offline"
-            && desktop != "none"
-            && (desktop != "mention" || isMentioned)
-            && (desktopThreads || !isThreadReply)
-
-        let channel = channelsById[post.channel_id]
-        let channelName = channel.map { channelDisplayName(for: $0) } ?? ""
-        let author = usersById[post.user_id]?.username ?? "New message"
-        appDelegate.noteIncomingMessage(
-            channelId: post.channel_id,
-            channelName: channelName,
-            author: author,
-            body: notificationExcerpt(from: post.message),
-            notify: shouldNotify,
-            sound: shouldNotify && soundEnabled,
-            postId: post.id,
-            rootId: post.root_id
+        let decision = repository.evaluateIncomingPost(
+            post,
+            isVisible: isVisible,
+            mutedChannelIds: mutedChannelIds,
+            desktopNotificationOverrides: channelDesktopNotificationByChannel
         )
+
+        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+        switch decision {
+        case .ignoreSelfOrSystem:
+            break
+        case .visibleInActiveChannel(let channelId):
+            appDelegate.markChannelRead(channelId)
+        case .muted:
+            updateSidebarBadges()
+        case .notify(let route):
+            updateSidebarBadges()
+            appDelegate.noteIncomingMessage(
+                channelId: route.channelId,
+                channelName: route.channelName,
+                author: route.author,
+                body: route.body,
+                notify: route.shouldNotify,
+                sound: route.sound,
+                postId: route.postId,
+                rootId: route.rootId
+            )
+        }
     }
 
     func notificationExcerpt(from message: String) -> String {
-        var text = message
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: ">", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.count > 160 {
-            text = String(text.prefix(160)) + "…"
-        }
-        return text.isEmpty ? "New message" : text
+        repository.notificationExcerpt(from: message)
     }
 
     func openChannel(withId channelId: String) {
@@ -906,15 +755,8 @@ extension MainWindow {
             let older = list.order.compactMap { list.posts[$0] }
                 .filter { ($0.root_id ?? "").isEmpty }
             guard self.activeChannelId == channelId else { return }
-            let page = TimelinePager.merge(
-                existing: self.currentChannelPosts,
-                older: older,
-                pageSize: self.postsPerPage
-            )
-            if page.didReachEnd {
-                self.didLoadAllHistory = true
-            }
-            guard !page.inserted.isEmpty else {
+            let page = self.repository.mergeOlderPosts(older: older, pageSize: self.postsPerPage)
+            guard page.insertedCount > 0 else {
                 self.rebuildTimelineContent(scrollToBottom: false)
                 return
             }
@@ -922,9 +764,7 @@ extension MainWindow {
             let anchorHeight = self.timelineDocView.frame.height
             let anchorOffset = self.timelineScrollView.contentView.bounds.origin.y
 
-            self.currentChannelPosts = page.posts
-            let missingUserIds = Array(Set(page.inserted.map { $0.user_id }).subtracting(self.usersById.keys))
-            if !missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(missingUserIds) {
+            if !page.missingUserIds.isEmpty, let users = try? await ws.fetchUsersByIds(page.missingUserIds) {
                 for user in users {
                     self.usersById[user.id] = user
                 }

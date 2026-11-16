@@ -665,6 +665,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         get { viewModel.webService }
         set { viewModel.webService = newValue }
     }
+    lazy var repository: WorkspaceRepository = WorkspaceRepository(state: viewModel)
     var currentUser: MMUser? {
         get { viewModel.currentUser }
         set { viewModel.currentUser = newValue }

@@ -343,6 +343,12 @@ struct MMPost: Codable {
     var props: MMPostProps? = nil
 }
 
+extension MMPost: Equatable {
+    static func == (lhs: MMPost, rhs: MMPost) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 struct MMThreadParticipant: Decodable {
     let id: String?
     let username: String?
