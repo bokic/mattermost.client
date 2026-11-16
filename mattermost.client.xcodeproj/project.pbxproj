@@ -99,6 +99,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				343864CE2CD3FE4400725849 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				343864C42CD3FE4400725849 /* mattermost.clientTests */,
@@ -122,6 +123,10 @@
 				TargetAttributes = {
 					343864B02CD3FE4300725849 = {
 						CreatedOnToolsVersion = 16.1;
+					};
+					343864C52CD3FE4400725849 = {
+						CreatedOnToolsVersion = 16.1;
+						TestTargetID = 343864B02CD3FE4300725849;
 					};
 				};
 			};
@@ -179,6 +184,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXContainerItemProxy section */
+		343864CD2CD3FE4400725849 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 343864A92CD3FE4300725849 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 343864B02CD3FE4300725849;
+			remoteInfo = mattermost.client;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		343864CE2CD3FE4400725849 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 343864B02CD3FE4300725849 /* mattermost.client */;
+			targetProxy = 343864CD2CD3FE4400725849 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		343864BC2CD3FE4400725849 /* Debug */ = {

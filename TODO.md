@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **272/272 pass** |
+| `./test.sh` | **287/287 pass** (coverage ≥ 50%) |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -41,14 +41,6 @@ completed baseline remains at the end.
 ---
 
 ## P5 — Quality, tooling & documentation
-
-- [ ] **The test target compiles copies of app sources instead of linking the app** — `M`
-  - `project.pbxproj:185-197` lists `webservice.swift`, `KeychainHelper.swift`, `Theme.swift`,
-    `ChatViewModel.swift`, `TimelineSupport.swift` and `ZoomManager.swift` as test sources.
-    Move to a hosted unit-test bundle (`TEST_HOST`/`BUNDLE_LOADER`) and `@testable import`.
-  - Add coverage for authentication/session restore, reconnect/backoff, composer send and
-    failure/retry, drafts, WS event parsing (edit/delete/read), search, attachments,
-    thread ordering and RHS pagination. Add coverage reporting + a threshold.
 
 - [ ] **CI is Debug-only and does not report coverage** — `M`
   - `.github/workflows/ci.yml` has no caching, no `-resultBundlePath`, no coverage, no

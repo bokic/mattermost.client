@@ -187,4 +187,115 @@ final class WebSocketClientTests: XCTestCase {
         let client = WebSocketClient(apiClient: api)
         XCTAssertFalse(client.isConnected)
     }
+
+    func testParseChannelViewedEvent() {
+        let client = WebSocketClient(
+            urlProvider: { nil },
+            tokenProvider: { nil },
+            isLoggedProvider: { false }
+        )
+
+        let json = """
+            {
+                "event": "channel_viewed",
+                "data": { "channel_id": "c_viewed_123" },
+                "seq": 8
+            }
+            """
+        let result = client.parseWebSocketMessage(json)
+        if case .channelViewed(let channelId) = result.event {
+            XCTAssertEqual(channelId, "c_viewed_123")
+        } else {
+            XCTFail("Expected .channelViewed event")
+        }
+    }
+
+    func testParseMultipleChannelsViewedEvent() {
+        let client = WebSocketClient(
+            urlProvider: { nil },
+            tokenProvider: { nil },
+            isLoggedProvider: { false }
+        )
+
+        let json = """
+            {
+                "event": "multiple_channels_viewed",
+                "data": { "channel_ids": ["c1", "c2", "c3"] },
+                "seq": 9
+            }
+            """
+        var additionalChannels: [String] = []
+        client.onWebSocketEvent = { event in
+            if case .channelViewed(let channelId) = event {
+                additionalChannels.append(channelId)
+            }
+        }
+
+        let result = client.parseWebSocketMessage(json)
+        if case .channelViewed(let channelId) = result.event {
+            XCTAssertEqual(channelId, "c1")
+        } else {
+            XCTFail("Expected first channel viewed")
+        }
+        XCTAssertEqual(additionalChannels, ["c2", "c3"])
+    }
+
+    func testParsePostUnreadEvent() {
+        let client = WebSocketClient(
+            urlProvider: { nil },
+            tokenProvider: { nil },
+            isLoggedProvider: { false }
+        )
+
+        let json = """
+            {
+                "event": "post_unread",
+                "data": { "channel_id": "c_unread_456" },
+                "seq": 10
+            }
+            """
+        let result = client.parseWebSocketMessage(json)
+        if case .postUnread(let channelId) = result.event {
+            XCTAssertEqual(channelId, "c_unread_456")
+        } else {
+            XCTFail("Expected .postUnread event")
+        }
+    }
+
+    func testParseStatusReplyEvent() {
+        let client = WebSocketClient(
+            urlProvider: { nil },
+            tokenProvider: { nil },
+            isLoggedProvider: { false }
+        )
+
+        let json = """
+            {
+                "status": "OK",
+                "seq_reply": 1,
+                "data": {
+                    "u1": "online",
+                    "u2": "away",
+                    "u3": "dnd"
+                }
+            }
+            """
+        let result = client.parseWebSocketMessage(json)
+        XCTAssertTrue(result.didConnect)
+        if case .userStatuses(let statuses) = result.event {
+            XCTAssertEqual(statuses["u1"], "online")
+            XCTAssertEqual(statuses["u2"], "away")
+            XCTAssertEqual(statuses["u3"], "dnd")
+        } else {
+            XCTFail("Expected .userStatuses event")
+        }
+    }
+
+    func testBackoffProgressionAndCap() {
+        let delays = (0...8).map { WebSocketClient.reconnectDelay(attempt: $0, jitter: 0) }
+        XCTAssertEqual(delays, [1, 2, 4, 8, 16, 30, 30, 30, 30])
+
+        let withJitter = WebSocketClient.reconnectDelay(attempt: 3, jitter: 0.5)
+        XCTAssertEqual(withJitter, 8.5)
+    }
 }

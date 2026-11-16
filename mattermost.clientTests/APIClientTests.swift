@@ -140,4 +140,103 @@ final class APIClientTests: XCTestCase {
         XCTAssertTrue(client.isLogged())
         XCTAssertEqual(client.token(), "tok123")
     }
+
+    func testSessionRestoreAndLogoutCleanup() {
+        let client = APIClient(host: "chat.example.com", port: 8065)
+        let tokenKey = "unitTest.sessionToken.\(UUID().uuidString)"
+
+        // Session restore: store token and apply to APIClient
+        KeychainHelper.set("restored-session-token", forKey: tokenKey)
+        let restoredToken = KeychainHelper.get(forKey: tokenKey)
+        XCTAssertEqual(restoredToken, "restored-session-token")
+
+        client.authToken = restoredToken ?? ""
+        XCTAssertTrue(client.isLogged())
+        XCTAssertEqual(client.token(), "restored-session-token")
+
+        // Logout: clear Keychain and APIClient token
+        KeychainHelper.delete(forKey: tokenKey)
+        XCTAssertNil(KeychainHelper.get(forKey: tokenKey))
+        client.authToken = ""
+        XCTAssertFalse(client.isLogged())
+        XCTAssertNil(client.token())
+    }
+
+    func testCheckTokenSucceedsAndSetsAuthToken() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [APIClientMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        APIClientMockURLProtocol.responseProvider = { request in
+            guard let url = request.url else { return nil }
+            if url.path == "/api/v4/users/me" {
+                let userJson = """
+                    {"id": "user_42", "username": "restored_user"}
+                    """
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )!
+                return (response, Data(userJson.utf8))
+            }
+            return nil
+        }
+
+        let client = APIClient(host: "chat.example.com", port: 8065, session: session)
+        let isValid = await client.checkToken(token: "valid-token-xyz")
+        XCTAssertTrue(isValid)
+        XCTAssertEqual(client.authToken, "valid-token-xyz")
+        XCTAssertEqual(client.currentUserId, "user_42")
+        XCTAssertTrue(client.isLogged())
+    }
+
+    func testCheckTokenFailsOnAuthenticationError() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [APIClientMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        APIClientMockURLProtocol.responseProvider = { request in
+            guard let url = request.url else { return nil }
+            if url.path == "/api/v4/users/me" {
+                let errorJson = """
+                    {"id": "api.context.session_expired.app_error", "message": "Invalid or expired session", "status_code": 401}
+                    """
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 401,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )!
+                return (response, Data(errorJson.utf8))
+            }
+            return nil
+        }
+
+        let client = APIClient(host: "chat.example.com", port: 8065, session: session)
+        let isValid = await client.checkToken(token: "expired-token-abc")
+        XCTAssertFalse(isValid)
+    }
+
+    private final class APIClientMockURLProtocol: URLProtocol, @unchecked Sendable {
+        nonisolated(unsafe) static var responseProvider: (@Sendable (URLRequest) -> (HTTPURLResponse, Data)?)?
+
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            guard let handler = Self.responseProvider,
+                let (response, data) = handler(request)
+            else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+
+        override func stopLoading() {}
+    }
 }
