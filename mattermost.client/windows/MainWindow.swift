@@ -46,10 +46,30 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let rightPanelSubtitle = NSTextField(labelWithString: "")
     let rightPanelCloseButton = RoundedEdgePanel()
     let rightPanelResizeHandle = RightPanelResizeHandle()
-    var rightPanelWidth: CGFloat = {
-        let stored = UserDefaults.standard.double(forKey: "rhsWidth")
-        return stored > 0 ? CGFloat(stored) : MMMetric.rightPanelDefaultWidth
-    }()
+    // Stores for persistent settings and drafts
+    var settingsStore: SettingsStore = SettingsStore.shared
+    var draftStore: DraftStore = DraftStore.shared
+
+    func updateStoreScope() {
+        let host = webService?.mHost ?? ""
+        let userId = currentUser?.id ?? webService?.currentUserId ?? ""
+        let scope = StoreScope(server: host, userId: userId)
+        settingsStore.scope = scope
+        draftStore.scope = scope
+        composerDraftsByChannelId = draftStore.allChannelDrafts()
+        threadDraftsByRootId = draftStore.allThreadDrafts()
+        channelScrollPositions = settingsStore.allScrollPositions()
+    }
+
+    var rightPanelWidth: CGFloat {
+        get {
+            let stored = settingsStore.rhsWidth
+            return stored > 0 ? CGFloat(stored) : MMMetric.rightPanelDefaultWidth
+        }
+        set {
+            settingsStore.rhsWidth = Double(newValue)
+        }
+    }
     static let localizedTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .current
@@ -133,7 +153,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let reactionPickerScroll = NSScrollView()
     let reactionPickerDoc = TimelineFlippedView()
     var reactionPickerEntries: [EmojiEntry] = []
-    var recentReactionNames = UserDefaults.standard.stringArray(forKey: "recentReactions") ?? []
+    var recentReactionNames: [String] {
+        get { settingsStore.recentReactions }
+        set { settingsStore.recentReactions = newValue }
+    }
     var isReactionPickerOpen = false
     var reactionPickerAnchorInChat: NSRect = .zero
     var reactionPickerPostId: String = ""
@@ -238,8 +261,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var searchResultsLoading = false
     var searchResultsAreFiles = false
     var searchResultsAreRecents = false
-    var recentSearches: [String] =
-        UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    var recentSearches: [String] {
+        get { settingsStore.recentSearches }
+        set { settingsStore.recentSearches = newValue }
+    }
     var searchRequestToken = 0
 
     // Direct Message picker (opened from the + in the Direct Messages header)
@@ -282,35 +307,22 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var selectedStatusIndex = 0
     weak var customStatusMenuRow: RoundedEdgePanel?
     var customStatusDialogHelper: CustomStatusDialogHelper?
-    var customStatusExpiresAt: Date? = {
-        let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
-        guard timestamp > 0 else { return nil }
-        let date = Date(timeIntervalSince1970: timestamp)
-        if date <= Date() {
-            UserDefaults.standard.removeObject(forKey: "customStatusEmoji")
-            UserDefaults.standard.removeObject(forKey: "customStatusText")
-            UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")
-            return nil
-        }
-        return date
-    }()
-    var customStatusText: String = {
-        let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
-        if timestamp > 0 && Date(timeIntervalSince1970: timestamp) <= Date() {
-            return ""
-        }
-        return UserDefaults.standard.string(forKey: "customStatusText") ?? ""
-    }()
-    var customStatusEmoji: String = {
-        let timestamp = UserDefaults.standard.double(forKey: "customStatusExpiresAt")
-        if timestamp > 0 && Date(timeIntervalSince1970: timestamp) <= Date() {
-            return ""
-        }
-        return UserDefaults.standard.string(forKey: "customStatusEmoji") ?? ""
-    }()
-    var loadRemoteImagesAutomatically: Bool = {
-        UserDefaults.standard.object(forKey: "loadRemoteImagesAutomatically") as? Bool ?? true
-    }()
+    var customStatusExpiresAt: Date? {
+        get { settingsStore.customStatusExpiresAt }
+        set { settingsStore.customStatusExpiresAt = newValue }
+    }
+    var customStatusText: String {
+        get { settingsStore.customStatusText }
+        set { settingsStore.customStatusText = newValue }
+    }
+    var customStatusEmoji: String {
+        get { settingsStore.customStatusEmoji }
+        set { settingsStore.customStatusEmoji = newValue }
+    }
+    var loadRemoteImagesAutomatically: Bool {
+        get { settingsStore.loadRemoteImagesAutomatically }
+        set { settingsStore.loadRemoteImagesAutomatically = newValue }
+    }
     var statusCheckViews: [NSImageView] = []
 
     // Left Channel Sidebar views
@@ -545,11 +557,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let composerHelpLabel = NSTextField(labelWithString: "Help")
     let composerAttachmentTray = NSView()
 
-    struct PendingAttachment {
-        let id: String
-        let name: String
-        let size: Int64?
-    }
+    typealias PendingAttachment = mattermost_client.PendingAttachment
 
     struct ActiveAttachmentUpload {
         enum Source {
@@ -599,16 +607,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     /// Composer state is kept per channel so switching conversations cannot send
     /// text or attachments to the wrong channel.
-    struct ComposerDraft {
-        var text: String
-        var attachments: [PendingAttachment]
-        var editingPostId: String?
-    }
-
-    struct ChannelScrollPosition {
-        var postId: String
-        var offset: CGFloat
-    }
+    typealias ComposerDraft = mattermost_client.ComposerDraft
+    typealias ChannelScrollPosition = mattermost_client.ChannelScrollPosition
 
     struct PendingOutgoingPost {
         enum Status {
@@ -668,7 +668,12 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     lazy var repository: WorkspaceRepository = WorkspaceRepository(state: viewModel)
     var currentUser: MMUser? {
         get { viewModel.currentUser }
-        set { viewModel.currentUser = newValue }
+        set {
+            viewModel.currentUser = newValue
+            if let user = newValue, !user.id.isEmpty {
+                updateStoreScope()
+            }
+        }
     }
     var activeTeam: MMTeam? {
         get { viewModel.activeTeam }
@@ -704,7 +709,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     }
     var userAvatarsById = BoundedImageCache()
     var markdownCodeBlockBuffers: [String: String] = [:]
-    var linkPreviewsEnabled = UserDefaults.standard.bool(forKey: "linkPreviewsEnabled")
+    var linkPreviewsEnabled: Bool {
+        get { settingsStore.linkPreviewsEnabled }
+        set { settingsStore.linkPreviewsEnabled = newValue }
+    }
     var linkPreviewsByURL: [String: LinkPreviewMetadata] = [:]
     var linkPreviewLoading: Set<String> = []
     var linkPreviewFailures: Set<String> = []

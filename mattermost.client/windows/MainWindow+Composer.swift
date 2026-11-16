@@ -42,7 +42,7 @@ extension MainWindow {
         emojiScroll.frame = NSRect(x: 0, y: 0, width: 350, height: 358)
         emojiPanel.addSubview(emojiScroll)
 
-        recentEmojiNames = UserDefaults.standard.stringArray(forKey: "recentEmojis") ?? []
+        recentEmojiNames = settingsStore.recentEmojis
         buildEmojiCategoryBar()
         emojiPanel.frame = NSRect(x: 0, y: 0, width: 350, height: 440)
     }
@@ -222,7 +222,7 @@ extension MainWindow {
         if recentEmojiNames.count > 18 {
             recentEmojiNames.removeLast(recentEmojiNames.count - 18)
         }
-        UserDefaults.standard.set(recentEmojiNames, forKey: "recentEmojis")
+        settingsStore.recentEmojis = recentEmojiNames
 
         if entry.isCustom {
             insertEmoji(":\(entry.name):")
@@ -643,7 +643,7 @@ extension MainWindow {
             if recentEmojiNames.count > 18 {
                 recentEmojiNames.removeLast(recentEmojiNames.count - 18)
             }
-            UserDefaults.standard.set(recentEmojiNames, forKey: "recentEmojis")
+            settingsStore.recentEmojis = recentEmojiNames
         }
 
         textView.insertText(item.insertText, replacementRange: completionRange)
@@ -1156,15 +1156,17 @@ extension MainWindow {
             attachments: pendingAttachments,
             editingPostId: editingPostId
         )
-        if draft.text.isEmpty && draft.attachments.isEmpty && draft.editingPostId == nil {
+        if draft.isEmpty {
             composerDraftsByChannelId.removeValue(forKey: channelId)
+            draftStore.removeChannelDraft(for: channelId)
         } else {
             composerDraftsByChannelId[channelId] = draft
+            draftStore.saveChannelDraft(draft, for: channelId)
         }
     }
 
     func restoreComposerDraft(for channelId: String) {
-        let draft = composerDraftsByChannelId[channelId]
+        let draft = draftStore.channelDraft(for: channelId) ?? composerDraftsByChannelId[channelId]
         editingPostId = draft?.editingPostId
         entryView.string = draft?.text ?? ""
         entryView.needsDisplay = true
@@ -1184,6 +1186,7 @@ extension MainWindow {
     func clearComposerDraft(for channelId: String) {
         guard !channelId.isEmpty else { return }
         composerDraftsByChannelId.removeValue(forKey: channelId)
+        draftStore.removeChannelDraft(for: channelId)
     }
 
     // MARK: - Per-thread drafts
@@ -1203,19 +1206,23 @@ extension MainWindow {
         let text = threadReplyTextView.string
         if text.isEmpty {
             threadDraftsByRootId.removeValue(forKey: threadRootId)
+            draftStore.removeThreadDraft(for: threadRootId)
         } else {
             threadDraftsByRootId[threadRootId] = text
+            draftStore.saveThreadDraft(text, for: threadRootId)
         }
     }
 
     func restoreThreadDraft() {
-        threadReplyTextView.string = threadDraftsByRootId[threadRootId] ?? ""
+        let text = draftStore.threadDraft(for: threadRootId) ?? threadDraftsByRootId[threadRootId] ?? ""
+        threadReplyTextView.string = text
         threadReplyTextView.needsDisplay = true
     }
 
     func clearThreadDraft(for rootId: String) {
         guard !rootId.isEmpty else { return }
         threadDraftsByRootId.removeValue(forKey: rootId)
+        draftStore.removeThreadDraft(for: rootId)
     }
 
     func setComposerDropHighlight(_ active: Bool) {

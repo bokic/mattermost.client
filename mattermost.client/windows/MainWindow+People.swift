@@ -306,28 +306,13 @@ extension MainWindow {
     }
 
     func recentCustomStatuses() -> [CustomStatusItem] {
-        guard let list = UserDefaults.standard.array(forKey: "recentCustomStatuses") as? [[String: Any]] else {
-            return []
-        }
-        return list.compactMap { dict in
-            guard let text = dict["text"] as? String, !text.isEmpty else { return nil }
-            let emoji = (dict["emoji"] as? String) ?? ""
-            let duration = (dict["duration"] as? Int) ?? 0
-            return CustomStatusItem(emoji: emoji, text: text, durationIndex: duration)
+        return settingsStore.recentCustomStatuses.map {
+            CustomStatusItem(emoji: $0.emoji, text: $0.text, durationIndex: $0.durationIndex)
         }
     }
 
     func saveRecentCustomStatus(emoji: String, text: String, durationIndex: Int) {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
-        var list = recentCustomStatuses()
-        list.removeAll { $0.text.lowercased() == trimmedText.lowercased() }
-        list.insert(CustomStatusItem(emoji: emoji, text: trimmedText, durationIndex: durationIndex), at: 0)
-        if list.count > 5 {
-            list = Array(list.prefix(5))
-        }
-        let dicts = list.map { ["emoji": $0.emoji, "text": $0.text, "duration": $0.durationIndex] }
-        UserDefaults.standard.set(dicts, forKey: "recentCustomStatuses")
+        settingsStore.saveRecentCustomStatus(emoji: emoji, text: text, durationIndex: durationIndex)
     }
 
     func applyServerCustomStatus(from user: MMUser) {
@@ -596,9 +581,7 @@ extension MainWindow {
     }
 
     func clearLocalCustomStatus() {
-        customStatusEmoji = ""
-        customStatusText = ""
-        customStatusExpiresAt = nil
+        settingsStore.clearCustomStatus()
         UserDefaults.standard.removeObject(forKey: "customStatusEmoji")
         UserDefaults.standard.removeObject(forKey: "customStatusText")
         UserDefaults.standard.removeObject(forKey: "customStatusExpiresAt")

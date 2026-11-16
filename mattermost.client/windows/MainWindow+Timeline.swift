@@ -3809,15 +3809,19 @@ extension MainWindow {
             return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
         }.min(by: { $0.y < $1.y })
         guard let row = row else { return }
-        channelScrollPositions[channelId] = ChannelScrollPosition(postId: row.id, offset: top - row.y)
+        let position = ChannelScrollPosition(postId: row.id, offset: top - row.y)
+        channelScrollPositions[channelId] = position
+        settingsStore.setScrollPosition(position, for: channelId)
     }
 
     @discardableResult
     func restoreChannelScrollPosition(for channelId: String) -> Bool {
-        guard let saved = channelScrollPositions[channelId],
+        let saved = settingsStore.scrollPosition(for: channelId) ?? channelScrollPositions[channelId]
+        guard let saved = saved,
               let row = timelineDocView.subviews.first(where: {
                   $0.identifier?.rawValue == "postRow_\(saved.postId)"
               }) else { return false }
+        channelScrollPositions[channelId] = saved
         let clip = timelineScrollView.contentView
         let maxY = max(0, timelineDocView.frame.height - clip.bounds.height)
         let target = min(maxY, max(0, row.frame.minY + saved.offset))

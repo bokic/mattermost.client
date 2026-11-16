@@ -102,6 +102,7 @@ extension MainWindow {
 
     func bindWebServiceAndLoadData() {
         guard let ws = webService else { return }
+        updateStoreScope()
         loadAttachmentSizeLimit()
 
         ws.onPostReceived = { [weak self] post, _ in

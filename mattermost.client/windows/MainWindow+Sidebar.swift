@@ -732,13 +732,16 @@ extension MainWindow {
     }
 
     func savedSidebarCollapsedState(_ categoryId: String) -> Bool? {
-        let states = UserDefaults.standard.dictionary(forKey: sidebarCollapseStorageKey()) as? [String: Bool]
-        return states?[categoryId]
+        let teamId = activeTeam?.id ?? "global"
+        let states = settingsStore.collapsedCategories(for: teamId)
+        return states[categoryId]
     }
 
     func setSidebarCollapsedState(_ collapsed: Bool, categoryId: String) {
-        var states = UserDefaults.standard.dictionary(forKey: sidebarCollapseStorageKey()) as? [String: Bool] ?? [:]
+        let teamId = activeTeam?.id ?? "global"
+        var states = settingsStore.collapsedCategories(for: teamId)
         states[categoryId] = collapsed
+        settingsStore.setCollapsedCategories(states, for: teamId)
         UserDefaults.standard.set(states, forKey: sidebarCollapseStorageKey())
     }
 

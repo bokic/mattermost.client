@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **258/258 pass** |
+| `./test.sh` | **271/271 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,11 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **Persistence is ad hoc `UserDefaults`** — `S`
-  - Drafts, scroll positions, statuses, emojis and UI state have no unified store or
-    migration story. Add a small `SettingsStore`/`DraftStore` abstraction with per-user,
-    per-server scoping and schema versioning.
 
 - [ ] **Legacy naming and small dead code** — `S`
   - `typealias webservice = WebService` (`webservice.swift:387`), duplicate
