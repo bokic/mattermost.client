@@ -4,6 +4,7 @@
 //
 
 import XCTest
+
 @testable import mattermost_client
 
 @MainActor

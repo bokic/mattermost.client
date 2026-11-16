@@ -536,7 +536,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let heroTitleLabel = NSTextField(labelWithString: "Town Square")
     let heroBotBadge = RoundedEdgePanel()
     let heroBotBadgeLabel = NSTextField(labelWithString: "BOT")
-    let heroDescriptionLabel = NSTextField(labelWithString: "Welcome to Town Square. Post messages here that you want everyone to see. Everyone\nautomatically becomes a member of this channel when they join the team.")
+    let heroDescriptionLabel = NSTextField(
+        labelWithString:
+            "Welcome to Town Square. Post messages here that you want everyone to see. Everyone\nautomatically becomes a member of this channel when they join the team."
+    )
     let heroInviteButton = RoundedEdgePanel()
     let heroInviteIconView = NSImageView()
     let heroInviteLabel = NSTextField(labelWithString: "Invite others to the workspace")
@@ -646,7 +649,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var completionUsers: [MMUser] = []
     var completionUsersTeamId: String?
     var completionUsersLoading = false
-    var composerBaseHeight: CGFloat { isComposerToolbarVisible ? MMMetric.composerToolbarHeight : MMMetric.composerHeight }
+    var composerBaseHeight: CGFloat {
+        isComposerToolbarVisible ? MMMetric.composerToolbarHeight : MMMetric.composerHeight
+    }
     var composerPendingHeight: CGFloat {
         hasComposerAttachments ? MMMetric.composerAttachmentsHeight : 0
     }
@@ -763,12 +768,17 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         }
     }
 
-    override init(contentRect rect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
+    override init(
+        contentRect rect: NSRect, styleMask style: NSWindow.StyleMask,
+        backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool
+    ) {
 
         super.init(contentRect: rect, styleMask: style, backing: backingStoreType, defer: flag)
 
         self.isReleasedWhenClosed = false
-        let initialAppearance = ThemeManager.shared.usesSystemAppearance ? nil : NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
+        let initialAppearance =
+            ThemeManager.shared.usesSystemAppearance
+            ? nil : NSAppearance(named: ThemeManager.shared.theme.isDark ? .darkAqua : .aqua)
         self.appearance = initialAppearance
         NSApp.appearance = initialAppearance
         self.backgroundColor = Theme.shared.sidebarTeamBarBg
@@ -836,7 +846,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         completionPanel.isHidden = true
         chatPanel.addSubview(completionPanel)
 
-
         contentView?.addSubview(mainPanel)
 
         chatPanel.color = Theme.shared.centerBg
@@ -848,39 +857,44 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         setupTopGlobalBar()
 
         updateViews()
-        zoomController = WindowZoomController(window: self, onLayout: { [weak self] in
-            self?.updateViews()
-        })
+        zoomController = WindowZoomController(
+            window: self,
+            onLayout: { [weak self] in
+                self?.updateViews()
+            })
         zoomController?.applyCurrentZoom()
         #if DEBUG
-        if CommandLine.arguments.contains("--custom-status-test") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in self?.showCustomStatusDialog() }
-        }
-        if CommandLine.arguments.contains("--statusmenu-test") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in self?.setStatusMenuOpen(true) }
-        }
-        if CommandLine.arguments.contains("--custom-set-test") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-                self?.applyCustomStatus(emoji: "coffee", text: "Focusing", durationIndex: 1)
+            if CommandLine.arguments.contains("--custom-status-test") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in self?.showCustomStatusDialog() }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in
-                self?.setStatusMenuOpen(true)
+            if CommandLine.arguments.contains("--statusmenu-test") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in self?.setStatusMenuOpen(true) }
             }
-        }
-        if CommandLine.arguments.contains("--view-test") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-                guard let self = self, let ws = self.webService else { return }
-                ws.sendWebSocketMessage(action: "view_channel", data: [
-                    "channel_id": self.activeChannelId,
-                    "prev_channel_id": "",
-                    "channel_type": "O"
-                ])
+            if CommandLine.arguments.contains("--custom-set-test") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                    self?.applyCustomStatus(emoji: "coffee", text: "Focusing", durationIndex: 1)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in
+                    self?.setStatusMenuOpen(true)
+                }
             }
-        }
+            if CommandLine.arguments.contains("--view-test") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                    guard let self = self, let ws = self.webService else { return }
+                    ws.sendWebSocketMessage(
+                        action: "view_channel",
+                        data: [
+                            "channel_id": self.activeChannelId,
+                            "prev_channel_id": "",
+                            "channel_type": "O",
+                        ])
+                }
+            }
         #endif
         self.makeKeyAndOrderFront(nil)
 
-        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
     enum FocusRegion {
@@ -895,12 +909,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 return
             }
             if event.keyCode == 48, !isCompletionVisible,
-               handleFocusTraversal(reverse: event.modifierFlags.contains(.shift)) {
+                handleFocusTraversal(reverse: event.modifierFlags.contains(.shift))
+            {
                 return
             }
             if !searchResultsPanel.isHidden, !isSearchPopoverOpen,
-               !event.modifierFlags.contains(.command),
-               !(firstResponder is NSTextView), !(firstResponder is NSTextField) {
+                !event.modifierFlags.contains(.command),
+                !(firstResponder is NSTextView), !(firstResponder is NSTextField)
+            {
                 switch event.keyCode {
                 case 125:
                     moveSearchSelection(by: 1)
@@ -918,22 +934,31 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         if event.type == .leftMouseDown || event.type == .rightMouseDown {
             if let contentView = contentView {
                 let point = contentView.convert(event.locationInWindow, from: nil)
-                if isProductMenuOpen && !productSwitcherMenu.frame.contains(point) && !productSwitcherPanel.frame.contains(point) {
+                if isProductMenuOpen && !productSwitcherMenu.frame.contains(point)
+                    && !productSwitcherPanel.frame.contains(point)
+                {
                     setProductSwitcherMenuOpen(false)
                 }
-                if isSearchPopoverOpen && !searchPopoverPanel.frame.contains(point) && !searchPanel.frame.contains(point) {
+                if isSearchPopoverOpen && !searchPopoverPanel.frame.contains(point)
+                    && !searchPanel.frame.contains(point)
+                {
                     setSearchPopoverOpen(false)
                 }
-                if !searchResultsPanel.isHidden && !searchResultsPanel.frame.contains(point) && !searchPanel.frame.contains(point) {
+                if !searchResultsPanel.isHidden && !searchResultsPanel.frame.contains(point)
+                    && !searchPanel.frame.contains(point)
+                {
                     closeSearchResults()
                 }
                 if isHelpMenuOpen && !helpMenu.frame.contains(point) && !helpPanel.frame.contains(point) {
                     setHelpMenuOpen(false)
                 }
-                if isStatusMenuOpen && !statusMenu.frame.contains(point) && !avatarButtonPanel.frame.contains(point) && !(isDndSubMenuOpen && dndSubMenu.frame.contains(point)) {
+                if isStatusMenuOpen && !statusMenu.frame.contains(point) && !avatarButtonPanel.frame.contains(point)
+                    && !(isDndSubMenuOpen && dndSubMenu.frame.contains(point))
+                {
                     setStatusMenuOpen(false)
                 }
-                if isTeamMenuOpen && !teamDropdownMenu.frame.contains(point) && !teamHeaderButton.frame.contains(point) {
+                if isTeamMenuOpen && !teamDropdownMenu.frame.contains(point) && !teamHeaderButton.frame.contains(point)
+                {
                     setTeamMenuOpen(false)
                 }
                 if isChannelMenuOpen {
@@ -952,7 +977,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 }
                 if isReactionPickerOpen {
                     let chatPoint = chatPanel.convert(event.locationInWindow, from: nil)
-                    if !reactionPickerPanel.frame.contains(chatPoint) && !reactionPickerAnchorInChat.contains(chatPoint) {
+                    if !reactionPickerPanel.frame.contains(chatPoint) && !reactionPickerAnchorInChat.contains(chatPoint)
+                    {
                         closeReactionPicker()
                     }
                 }
@@ -971,7 +997,9 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 if isDMPickerOpen && !dmPickerPanel.frame.contains(point) && !dmAnchorFrame.contains(point) {
                     closeDMPicker()
                 }
-                if isProfilePopoverOpen && !profilePopoverPanel.frame.contains(point) && (profileAnchorFrame.isEmpty || !profileAnchorFrame.contains(point)) {
+                if isProfilePopoverOpen && !profilePopoverPanel.frame.contains(point)
+                    && (profileAnchorFrame.isEmpty || !profileAnchorFrame.contains(point))
+                {
                     closeProfilePopover()
                 }
                 if isCompletionVisible {
@@ -1068,7 +1096,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         ("thumbsup", "👍"), ("thumbsdown", "👎"), ("smile", "😄"), ("joy", "😂"),
         ("heart", "❤️"), ("tada", "🎉"), ("eyes", "👀"), ("fire", "🔥"),
         ("wave", "👋"), ("clap", "👏"), ("rocket", "🚀"), ("white_check_mark", "✅"),
-        ("thinking_face", "🤔"), ("sob", "😭"), ("sunglasses", "😎"), ("100", "💯")
+        ("thinking_face", "🤔"), ("sob", "😭"), ("sunglasses", "😎"), ("100", "💯"),
     ]
 
     override func resignKey() {

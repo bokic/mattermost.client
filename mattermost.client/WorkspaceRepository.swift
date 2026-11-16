@@ -162,13 +162,19 @@ protocol WorkspaceRepositoryProtocol: AnyObject {
     func markAllChannelsRead(teamId: String, userId: String) async throws -> Set<String>
     func handleRemoteChannelViewed(_ channelId: String)
     func handleRemoteChannelUnread(_ channelId: String)
-    func computeNewMessagesBaseline(for channelId: String, posts: [MMPost]) -> (baseline: Int64, unreadCount: Int, dividerPostId: String?)
+    func computeNewMessagesBaseline(for channelId: String, posts: [MMPost]) -> (
+        baseline: Int64, unreadCount: Int, dividerPostId: String?
+    )
 
     // Mentions & Notification Routing
     func isCurrentUserMentioned(in post: MMPost) -> Bool
-    func isChannelMuted(_ channelId: String, mutedChannelIds: Set<String>, desktopNotificationOverrides: [String: String]) -> Bool
+    func isChannelMuted(
+        _ channelId: String, mutedChannelIds: Set<String>, desktopNotificationOverrides: [String: String]
+    ) -> Bool
     func notificationExcerpt(from message: String) -> String
-    func evaluateIncomingPost(_ post: MMPost, isVisible: Bool, mutedChannelIds: Set<String>, desktopNotificationOverrides: [String: String]) -> IncomingPostDecision
+    func evaluateIncomingPost(
+        _ post: MMPost, isVisible: Bool, mutedChannelIds: Set<String>, desktopNotificationOverrides: [String: String]
+    ) -> IncomingPostDecision
 
     // Posts & Pagination
     func fetchChannelPosts(channelId: String, pageSize: Int) async throws -> ChannelPostsFetchResult
@@ -179,7 +185,8 @@ protocol WorkspaceRepositoryProtocol: AnyObject {
 
     // Workspace Navigation & Setup
     func channelBelongsToTeam(_ channel: MMChannel, teamId: String) -> Bool
-    func resolveDefaultChannel(teamId: String, channels: [MMChannel], savedChannelId: String?, systemBotArg: Bool) -> MMChannel?
+    func resolveDefaultChannel(teamId: String, channels: [MMChannel], savedChannelId: String?, systemBotArg: Bool)
+        -> MMChannel?
     func updateChannel(_ channel: MMChannel)
     func updateTeam(_ team: MMTeam)
     func updateUserTeams(_ teams: [MMTeam], savedTeamId: String?) -> (teams: [MMTeam], activeTeam: MMTeam?)
@@ -237,7 +244,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     func channelDisplayName(for channel: MMChannel) -> String {
         if channel.type == "D" {
             if let targetId = resolveDMTargetUserId(for: channel),
-               let user = state.usersById[targetId] {
+                let user = state.usersById[targetId]
+            {
                 return (user.id == state.currentUser?.id) ? "\(user.username) (you)" : user.username
             }
             if !channel.display_name.isEmpty && !Self.isRawDMNameOrId(channel.display_name) {
@@ -254,7 +262,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
 
     func markChannelViewed(channelId: String) async throws -> Int64 {
         guard let ws = webService, ws.isLogged() else { return 0 }
-        let viewedAt = (try await ws.markChannelViewed(channelId: channelId)) ?? Int64(Date().timeIntervalSince1970 * 1000)
+        let viewedAt =
+            (try await ws.markChannelViewed(channelId: channelId)) ?? Int64(Date().timeIntervalSince1970 * 1000)
         state.lastViewedAtByChannel[channelId] = viewedAt
         state.unreadByChannel[channelId] = 0
         state.mentionsByChannel[channelId] = 0
@@ -274,9 +283,10 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
 
     func markAllChannelsRead(teamId: String, userId: String) async throws -> Set<String> {
         guard let ws = webService, ws.isLogged() else { return [] }
-        let teamChannelIds = Set(state.channelsById.values.filter {
-            channelBelongsToTeam($0, teamId: teamId)
-        }.map { $0.id })
+        let teamChannelIds = Set(
+            state.channelsById.values.filter {
+                channelBelongsToTeam($0, teamId: teamId)
+            }.map { $0.id })
         try await ws.markAllChannelsRead(userId: userId, teamId: teamId)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         for channelId in teamChannelIds {
@@ -319,7 +329,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         let message = post.message.lowercased()
         var candidates = ["@" + username, "@here", "@channel", "@all"]
         if let keys = state.currentUser?.notify_props?.mention_keys {
-            candidates += keys
+            candidates +=
+                keys
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
                 .filter { !$0.isEmpty }
@@ -349,7 +360,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     }
 
     func notificationExcerpt(from message: String) -> String {
-        var text = message
+        var text =
+            message
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: ">", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -374,11 +386,13 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
             return .visibleInActiveChannel(channelId: post.channel_id)
         }
 
-        guard !isChannelMuted(
-            post.channel_id,
-            mutedChannelIds: mutedChannelIds,
-            desktopNotificationOverrides: desktopNotificationOverrides
-        ) else {
+        guard
+            !isChannelMuted(
+                post.channel_id,
+                mutedChannelIds: mutedChannelIds,
+                desktopNotificationOverrides: desktopNotificationOverrides
+            )
+        else {
             return .muted(channelId: post.channel_id)
         }
 
@@ -395,7 +409,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         let isThreadReply = !(post.root_id ?? "").isEmpty
         let status = state.currentUserStatus.lowercased()
 
-        let shouldNotify = status != "dnd"
+        let shouldNotify =
+            status != "dnd"
             && status != "offline"
             && desktop != "none"
             && (desktop != "mention" || isMentioned)
@@ -420,7 +435,9 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
 
     // MARK: - Posts & Pagination
 
-    func fetchChannelPosts(channelId: String, pageSize: Int = TimelinePager.pageSize) async throws -> ChannelPostsFetchResult {
+    func fetchChannelPosts(channelId: String, pageSize: Int = TimelinePager.pageSize) async throws
+        -> ChannelPostsFetchResult
+    {
         guard let ws = webService, ws.isLogged() else {
             return ChannelPostsFetchResult(
                 posts: [],
@@ -437,9 +454,10 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         var posts = postList.chronologicalPosts
 
         if let jumpId = state.pendingJumpPostId,
-           !posts.contains(where: { $0.id == jumpId }),
-           let target = try? await ws.fetchPost(postId: jumpId),
-           target.channel_id == channelId {
+            !posts.contains(where: { $0.id == jumpId }),
+            let target = try? await ws.fetchPost(postId: jumpId),
+            target.channel_id == channelId
+        {
             posts.append(target)
             posts.sort { $0.create_at < $1.create_at }
         }
@@ -550,7 +568,9 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
 
     // MARK: - Workspace Setup & Channel Switching
 
-    func prepareChannelSwitch(to itemId: String) -> (channel: MMChannel?, channelChanged: Bool, previousChannelId: String) {
+    func prepareChannelSwitch(to itemId: String) -> (
+        channel: MMChannel?, channelChanged: Bool, previousChannelId: String
+    ) {
         let normalized = itemId.lowercased()
         guard let ch = state.channelsById[itemId] ?? state.channelsByName[normalized] else {
             return (nil, false, state.activeChannelId)
@@ -579,7 +599,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         systemBotArg: Bool
     ) -> MMChannel? {
         let savedChannel = savedChannelId.flatMap { state.channelsById[$0] }
-        let botCh = state.channelsByName["system-bot"]
+        let botCh =
+            state.channelsByName["system-bot"]
             ?? state.channelsByName["system bot"]
             ?? channels.first(where: { isChannelBot(for: $0) })
 
@@ -593,8 +614,9 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     func isChannelBot(for channel: MMChannel) -> Bool {
         guard channel.type == "D" else { return false }
         if let targetId = resolveDMTargetUserId(for: channel),
-           let user = state.usersById[targetId],
-           user.is_bot == true {
+            let user = state.usersById[targetId],
+            user.is_bot == true
+        {
             return true
         }
         return channelDisplayName(for: channel).lowercased() == "system-bot"
@@ -617,7 +639,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
 
     func updateUserTeams(_ teams: [MMTeam], savedTeamId: String?) -> (teams: [MMTeam], activeTeam: MMTeam?) {
         state.userTeams = teams
-        let active = teams.first(where: { $0.id == savedTeamId })
+        let active =
+            teams.first(where: { $0.id == savedTeamId })
             ?? (state.activeTeam.flatMap { active in teams.first(where: { $0.id == active.id }) })
             ?? teams.first
         state.activeTeam = active
@@ -630,7 +653,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         systemBotArg: Bool
     ) async throws -> InitialWorkspaceResult {
         guard let ws = webService, ws.isLogged() else {
-            throw NSError(domain: "WorkspaceRepository", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not logged in"])
+            throw NSError(
+                domain: "WorkspaceRepository", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not logged in"])
         }
 
         let me = try await ws.fetchCurrentUser()
@@ -653,7 +677,8 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         let teams = try await ws.fetchTeams()
         let (_, activeTeamOpt) = updateUserTeams(teams, savedTeamId: savedTeamId)
         guard let activeTeam = activeTeamOpt else {
-            throw NSError(domain: "WorkspaceRepository", code: 404, userInfo: [NSLocalizedDescriptionKey: "No teams found"])
+            throw NSError(
+                domain: "WorkspaceRepository", code: 404, userInfo: [NSLocalizedDescriptionKey: "No teams found"])
         }
 
         let channels = try await ws.fetchChannels(teamId: activeTeam.id)

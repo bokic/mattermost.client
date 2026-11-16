@@ -1,6 +1,6 @@
 import Cocoa
-import os
 import UserNotifications
+import os
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
@@ -15,11 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private var zoomGestureMonitor: Any?
     private var unreadCounts: [String: Int] = [:]
     private var notificationIds: [String: [String]] = [:]
-    
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         DebugLog.info("AppDelegate: applicationDidFinishLaunching. Log path: \(DebugLog.logPath)")
         KeychainHelper.migrateLegacyCredentials()
-        DebugLog.info("Credentials: \(KeychainHelper.usesDebugCredentialStore ? "debug UserDefaults store (plaintext)" : "macOS Keychain")")
+        DebugLog.info(
+            "Credentials: \(KeychainHelper.usesDebugCredentialStore ? "debug UserDefaults store (plaintext)" : "macOS Keychain")"
+        )
         setupMainMenu()
         installZoomGestureMonitor()
         DistributedNotificationCenter.default().addObserver(
@@ -40,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
-        
+
         let statusBar = NSStatusBar.system
         statusBarItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         let icon = NSImage(named: NSImage.Name("MenuIcon16"))
@@ -51,14 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         statusBarItem.button?.target = self
         statusBarItem.button?.action = #selector(AppDelegate.statusBarButtonClicked(_:))
         statusBarItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        
+
         statusBarMenu = NSMenu(title: "Cap Status Bar Menu")
-        
+
         statusBarMenu.addItem(
             withTitle: "Quit app",
             action: #selector(AppDelegate.quitApp),
             keyEquivalent: "")
-        
+
         startAuthentication()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             UpdateChecker.shared.checkForUpdates(userInitiated: false)
@@ -74,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         return true
     }
-    
+
     /// Reads credentials off the main thread: Keychain access can block while the
     /// system shows an authorization prompt, which must not stall app launch.
     /// The password item is only read when the cached token is missing or invalid,
@@ -83,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let userSettings = UserDefaults.standard
         let host = userSettings.string(forKey: "host")
         let port = UInt16(userSettings.integer(forKey: "port"))
-        
+
         Task.detached { [weak self] in
             let token = KeychainHelper.get(forKey: "token")
             await MainActor.run { [weak self] in
@@ -117,9 +119,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
     }
-    
+
     // MARK: - Zoom Gestures
-    
+
     /// Pinch-to-zoom on the trackpad and Command+scroll wheel change the UI zoom,
     /// matching browser behaviour.
     private func installZoomGestureMonitor() {
@@ -128,13 +130,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return self.handleZoomGesture(event)
         }
     }
-    
+
     private func handleZoomGesture(_ event: NSEvent) -> NSEvent? {
         guard let eventWindow = event.window,
-              eventWindow === mainWindow || eventWindow === loginWindow,
-              eventWindow.attachedSheet == nil,
-              !eventWindow.isSheet else { return event }
-        
+            eventWindow === mainWindow || eventWindow === loginWindow,
+            eventWindow.attachedSheet == nil,
+            !eventWindow.isSheet
+        else { return event }
+
         if event.type == .magnify {
             switch event.phase {
             case .began:
@@ -155,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
             return nil
         }
-        
+
         if event.type == .scrollWheel, event.modifierFlags.contains(.command) {
             let delta = event.scrollingDeltaY
             guard abs(delta) > 0.01 else { return nil }
@@ -164,22 +167,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             ZoomManager.shared.setZoomFactor(ZoomManager.shared.currentZoomFactor * (1 + step))
             return nil
         }
-        
+
         return event
     }
-    
+
     func tryLoginWithStoredCredentials() {
         loginWithStoredPassword(
             host: UserDefaults.standard.string(forKey: "host"),
             port: UInt16(UserDefaults.standard.integer(forKey: "port"))
         )
     }
-    
+
     private func loginWithStoredCredentials(host: String?, port: UInt16, password: String?) {
         let userSettings = UserDefaults.standard
         let username = userSettings.string(forKey: "username")
 
-        if let host = host, !host.isEmpty, let username = username, !username.isEmpty, let password = password, !password.isEmpty {
+        if let host = host, !host.isEmpty, let username = username, !username.isEmpty, let password = password,
+            !password.isEmpty
+        {
             DebugLog.info("Attempting password login")
             webService = WebService(host: host, port: port)
             Task { @MainActor in
@@ -207,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     // MARK: - Unread badges & notifications
-    
+
     private func configureNotifications() {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
@@ -219,7 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
     }
-    
+
     /// Records an unread message for a channel, updates the menu-bar/dock badges
     /// and optionally posts a macOS notification.
     func noteIncomingMessage(
@@ -247,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             )
         }
     }
-    
+
     /// Replaces the in-memory unread map with server-backed membership counts so
     /// the Dock/menu-bar badge survives relaunch and stays in sync with the sidebar.
     func syncUnreadCounts(_ counts: [String: Int]) {
@@ -263,11 +268,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         updateUnreadIndicators()
     }
-    
+
     var totalUnreadCount: Int {
         unreadCounts.values.reduce(0, +)
     }
-    
+
     private func updateUnreadIndicators() {
         let total = totalUnreadCount
         if total > 0 {
@@ -275,7 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 string: " •",
                 attributes: [
                     .foregroundColor: NSColor.systemBlue,
-                    .font: NSFont.systemFont(ofSize: 14, weight: .bold)
+                    .font: NSFont.systemFont(ofSize: 14, weight: .bold),
                 ]
             )
             statusBarItem.button?.toolTip = "\(total) unread message\(total == 1 ? "" : "s")"
@@ -286,7 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             NSApp.dockTile.badgeLabel = ""
         }
     }
-    
+
     private func postNotification(
         channelId: String,
         channelName: String,
@@ -306,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if let postId = postId, !postId.isEmpty { userInfo["postId"] = postId }
         if let rootId = rootId, !rootId.isEmpty { userInfo["rootId"] = rootId }
         content.userInfo = userInfo
-        
+
         let identifier = UUID().uuidString
         notificationIds[channelId, default: []].append(identifier)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
@@ -316,7 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
     }
-    
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -326,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if notification.request.content.sound != nil { options.insert(.sound) }
         completionHandler(options)
     }
-    
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -351,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         completionHandler()
     }
-    
+
     func showMainWindow() {
         guard mainWindow == nil else {
             if let window = mainWindow {
@@ -365,7 +370,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             guard let self = self else { return }
             var teamId: String?
             if let me = try? await service.fetchCurrentUser(),
-               let preferences = try? await service.fetchUserPreferences(userId: me.id) {
+                let preferences = try? await service.fetchUserPreferences(userId: me.id)
+            {
                 if let teams = try? await service.fetchTeams() {
                     let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
                     teamId = teams.first(where: { $0.id == savedTeamId })?.id ?? teams.first?.id
@@ -398,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         window.start(with: webService)
         webService.connectWebSocket()
     }
-    
+
     /// Clears stored credentials and returns to the login screen.
     func logout() {
         webService.disconnectWebSocket()
@@ -408,7 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         for key in [
             "username", "currentUserId", "lastTeamId", "lastChannelId",
             "customStatusEmoji", "customStatusText", "customStatusExpiresAt", "recentCustomStatuses",
-            "recentEmojis", "rememberPassword"
+            "recentEmojis", "rememberPassword",
         ] {
             defaults.removeObject(forKey: key)
         }
@@ -418,7 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         updateUnreadIndicators()
         showLoginWindow()
     }
-    
+
     func showLoginWindow() {
         mainWindow?.cancelAllThumbnailTasks()
         mainWindow?.cancelAvatarFetchTasks()
@@ -430,22 +436,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             styleMask: [.miniaturizable, .closable, .resizable, .titled],
             backing: .buffered, defer: false)
     }
-    
+
     @objc func statusBarButtonClicked(_ sender: NSStatusBarButton) {
         if let event = NSApp.currentEvent,
-           event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+            event.type == .rightMouseUp || event.modifierFlags.contains(.control)
+        {
             statusBarItem.menu = statusBarMenu
             statusBarItem.button?.performClick(nil)
             statusBarItem.menu = nil
             return
         }
-        
+
         toggleMainWindow()
     }
-    
+
     func toggleMainWindow() {
         guard let window = mainWindow ?? loginWindow else { return }
-        
+
         if window.isVisible && !window.isMiniaturized {
             window.orderOut(nil)
         } else {
@@ -456,7 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             window.makeKeyAndOrderFront(nil)
         }
     }
-    
+
     @objc func quitApp() {
         if let monitor = zoomGestureMonitor {
             NSEvent.removeMonitor(monitor)
@@ -471,23 +478,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             presentingWindow: mainWindow ?? loginWindow
         )
     }
-    
+
     // MARK: - Main Menu & Zoom Actions
-    
+
     private func setupMainMenu() {
         let mainMenu = NSMenu()
-        
+
         // App Menu
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
-        appMenu.addItem(withTitle: L10n.string("About Mattermost"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
-        let checkUpdatesItem = NSMenuItem(title: L10n.string("Check for Updates…"), action: #selector(AppDelegate.checkForUpdatesAction(_:)), keyEquivalent: "")
+        appMenu.addItem(
+            withTitle: L10n.string("About Mattermost"),
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let checkUpdatesItem = NSMenuItem(
+            title: L10n.string("Check for Updates…"), action: #selector(AppDelegate.checkForUpdatesAction(_:)),
+            keyEquivalent: "")
         checkUpdatesItem.target = self
         appMenu.addItem(checkUpdatesItem)
         appMenu.addItem(NSMenuItem.separator())
-        let preferencesItem = NSMenuItem(title: L10n.string("Settings…"), action: #selector(AppDelegate.showPreferences), keyEquivalent: ",")
+        let preferencesItem = NSMenuItem(
+            title: L10n.string("Settings…"), action: #selector(AppDelegate.showPreferences), keyEquivalent: ",")
         preferencesItem.target = self
         appMenu.addItem(preferencesItem)
         appMenu.addItem(NSMenuItem.separator())
@@ -497,14 +509,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         appMenu.addItem(servicesItem)
         NSApp.servicesMenu = servicesMenu
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: L10n.string("Hide Mattermost"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        let hideOthers = NSMenuItem(title: L10n.string("Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        appMenu.addItem(
+            withTitle: L10n.string("Hide Mattermost"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = NSMenuItem(
+            title: L10n.string("Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h")
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthers)
-        appMenu.addItem(withTitle: L10n.string("Show All"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(
+            withTitle: L10n.string("Show All"), action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: L10n.string("Quit Mattermost"), action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
-        
+        appMenu.addItem(
+            withTitle: L10n.string("Quit Mattermost"), action: #selector(AppDelegate.quitApp), keyEquivalent: "q")
+
         // Edit Menu (Standard text editing shortcuts)
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
@@ -519,40 +537,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(NSMenuItem.separator())
 
-        let searchItem = NSMenuItem(title: "Search", action: #selector(AppDelegate.focusGlobalSearch), keyEquivalent: "k")
+        let searchItem = NSMenuItem(
+            title: "Search", action: #selector(AppDelegate.focusGlobalSearch), keyEquivalent: "k")
         searchItem.target = self
         searchItem.keyEquivalentModifierMask = [.command]
         editMenu.addItem(searchItem)
 
-        let findChannelItem = NSMenuItem(title: "Find in Channel", action: #selector(AppDelegate.focusChannelSearch), keyEquivalent: "f")
+        let findChannelItem = NSMenuItem(
+            title: "Find in Channel", action: #selector(AppDelegate.focusChannelSearch), keyEquivalent: "f")
         findChannelItem.target = self
         findChannelItem.keyEquivalentModifierMask = [.command]
         editMenu.addItem(findChannelItem)
-        
+
         // View Menu (Zoom In, Zoom Out, Actual Size)
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")
         viewMenuItem.submenu = viewMenu
-        
+
         let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(AppDelegate.zoomInAction), keyEquivalent: "=")
         zoomInItem.keyEquivalentModifierMask = [.command]
-        
-        let zoomInShiftItem = NSMenuItem(title: "Zoom In", action: #selector(AppDelegate.zoomInAction), keyEquivalent: "+")
+
+        let zoomInShiftItem = NSMenuItem(
+            title: "Zoom In", action: #selector(AppDelegate.zoomInAction), keyEquivalent: "+")
         zoomInShiftItem.keyEquivalentModifierMask = [.command]
         zoomInShiftItem.isAlternate = true
-        
-        let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(AppDelegate.zoomOutAction), keyEquivalent: "-")
+
+        let zoomOutItem = NSMenuItem(
+            title: "Zoom Out", action: #selector(AppDelegate.zoomOutAction), keyEquivalent: "-")
         zoomOutItem.keyEquivalentModifierMask = [.command]
-        
-        let actualSizeItem = NSMenuItem(title: "Actual Size", action: #selector(AppDelegate.zoomActualSizeAction), keyEquivalent: "0")
+
+        let actualSizeItem = NSMenuItem(
+            title: "Actual Size", action: #selector(AppDelegate.zoomActualSizeAction), keyEquivalent: "0")
         actualSizeItem.keyEquivalentModifierMask = [.command]
-        
+
         let currentPct = Int(round(ZoomManager.shared.currentZoomFactor * 100))
         let zoomStatusItem = NSMenuItem(title: "Zoom: \(currentPct)%", action: nil, keyEquivalent: "")
         zoomStatusItem.isEnabled = false
         self.zoomPercentMenuItem = zoomStatusItem
-        
+
         viewMenu.addItem(zoomInItem)
         viewMenu.addItem(zoomInShiftItem)
         viewMenu.addItem(zoomOutItem)
@@ -560,7 +583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         viewMenu.addItem(actualSizeItem)
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(zoomStatusItem)
-        
+
         // Window Menu
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
@@ -576,21 +599,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         mainMenu.addItem(helpMenuItem)
         let helpMenu = NSMenu(title: "Help")
         helpMenuItem.submenu = helpMenu
-        let docsItem = NSMenuItem(title: L10n.string("Mattermost Help"), action: #selector(AppDelegate.openHelp), keyEquivalent: "?")
+        let docsItem = NSMenuItem(
+            title: L10n.string("Mattermost Help"), action: #selector(AppDelegate.openHelp), keyEquivalent: "?")
         docsItem.target = self
         helpMenu.addItem(docsItem)
 
         NSApp.mainMenu = mainMenu
         NSApp.windowsMenu = windowMenu
         NSApp.helpMenu = helpMenu
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(zoomFactorChangedNotification(_:)), name: .zoomFactorDidChange, object: nil)
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(zoomFactorChangedNotification(_:)), name: .zoomFactorDidChange, object: nil)
     }
-    
+
     @objc private func systemDidWake() {
         webService.reconnectIfNeeded()
     }
-    
+
     @objc func focusGlobalSearch() {
         mainWindow?.focusGlobalSearch()
     }
@@ -619,15 +644,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     @objc func zoomInAction() {
         ZoomManager.shared.zoomIn()
     }
-    
+
     @objc func zoomOutAction() {
         ZoomManager.shared.zoomOut()
     }
-    
+
     @objc func zoomActualSizeAction() {
         ZoomManager.shared.resetZoom()
     }
-    
+
     @objc private func zoomFactorChangedNotification(_ notification: Notification) {
         let pct = Int(round(ZoomManager.shared.currentZoomFactor * 100))
         zoomPercentMenuItem?.title = "Zoom: \(pct)%"

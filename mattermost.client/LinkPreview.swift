@@ -25,10 +25,12 @@ enum LinkPreviewParser {
 
     static func firstURL(in message: String) -> URL? {
         let cleaned = stripCode(from: message)
-        guard let regex = try? NSRegularExpression(
-            pattern: urlPattern,
-            options: [.caseInsensitive]
-        ) else { return nil }
+        guard
+            let regex = try? NSRegularExpression(
+                pattern: urlPattern,
+                options: [.caseInsensitive]
+            )
+        else { return nil }
         let range = NSRange(location: 0, length: (cleaned as NSString).length)
         guard let match = regex.firstMatch(in: cleaned, options: [], range: range) else {
             return nil
@@ -43,22 +45,26 @@ enum LinkPreviewParser {
 
     static func parse(html: String, baseURL: URL) -> LinkPreviewMetadata? {
         let values = metadataValues(in: html)
-        let title = values["og:title"]
+        let title =
+            values["og:title"]
             ?? values["twitter:title"]
             ?? titleTag(in: html)
             ?? ""
-        let description = values["og:description"]
+        let description =
+            values["og:description"]
             ?? values["twitter:description"]
             ?? values["description"]
             ?? ""
         let siteName = values["og:site_name"] ?? baseURL.host ?? ""
-        let imageString = values["og:image"]
+        let imageString =
+            values["og:image"]
             ?? values["og:image:url"]
             ?? values["twitter:image"]
             ?? values["twitter:image:src"]
         let imageURL = imageString.flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL }
-        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard
+            !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return nil }
         return LinkPreviewMetadata(
             url: baseURL,
@@ -86,16 +92,19 @@ enum LinkPreviewParser {
     private static func metadataValues(in html: String) -> [String: String] {
         var values: [String: String] = [:]
         let pattern = #"<meta\b[^>]*>"#
-        guard let regex = try? NSRegularExpression(
-            pattern: pattern,
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        ) else { return values }
+        guard
+            let regex = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+            )
+        else { return values }
         let nsHTML = html as NSString
         let range = NSRange(location: 0, length: nsHTML.length)
         for match in regex.matches(in: html, options: [], range: range) {
             let tag = nsHTML.substring(with: match.range)
-            guard let property = attribute("property", in: tag)
-                ?? attribute("name", in: tag),
+            guard
+                let property = attribute("property", in: tag)
+                    ?? attribute("name", in: tag),
                 let content = attribute("content", in: tag)
             else { continue }
             values[property.lowercased()] = content
@@ -105,10 +114,12 @@ enum LinkPreviewParser {
 
     private static func attribute(_ name: String, in tag: String) -> String? {
         let pattern = "\\b\(name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))"
-        guard let regex = try? NSRegularExpression(
-            pattern: pattern,
-            options: [.caseInsensitive]
-        ) else { return nil }
+        guard
+            let regex = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.caseInsensitive]
+            )
+        else { return nil }
         let range = NSRange(location: 0, length: (tag as NSString).length)
         guard let match = regex.firstMatch(in: tag, options: [], range: range) else {
             return nil
@@ -123,10 +134,12 @@ enum LinkPreviewParser {
     }
 
     private static func titleTag(in html: String) -> String? {
-        guard let regex = try? NSRegularExpression(
-            pattern: #"<title\b[^>]*>([\s\S]*?)</title>"#,
-            options: [.caseInsensitive]
-        ) else { return nil }
+        guard
+            let regex = try? NSRegularExpression(
+                pattern: #"<title\b[^>]*>([\s\S]*?)</title>"#,
+                options: [.caseInsensitive]
+            )
+        else { return nil }
         let range = NSRange(location: 0, length: (html as NSString).length)
         guard let match = regex.firstMatch(in: html, options: [], range: range) else {
             return nil
@@ -161,9 +174,9 @@ enum LinkPreviewService {
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse,
-                  (200...299).contains(http.statusCode),
-                  data.count <= 2 * 1024 * 1024,
-                  let html = String(data: data, encoding: .utf8)
+                (200...299).contains(http.statusCode),
+                data.count <= 2 * 1024 * 1024,
+                let html = String(data: data, encoding: .utf8)
                     ?? String(data: data, encoding: .isoLatin1)
             else { return nil }
             return LinkPreviewParser.parse(html: html, baseURL: http.url ?? url)
@@ -181,9 +194,9 @@ enum LinkPreviewService {
         let session = URLSession(configuration: configuration)
         defer { session.finishTasksAndInvalidate() }
         guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200...299).contains(http.statusCode),
-              data.count <= 4 * 1024 * 1024
+            let http = response as? HTTPURLResponse,
+            (200...299).contains(http.statusCode),
+            data.count <= 4 * 1024 * 1024
         else { return nil }
         return data
     }

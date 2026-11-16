@@ -898,7 +898,9 @@ class APIClient: APIClientProtocol {
         )
     }
 
-    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> [MMChannelMember] {
+    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws
+        -> [MMChannelMember]
+    {
         let (data, _) = try await performRequest(
             path: "/api/v4/channels/\(channelId)/members",
             queryItems: [
@@ -1092,7 +1094,8 @@ class APIClient: APIClientProtocol {
         return try await performAuthenticatedRequest(path: "/api/v4/channels/\(channelId)/pinned")
     }
 
-    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> MMPostList
+    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize)
+        async throws -> MMPostList
     {
         return try await performAuthenticatedRequest(
             path: "/api/v4/users/\(userId)/posts/flagged",
@@ -1208,11 +1211,13 @@ class APIClient: APIClientProtocol {
 
     // MARK: - Threads
 
-    func fetchThreads(userId: String, teamId: String, perPage: Int = TimelinePager.pageSize) async throws -> [MMThread] {
+    func fetchThreads(userId: String, teamId: String, perPage: Int = TimelinePager.pageSize) async throws -> [MMThread]
+    {
         try await fetchThreadsPage(userId: userId, teamId: teamId, perPage: perPage).threads
     }
 
-    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws
+    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize)
+        async throws
         -> MMThreadsResponse
     {
         try await performAuthenticatedRequest(

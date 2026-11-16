@@ -64,13 +64,16 @@ extension FileTransferProtocol {
         try await fetchFileData(fileId: fileId, preview: false)
     }
 
-    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws
+    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize)
+        async throws
         -> [MMFileInfo]
     {
         try await searchChannelFiles(teamId: teamId, channelId: channelId, page: page, perPage: perPage)
     }
 
-    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> [MMFileInfo] {
+    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = TimelinePager.pageSize)
+        async throws -> [MMFileInfo]
+    {
         try await searchTeamFiles(teamId: teamId, terms: terms, page: page, perPage: perPage)
     }
 }
@@ -334,7 +337,8 @@ class FileTransfer: FileTransferProtocol {
     }
 
     /// Recent files in a channel, using the same search the web RHS uses.
-    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws
+    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize)
+        async throws
         -> [MMFileInfo]
     {
         let result: MMFileSearchResult = try await apiClient.performAuthenticatedRequest(
@@ -353,7 +357,9 @@ class FileTransfer: FileTransferProtocol {
     }
 
     /// Searches files across the whole team (the global Search → Files tab).
-    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> [MMFileInfo] {
+    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = TimelinePager.pageSize)
+        async throws -> [MMFileInfo]
+    {
         let result: MMFileSearchResult = try await apiClient.performAuthenticatedRequest(
             path: "/api/v4/teams/\(teamId)/files/search",
             method: "POST",

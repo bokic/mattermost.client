@@ -285,7 +285,8 @@ final class SettingsStore: SettingsStoreProtocol {
                 return []
             }
             if let data = defaults.data(forKey: scope.key("recentCustomStatuses")),
-               let records = try? decoder.decode([CustomStatusRecord].self, from: data) {
+                let records = try? decoder.decode([CustomStatusRecord].self, from: data)
+            {
                 return records
             }
             if scope.isGlobal, let legacy = defaults.array(forKey: "recentCustomStatuses") as? [[String: Any]] {
@@ -474,7 +475,8 @@ final class SettingsStore: SettingsStoreProtocol {
 
     func allScrollPositions() -> [String: ChannelScrollPosition] {
         guard let data = defaults.data(forKey: scope.key("scrollPositions")),
-              let positions = try? decoder.decode([String: ChannelScrollPosition].self, from: data) else {
+            let positions = try? decoder.decode([String: ChannelScrollPosition].self, from: data)
+        else {
             return [:]
         }
         return positions

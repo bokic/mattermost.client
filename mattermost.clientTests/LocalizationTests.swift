@@ -89,7 +89,7 @@ final class LocalizationTests: XCTestCase {
     }
 
     func testDatesFollowLocale() {
-        let date = Date(timeIntervalSince1970: 1700000000)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
 
         let enFormatter = DateFormatter()
         enFormatter.locale = Locale(identifier: "en_US")

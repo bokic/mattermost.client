@@ -104,7 +104,8 @@ extension MainWindow {
         let idle = Theme.shared.centerText.withAlphaComponent(0.64)
         for (title, button) in emojiCategoryBarButtons {
             let isSelected = title == emojiSelectedCategory
-            button.color = isSelected
+            button.color =
+                isSelected
                 ? Theme.shared.buttonBg.withAlphaComponent(0.08)
                 : .clear
             button.subviews.compactMap { $0 as? NSImageView }.forEach {
@@ -199,7 +200,8 @@ extension MainWindow {
                 button.addSubview(label)
             }
             button.onHoverChanged = { [weak button] isHovered in
-                button?.color = isHovered
+                button?.color =
+                    isHovered
                     ? Theme.shared.centerText.withAlphaComponent(0.16)
                     : .clear
                 button?.setNeedsAppearanceUpdate()
@@ -233,7 +235,8 @@ extension MainWindow {
 
     func loadCustomEmojis() {
         guard !isCustomEmojiLoaded,
-              let ws = webService, ws.isLogged() else { return }
+            let ws = webService, ws.isLogged()
+        else { return }
         isCustomEmojiLoaded = true
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -252,7 +255,8 @@ extension MainWindow {
                 )
                 entries.append(entry)
                 if let data = try? await ws.fetchEmojiImage(emojiId: emoji.id),
-                   let image = NSImage(data: data) {
+                    let image = NSImage(data: data)
+                {
                     self.customEmojiImages[emoji.id] = image
                 }
             }
@@ -336,7 +340,8 @@ extension MainWindow {
         completionTarget = target
         let textView = target == .thread ? threadReplyTextView : entryView
         guard textView.selectedRange().length == 0,
-              let trigger = detectCompletionTrigger(in: textView) else {
+            let trigger = detectCompletionTrigger(in: textView)
+        else {
             closeCompletion()
             return
         }
@@ -348,7 +353,8 @@ extension MainWindow {
             let query = trigger.query.lowercased()
             var seen = Set<String>()
             let candidates = completionUsers.isEmpty ? Array(usersById.values) : completionUsers
-            items = candidates
+            items =
+                candidates
                 .filter { user in
                     guard seen.insert(user.id).inserted else { return false }
                     let full = [user.first_name, user.last_name].compactMap { $0 }.joined(separator: " ").lowercased()
@@ -417,7 +423,8 @@ extension MainWindow {
             return
         }
 
-        let sameSelection = isCompletionVisible
+        let sameSelection =
+            isCompletionVisible
             && completionKind == trigger.kind
             && completionRange == trigger.range
             && completionItems.count == min(items.count, 8)
@@ -442,7 +449,7 @@ extension MainWindow {
         let specifications: [(CompletionKind, String)] = [
             (.user, #"(?<![\w@])@([A-Za-z0-9._-]*)$"#),
             (.channel, #"(?<![\w])[#~]([A-Za-z0-9._-]*)$"#),
-            (.emoji, #"(?<![\w:]):([A-Za-z0-9_+\-]+)$"#)
+            (.emoji, #"(?<![\w:]):([A-Za-z0-9_+\-]+)$"#),
         ]
         let range = NSRange(location: 0, length: caret)
         for (kind, pattern) in specifications {
@@ -456,9 +463,10 @@ extension MainWindow {
 
     func ensureCompletionUsers() {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              completionUsersTeamId != team.id,
-              !completionUsersLoading else { return }
+            let team = activeTeam,
+            completionUsersTeamId != team.id,
+            !completionUsersLoading
+        else { return }
         completionUsersLoading = true
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -690,8 +698,9 @@ extension MainWindow {
     func uploadFiles(_ urls: [URL]) {
         let files = urls.filter { !$0.hasDirectoryPath }
         guard !files.isEmpty,
-              !activeChannelId.isEmpty,
-              webService != nil else { return }
+            !activeChannelId.isEmpty,
+            webService != nil
+        else { return }
         let channelId = activeChannelId
         let limit = attachmentSizeLimit
         var rejected: [String] = []
@@ -706,7 +715,8 @@ extension MainWindow {
                 )
                 continue
             }
-            let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+            let mime =
+                UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
                 ?? "application/octet-stream"
             enqueueUpload(
                 ActiveAttachmentUpload(
@@ -822,7 +832,7 @@ extension MainWindow {
 
     private func updateUploadProgress(id: UUID, progress: Double) {
         guard let index = activeAttachmentUploads.firstIndex(where: { $0.id == id }),
-              case .uploading = activeAttachmentUploads[index].state
+            case .uploading = activeAttachmentUploads[index].state
         else { return }
         guard abs(activeAttachmentUploads[index].currentProgress - progress) >= 0.01 || progress >= 1
         else { return }
@@ -852,7 +862,8 @@ extension MainWindow {
         } else {
             addPendingAttachment(attachment, to: upload.channelId)
             if activeChannelId == upload.channelId {
-                composerHelpLabel.stringValue = pendingAttachments.isEmpty
+                composerHelpLabel.stringValue =
+                    pendingAttachments.isEmpty
                     ? defaultComposerStatusText()
                     : "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
             }
@@ -905,7 +916,7 @@ extension MainWindow {
 
     func retryUpload(id: UUID) {
         guard let index = activeAttachmentUploads.firstIndex(where: { $0.id == id }),
-              !activeAttachmentUploads[index].isInProgress
+            !activeAttachmentUploads[index].isInProgress
         else { return }
         activeAttachmentUploads[index].state = .queued
         renderPendingAttachments()
@@ -1133,7 +1144,8 @@ extension MainWindow {
         layoutRightChatPanel()
         scrollTimelineToBottom()
         updateComposerSendState()
-        composerHelpLabel.stringValue = pendingAttachments.isEmpty
+        composerHelpLabel.stringValue =
+            pendingAttachments.isEmpty
             ? "Help"
             : "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
     }
@@ -1178,7 +1190,8 @@ extension MainWindow {
         } else if pendingAttachments.isEmpty {
             composerHelpLabel.stringValue = "Help"
         } else {
-            composerHelpLabel.stringValue = "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+            composerHelpLabel.stringValue =
+                "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
         }
         layoutRightChatPanel()
     }
@@ -1226,7 +1239,8 @@ extension MainWindow {
     }
 
     func setComposerDropHighlight(_ active: Bool) {
-        chatEntryPanel.color = active
+        chatEntryPanel.color =
+            active
             ? Theme.shared.buttonBg
             : Theme.shared.centerText.withAlphaComponent(0.16)
         chatEntryPanel.setNeedsAppearanceUpdate()
@@ -1235,7 +1249,8 @@ extension MainWindow {
         } else if pendingAttachments.isEmpty {
             composerHelpLabel.stringValue = "Help"
         } else {
-            composerHelpLabel.stringValue = "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
+            composerHelpLabel.stringValue =
+                "Attached \(pendingAttachments.count) file\(pendingAttachments.count == 1 ? "" : "s")"
         }
     }
 
@@ -1284,11 +1299,13 @@ extension MainWindow {
         closeCompletion()
         let myId = currentUser?.id ?? webService?.currentUserId ?? ""
         guard !myId.isEmpty else { return false }
-        guard let post = currentChannelPosts.last(where: {
-            $0.user_id == myId
-                && ($0.delete_at ?? 0) == 0
-                && !($0.type?.hasPrefix("system_") ?? false)
-        }) else { return false }
+        guard
+            let post = currentChannelPosts.last(where: {
+                $0.user_id == myId
+                    && ($0.delete_at ?? 0) == 0
+                    && !($0.type?.hasPrefix("system_") ?? false)
+            })
+        else { return false }
 
         editingPostId = post.id
         entryView.string = post.message
@@ -1352,7 +1369,8 @@ extension MainWindow {
                             self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
                         }
                     } else {
-                        var draft = self.composerDraftsByChannelId[channelId]
+                        var draft =
+                            self.composerDraftsByChannelId[channelId]
                             ?? ComposerDraft(text: "", attachments: [], editingPostId: editingId)
                         if draft.text.isEmpty { draft.text = message }
                         draft.editingPostId = editingId
@@ -1390,7 +1408,8 @@ extension MainWindow {
 
     func sendPendingPost(id: String) {
         guard let index = pendingOutgoingPosts.firstIndex(where: { $0.id == id }),
-              let ws = webService else { return }
+            let ws = webService
+        else { return }
         let pending = pendingOutgoingPosts[index]
         pendingOutgoingPosts[index].status = .sending
         if pending.channelId == activeChannelId {
@@ -1478,30 +1497,40 @@ extension MainWindow {
         makeFirstResponder(entryView)
         let range = entryView.selectedRange()
         let text = entryView.string as NSString
-        let selected = range.location <= text.length && range.location + range.length <= text.length
+        let selected =
+            range.location <= text.length && range.location + range.length <= text.length
             ? text.substring(with: range)
             : ""
         let prefix: String
         let suffix: String
         switch symbol {
         case "bold":
-            prefix = "**"; suffix = "**"
+            prefix = "**"
+            suffix = "**"
         case "italic":
-            prefix = "_"; suffix = "_"
+            prefix = "_"
+            suffix = "_"
         case "strikethrough":
-            prefix = "~~"; suffix = "~~"
+            prefix = "~~"
+            suffix = "~~"
         case "link":
-            prefix = "["; suffix = "](https://)"
+            prefix = "["
+            suffix = "](https://)"
         case "chevron.left.forwardslash.chevron.right":
-            prefix = "`"; suffix = "`"
+            prefix = "`"
+            suffix = "`"
         case "text.quote":
-            prefix = "> "; suffix = ""
+            prefix = "> "
+            suffix = ""
         case "list.bullet":
-            prefix = "- "; suffix = ""
+            prefix = "- "
+            suffix = ""
         case "list.number":
-            prefix = "1. "; suffix = ""
+            prefix = "1. "
+            suffix = ""
         case "number":
-            prefix = "# "; suffix = ""
+            prefix = "# "
+            suffix = ""
         default:
             return
         }
@@ -1580,8 +1609,9 @@ extension MainWindow {
         if !isThread, commandSelector == #selector(NSResponder.moveUp(_:)) {
             let shiftHeld = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
             if !shiftHeld,
-               editingPostId == nil,
-               entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                editingPostId == nil,
+                entryView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
                 return startEditingLastMessage()
             }
             return false

@@ -44,9 +44,15 @@ final class ThreadSupportTests: XCTestCase {
     }
 
     func testRepliesChronologicalOrdering() {
-        let p1 = MMPost(id: "p1", create_at: 300, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1", channel_id: "c1", root_id: "root", original_id: nil, message: "third", type: nil)
-        let p2 = MMPost(id: "p2", create_at: 100, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1", channel_id: "c1", root_id: "root", original_id: nil, message: "first", type: nil)
-        let p3 = MMPost(id: "p3", create_at: 200, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1", channel_id: "c1", root_id: "root", original_id: nil, message: "second", type: nil)
+        let p1 = MMPost(
+            id: "p1", create_at: 300, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1",
+            channel_id: "c1", root_id: "root", original_id: nil, message: "third", type: nil)
+        let p2 = MMPost(
+            id: "p2", create_at: 100, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1",
+            channel_id: "c1", root_id: "root", original_id: nil, message: "first", type: nil)
+        let p3 = MMPost(
+            id: "p3", create_at: 200, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1",
+            channel_id: "c1", root_id: "root", original_id: nil, message: "second", type: nil)
 
         let unordered = [p1, p2, p3]
         let ordered = unordered.sorted { $0.create_at < $1.create_at }
@@ -55,9 +61,15 @@ final class ThreadSupportTests: XCTestCase {
     }
 
     func testRootAndRepliesSeparation() {
-        let root = MMPost(id: "root-1", create_at: 50, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1", channel_id: "c1", root_id: "", original_id: nil, message: "root message", type: nil)
-        let reply1 = MMPost(id: "reply-1", create_at: 100, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u2", channel_id: "c1", root_id: "root-1", original_id: nil, message: "reply 1", type: nil)
-        let reply2 = MMPost(id: "reply-2", create_at: 150, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u3", channel_id: "c1", root_id: "root-1", original_id: nil, message: "reply 2", type: nil)
+        let root = MMPost(
+            id: "root-1", create_at: 50, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u1",
+            channel_id: "c1", root_id: "", original_id: nil, message: "root message", type: nil)
+        let reply1 = MMPost(
+            id: "reply-1", create_at: 100, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u2",
+            channel_id: "c1", root_id: "root-1", original_id: nil, message: "reply 1", type: nil)
+        let reply2 = MMPost(
+            id: "reply-2", create_at: 150, update_at: nil, edit_at: nil, delete_at: nil, is_pinned: nil, user_id: "u3",
+            channel_id: "c1", root_id: "root-1", original_id: nil, message: "reply 2", type: nil)
 
         let threadPosts = [root, reply1, reply2]
         let rootPost = threadPosts.first(where: { ($0.root_id ?? "").isEmpty }) ?? threadPosts[0]

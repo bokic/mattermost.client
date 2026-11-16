@@ -97,25 +97,25 @@ final class UpdateCheckerTests: XCTestCase {
 
     func testAppcastXMLParsing() throws {
         let xmlString = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-          <channel>
-            <title>Mattermost Updates</title>
-            <item>
-              <title>Version 0.9.0</title>
-              <pubDate>Sun, 15 Nov 2026 22:00:00 +0000</pubDate>
-              <sparkle:releaseNotesLink>https://github.com/bokic/mattermost.client/releases/tag/v0.9.0</sparkle:releaseNotesLink>
-              <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-              <enclosure url="https://example.com/mattermost-0.9.0.dmg"
-                         sparkle:version="0.9.0"
-                         sparkle:shortVersionString="0.9.0"
-                         sparkle:sha256="abc123def456"
-                         length="33554432"
-                         type="application/octet-stream" />
-            </item>
-          </channel>
-        </rss>
-        """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+              <channel>
+                <title>Mattermost Updates</title>
+                <item>
+                  <title>Version 0.9.0</title>
+                  <pubDate>Sun, 15 Nov 2026 22:00:00 +0000</pubDate>
+                  <sparkle:releaseNotesLink>https://github.com/bokic/mattermost.client/releases/tag/v0.9.0</sparkle:releaseNotesLink>
+                  <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+                  <enclosure url="https://example.com/mattermost-0.9.0.dmg"
+                             sparkle:version="0.9.0"
+                             sparkle:shortVersionString="0.9.0"
+                             sparkle:sha256="abc123def456"
+                             length="33554432"
+                             type="application/octet-stream" />
+                </item>
+              </channel>
+            </rss>
+            """
 
         let data = xmlString.data(using: .utf8)!
         let items = try AppcastParser.parse(data: data)
@@ -125,29 +125,30 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(item.version, "0.9.0")
         XCTAssertEqual(item.shortVersionString, "0.9.0")
         XCTAssertEqual(item.downloadURL.absoluteString, "https://example.com/mattermost-0.9.0.dmg")
-        XCTAssertEqual(item.releaseNotesURL?.absoluteString, "https://github.com/bokic/mattermost.client/releases/tag/v0.9.0")
+        XCTAssertEqual(
+            item.releaseNotesURL?.absoluteString, "https://github.com/bokic/mattermost.client/releases/tag/v0.9.0")
         XCTAssertEqual(item.minimumSystemVersion, "15.0")
         XCTAssertEqual(item.sha256, "abc123def456")
-        XCTAssertEqual(item.fileSize, 33554432)
+        XCTAssertEqual(item.fileSize, 33_554_432)
         XCTAssertNotNil(item.pubDate)
     }
 
     func testCheckFeedDetectsUpdateAvailable() async {
         let xmlString = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-          <channel>
-            <item>
-              <title>Version 1.0.0</title>
-              <enclosure url="https://example.com/mattermost-1.0.0.dmg"
-                         sparkle:version="1.0.0"
-                         sparkle:shortVersionString="1.0.0"
-                         length="34000000"
-                         type="application/octet-stream" />
-            </item>
-          </channel>
-        </rss>
-        """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+              <channel>
+                <item>
+                  <title>Version 1.0.0</title>
+                  <enclosure url="https://example.com/mattermost-1.0.0.dmg"
+                             sparkle:version="1.0.0"
+                             sparkle:shortVersionString="1.0.0"
+                             length="34000000"
+                             type="application/octet-stream" />
+                </item>
+              </channel>
+            </rss>
+            """
 
         let url = URL(string: "https://example.com/appcast.xml")!
         UpdateMockURLProtocol.mockData = xmlString.data(using: .utf8)
@@ -176,20 +177,20 @@ final class UpdateCheckerTests: XCTestCase {
 
     func testCheckFeedReportsUpToDateWhenCurrentIsNewer() async {
         let xmlString = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-          <channel>
-            <item>
-              <title>Version 0.8.0</title>
-              <enclosure url="https://example.com/mattermost-0.8.0.dmg"
-                         sparkle:version="0.8.0"
-                         sparkle:shortVersionString="0.8.0"
-                         length="30000000"
-                         type="application/octet-stream" />
-            </item>
-          </channel>
-        </rss>
-        """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+              <channel>
+                <item>
+                  <title>Version 0.8.0</title>
+                  <enclosure url="https://example.com/mattermost-0.8.0.dmg"
+                             sparkle:version="0.8.0"
+                             sparkle:shortVersionString="0.8.0"
+                             length="30000000"
+                             type="application/octet-stream" />
+                </item>
+              </channel>
+            </rss>
+            """
 
         let url = URL(string: "https://example.com/appcast.xml")!
         UpdateMockURLProtocol.mockData = xmlString.data(using: .utf8)

@@ -37,8 +37,12 @@ final class SidebarCategoryTests: XCTestCase {
     func testFavoritesOrderPreservesServerOrder() {
         let window = makeWindow()
         defer { window.close() }
-        let chA = MMChannel(id: "ch_a", create_at: 0, update_at: 0, delete_at: 0, team_id: "t1", type: "O", display_name: "Alpha", name: "alpha", header: nil, purpose: nil, last_post_at: 0, total_msg_count: 0, creator_id: nil)
-        let chZ = MMChannel(id: "ch_z", create_at: 0, update_at: 0, delete_at: 0, team_id: "t1", type: "O", display_name: "Zulu", name: "zulu", header: nil, purpose: nil, last_post_at: 0, total_msg_count: 0, creator_id: nil)
+        let chA = MMChannel(
+            id: "ch_a", create_at: 0, update_at: 0, delete_at: 0, team_id: "t1", type: "O", display_name: "Alpha",
+            name: "alpha", header: nil, purpose: nil, last_post_at: 0, total_msg_count: 0, creator_id: nil)
+        let chZ = MMChannel(
+            id: "ch_z", create_at: 0, update_at: 0, delete_at: 0, team_id: "t1", type: "O", display_name: "Zulu",
+            name: "zulu", header: nil, purpose: nil, last_post_at: 0, total_msg_count: 0, creator_id: nil)
         window.channelsById = ["ch_a": chA, "ch_z": chZ]
         window.favoriteChannelOrder = ["ch_z", "ch_a"]
         window.favoriteChannelIds = ["ch_z", "ch_a"]
@@ -60,7 +64,9 @@ final class SidebarCategoryTests: XCTestCase {
         )
         XCTAssertTrue(botItem.isBotBadge)
         XCTAssertFalse(botItem.hasCustomAvatar)
-        window.sidebarCategories = [window.createSidebarCategory(id: "c1", title: "C", showsAddButton: false, items: [botItem])]
+        window.sidebarCategories = [
+            window.createSidebarCategory(id: "c1", title: "C", showsAddButton: false, items: [botItem])
+        ]
         window.selectedSidebarItemId = "bot_1"
         window.updateSidebarSelectionAppearance()
         XCTAssertEqual(botItem.iconView.contentTintColor, Theme.shared.sidebarActiveColor)
@@ -88,7 +94,8 @@ final class SidebarCategoryTests: XCTestCase {
             customImage: nil
         )
         window.sidebarCategories = [
-            window.createSidebarCategory(id: "cat", title: "Cat", showsAddButton: false, items: [itemWithClose, itemWithoutClose])
+            window.createSidebarCategory(
+                id: "cat", title: "Cat", showsAddButton: false, items: [itemWithClose, itemWithoutClose])
         ]
         window.unreadByChannel = ["dm_1": 5, "ch_1": 3]
         window.updateSidebarBadges()
@@ -126,7 +133,9 @@ final class SidebarCategoryTests: XCTestCase {
             isBotBadge: false,
             showsCloseOnHover: false
         )
-        window.sidebarCategories = [window.createSidebarCategory(id: "c", title: "C", showsAddButton: false, items: [item])]
+        window.sidebarCategories = [
+            window.createSidebarCategory(id: "c", title: "C", showsAddButton: false, items: [item])
+        ]
         // Mention badge
         window.mentionsByChannel = ["ch_badge": 2]
         window.updateSidebarBadges()

@@ -9,5 +9,10 @@
   "lineBreakBeforeControlFlowKeywords": false,
   "lineBreakBeforeEachArgument": false,
   "prioritizeKeepingArgumentListOnOneLine": true,
-  "maximumBlankLines": 1
+  "maximumBlankLines": 1,
+  "rules": {
+    "AlwaysUseLowerCamelCase": false,
+    "ReplaceForEachWithForLoop": false,
+    "UseSynthesizedInitializer": false
+  }
 }

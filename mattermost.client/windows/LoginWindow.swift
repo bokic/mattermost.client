@@ -139,7 +139,8 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         contentView.wantsLayer = true
 
         let logo = NSImageView()
-        logo.image = NSImage(named: NSImage.Name("Mattermost Logo"))
+        logo.image =
+            NSImage(named: NSImage.Name("Mattermost Logo"))
             ?? NSImage(systemSymbolName: "bubble.left.and.bubble.right.fill", accessibilityDescription: nil)
         logo.imageScaling = .scaleProportionallyUpOrDown
         logo.frame = NSRect(x: 36, y: 606, width: 38, height: 38)
@@ -362,10 +363,12 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         let host = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let port: UInt16 = portLabel.intValue > 0 ? UInt16(clamping: portLabel.intValue) : 0
         let username = usernameLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let password = passwordLabel.isHidden
+        let password =
+            passwordLabel.isHidden
             ? visiblePasswordField.stringValue
             : passwordLabel.stringValue
-        let mfaToken = mfaField.isHidden
+        let mfaToken =
+            mfaField.isHidden
             ? nil
             : mfaField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -738,7 +741,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
 
     @objc private func ssoProviderSelected(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
-              let provider = ssoProviders.first(where: { $0.id == id })
+            let provider = ssoProviders.first(where: { $0.id == id })
         else { return }
         let host = hostLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let port: UInt16 = portLabel.intValue > 0 ? UInt16(clamping: portLabel.intValue) : 0

@@ -161,7 +161,7 @@ extension MainWindow {
             ("point.3.connected.trianglepath.dotted", L10n.string("Integrations"), "Integrations", 179),
             ("square.grid.2x2", L10n.string("App Marketplace"), "App Marketplace", 147),
             ("arrow.down.to.line", L10n.string("Download Apps"), "Download Apps", 115),
-            ("info.circle", L10n.string("About Mattermost"), "About Mattermost", 83)
+            ("info.circle", L10n.string("About Mattermost"), "About Mattermost", 83),
         ]
 
         for item in items {
@@ -235,24 +235,26 @@ extension MainWindow {
             string: "This is the free ",
             attributes: [
                 .font: MMFont.font(ofSize: 11),
-                .foregroundColor: mutedIcon
+                .foregroundColor: mutedIcon,
             ]
         )
-        footerText.append(NSAttributedString(
-            string: "unsupported",
-            attributes: [
-                .font: MMFont.font(ofSize: 11),
-                .foregroundColor: brandBlue,
-                .underlineStyle: NSUnderlineStyle.single.rawValue
-            ]
-        ))
-        footerText.append(NSAttributedString(
-            string: " edition of\nMattermost.",
-            attributes: [
-                .font: MMFont.font(ofSize: 11),
-                .foregroundColor: mutedIcon
-            ]
-        ))
+        footerText.append(
+            NSAttributedString(
+                string: "unsupported",
+                attributes: [
+                    .font: MMFont.font(ofSize: 11),
+                    .foregroundColor: brandBlue,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                ]
+            ))
+        footerText.append(
+            NSAttributedString(
+                string: " edition of\nMattermost.",
+                attributes: [
+                    .font: MMFont.font(ofSize: 11),
+                    .foregroundColor: mutedIcon,
+                ]
+            ))
 
         let footerLabel = NSTextField(labelWithAttributedString: footerText)
         footerLabel.maximumNumberOfLines = 2
@@ -285,7 +287,7 @@ extension MainWindow {
             ("lightbulb", "Training resources", 104),
             ("questionmark", "Ask the community", 72),
             ("exclamationmark.triangle", "Report a problem", 40),
-            ("return", "Keyboard shortcuts", 8)
+            ("return", "Keyboard shortcuts", 8),
         ]
 
         for item in items {
@@ -444,12 +446,19 @@ extension MainWindow {
         // 3. Status rows: Online, Away, Do not disturb (two-line + chevron), Offline
         statusCheckViews.removeAll()
 
-        let statusConfigs: [(index: Int, symbol: String, tint: NSColor, title: String, subtitle: String?, y: CGFloat, height: CGFloat, showsChevron: Bool)] = [
-            (0, "checkmark.circle.fill", Theme.shared.onlineIndicator, L10n.string("Online"), nil, 216, 34, false),
-            (1, "clock.fill", Theme.shared.awayIndicator, L10n.string("Away"), nil, 182, 34, false),
-            (2, "minus.circle.fill", Theme.shared.dndIndicator, L10n.string("Do not disturb"), L10n.string("Disables all notifications"), 136, 46, true),
-            (3, "circle", Theme.shared.centerTextPlaceholder, L10n.string("Offline"), nil, 102, 34, false)
-        ]
+        let statusConfigs:
+            [(
+                index: Int, symbol: String, tint: NSColor, title: String, subtitle: String?, y: CGFloat,
+                height: CGFloat, showsChevron: Bool
+            )] = [
+                (0, "checkmark.circle.fill", Theme.shared.onlineIndicator, L10n.string("Online"), nil, 216, 34, false),
+                (1, "clock.fill", Theme.shared.awayIndicator, L10n.string("Away"), nil, 182, 34, false),
+                (
+                    2, "minus.circle.fill", Theme.shared.dndIndicator, L10n.string("Do not disturb"),
+                    L10n.string("Disables all notifications"), 136, 46, true
+                ),
+                (3, "circle", Theme.shared.centerTextPlaceholder, L10n.string("Offline"), nil, 102, 34, false),
+            ]
 
         for cfg in statusConfigs {
             let row = RoundedEdgePanel()
@@ -646,7 +655,7 @@ extension MainWindow {
             ("1 hour", nil, 107, 30, 60 * 60),
             ("2 hours", nil, 77, 30, 120 * 60),
             ("Tomorrow", tomorrowDayString, 47, 30, nil),
-            ("Choose date and time", nil, 6, 32, nil)
+            ("Choose date and time", nil, 6, 32, nil),
         ]
 
         for item in rows {
@@ -658,7 +667,8 @@ extension MainWindow {
             let titleLabel = NSTextField(labelWithString: item.title)
             titleLabel.font = MMFont.font(ofSize: 13, weight: .regular)
             titleLabel.textColor = darkText
-            titleLabel.frame = NSRect(x: 20, y: (item.height - 18) / 2, width: item.rightText != nil ? 90 : (subWidth - 36), height: 18)
+            titleLabel.frame = NSRect(
+                x: 20, y: (item.height - 18) / 2, width: item.rightText != nil ? 90 : (subWidth - 36), height: 18)
             row.addSubview(titleLabel)
 
             if let rightText = item.rightText {
@@ -780,7 +790,8 @@ extension MainWindow {
         filterMenu.shadowOffset = CGSize(width: 0, height: -4)
         filterMenu.isHidden = true
 
-        let makeRow: (String, CGFloat, Bool, Bool) -> (RoundedEdgePanel, NSImageView) = { [weak self] title, y, favorites, unreadOnly in
+        let makeRow: (String, CGFloat, Bool, Bool) -> (RoundedEdgePanel, NSImageView) = {
+            [weak self] title, y, favorites, unreadOnly in
             let row = RoundedEdgePanel()
             row.frame = NSRect(x: 6, y: y, width: 168, height: 28)
             row.cornerRadius = MMRadius.control
@@ -803,7 +814,8 @@ extension MainWindow {
             row.accessibilityRoleOverride = .menuItem
 
             row.onHoverChanged = { [weak row] isHovered in
-                row?.color = isHovered
+                row?.color =
+                    isHovered
                     ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
@@ -993,7 +1005,8 @@ extension MainWindow {
             return
         }
         guard let ws = webService, ws.isLogged(),
-              activeTeam != nil, let contentView = contentView else {
+            activeTeam != nil, let contentView = contentView
+        else {
             showInfoAlert(L10n.string("Sign in to start a direct message."))
             return
         }
@@ -1085,7 +1098,8 @@ extension MainWindow {
 
     func loadDMUsers(page: Int = 0) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam, !isLoadingDMUsers else { return }
+            let team = activeTeam, !isLoadingDMUsers
+        else { return }
         isLoadingDMUsers = true
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1134,7 +1148,8 @@ extension MainWindow {
 
     func loadMoreDMUsers() {
         guard !isLoadingDMUsers, dmHasMoreUsers,
-              dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return }
         loadDMUsers(page: dmUsersPage + 1)
     }
 
@@ -1153,8 +1168,9 @@ extension MainWindow {
         let workItem = DispatchWorkItem { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self = self,
-                      let ws = self.webService, ws.isLogged(),
-                      let team = self.activeTeam else { return }
+                    let ws = self.webService, ws.isLogged(),
+                    let team = self.activeTeam
+                else { return }
                 let currentQuery = self.dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard currentQuery == query, !query.isEmpty else { return }
                 guard let results = try? await ws.searchUsers(term: query, teamId: team.id) else { return }
@@ -1195,7 +1211,7 @@ extension MainWindow {
                     user.username,
                     user.first_name ?? "",
                     user.last_name ?? "",
-                    user.nickname ?? ""
+                    user.nickname ?? "",
                 ].joined(separator: " ").lowercased()
                 return haystack.contains(query)
             }
@@ -1336,7 +1352,8 @@ extension MainWindow {
             row.onHoverChanged = { [weak self, weak row] isHovered in
                 guard let self = self else { return }
                 let currentlySelected = self.selectedDMUserIds.contains(user.id)
-                row?.color = currentlySelected
+                row?.color =
+                    currentlySelected
                     ? Theme.shared.centerHover
                     : (isHovered ? Theme.shared.centerHover.withAlphaComponent(0.6) : .clear)
                 row?.setNeedsAppearanceUpdate()
@@ -1388,7 +1405,9 @@ extension MainWindow {
         let selectedIds = Array(selectedDMUserIds)
         if selectedIds.count == 1 {
             let targetId = selectedIds[0]
-            if let user = usersById[targetId] ?? dmUsers.first(where: { $0.id == targetId }) ?? dmSearchResults.first(where: { $0.id == targetId }) {
+            if let user = usersById[targetId] ?? dmUsers.first(where: { $0.id == targetId })
+                ?? dmSearchResults.first(where: { $0.id == targetId })
+            {
                 startDirectMessage(with: user)
             }
         } else {
@@ -1402,11 +1421,15 @@ extension MainWindow {
             return
         }
         let query = dmSearchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let matching = dmSearchResults.first ?? dmUsers.first(where: { u in
-            guard !query.isEmpty else { return true }
-            let haystack = [u.username, u.first_name ?? "", u.last_name ?? "", u.nickname ?? ""].joined(separator: " ").lowercased()
-            return haystack.contains(query)
-        })
+        let matching =
+            dmSearchResults.first
+            ?? dmUsers.first(where: { u in
+                guard !query.isEmpty else { return true }
+                let haystack = [u.username, u.first_name ?? "", u.last_name ?? "", u.nickname ?? ""].joined(
+                    separator: " "
+                ).lowercased()
+                return haystack.contains(query)
+            })
         if let first = matching {
             startDirectMessage(with: first)
         }
@@ -1414,7 +1437,8 @@ extension MainWindow {
 
     func startGroupMessage(with userIds: [String]) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+            let team = activeTeam
+        else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
@@ -1443,7 +1467,8 @@ extension MainWindow {
             return
         }
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+            let team = activeTeam
+        else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
@@ -1467,56 +1492,88 @@ extension MainWindow {
     func showChannelMenu() {
         guard !activeChannelId.isEmpty, channelsById[activeChannelId] != nil else { return }
         let favoriteTitle = isChannelFavorited ? "Remove from Favorites" : "Add to Favorites"
-        let hasUnread = (unreadByChannel[activeChannelId] ?? 0) > 0
+        let hasUnread =
+            (unreadByChannel[activeChannelId] ?? 0) > 0
             || (mentionsByChannel[activeChannelId] ?? 0) > 0
         let rows: [(symbol: String, title: String, action: () -> Void)] = [
-            ("info.circle", L10n.string("View Info"), { [weak self] in
-                self?.closeChannelMenu()
-                self?.showRightPanel(mode: .channelInfo)
-            }),
-            ("pin", L10n.string("Pinned Posts"), { [weak self] in
-                self?.closeChannelMenu()
-                self?.showRightPanel(mode: .pinned)
-            }),
-            ("doc.text", L10n.string("Files"), { [weak self] in
-                self?.closeChannelMenu()
-                self?.showRightPanel(mode: .files)
-            }),
+            (
+                "info.circle", L10n.string("View Info"),
+                { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.showRightPanel(mode: .channelInfo)
+                }
+            ),
+            (
+                "pin", L10n.string("Pinned Posts"),
+                { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.showRightPanel(mode: .pinned)
+                }
+            ),
+            (
+                "doc.text", L10n.string("Files"),
+                { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.showRightPanel(mode: .files)
+                }
+            ),
             hasUnread
-                ? ("checkmark.circle", L10n.string("Mark as Read"), { [weak self] in
-                    self?.closeChannelMenu()
-                    self?.markActiveChannelRead()
-                })
-                : ("envelope.badge", L10n.string("Mark as Unread"), { [weak self] in
-                    self?.closeChannelMenu()
-                    self?.markActiveChannelUnread()
-                }),
-            ("checkmark.circle.fill", L10n.string("Mark All as Read"), { [weak self] in
-                self?.closeChannelMenu()
-                self?.markAllChannelsRead()
-            }),
-            (isChannelMuted(activeChannelId) ? "speaker.slash" : "speaker", isChannelMuted(activeChannelId) ? L10n.string("Unmute Channel") : L10n.string("Mute Channel"), { [weak self] in
-                guard let self = self else { return }
-                self.closeChannelMenu()
-                self.setChannelNotificationPreference(
-                    channelId: self.activeChannelId,
-                    desktop: self.isChannelMuted(self.activeChannelId) ? "default" : "none"
+                ? (
+                    "checkmark.circle", L10n.string("Mark as Read"),
+                    { [weak self] in
+                        self?.closeChannelMenu()
+                        self?.markActiveChannelRead()
+                    }
                 )
-            }),
-            (isChannelFavorited ? "star.slash" : "star", favoriteTitle, { [weak self] in
-                guard let self = self else { return }
-                self.closeChannelMenu()
-                self.setChannelFavorite(!self.isChannelFavorited, channelId: self.activeChannelId)
-            }),
-            ("link", "Copy Link", { [weak self] in
-                guard let self = self else { return }
-                self.closeChannelMenu()
-                self.copyChannelLink()
-            }),
-            ("rectangle.portrait.and.arrow.right", L10n.string("Leave Channel"), { [weak self] in
-                self?.closeChannelMenu()
-                self?.confirmLeaveChannel()
-            })
+                : (
+                    "envelope.badge", L10n.string("Mark as Unread"),
+                    { [weak self] in
+                        self?.closeChannelMenu()
+                        self?.markActiveChannelUnread()
+                    }
+                ),
+            (
+                "checkmark.circle.fill", L10n.string("Mark All as Read"),
+                { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.markAllChannelsRead()
+                }
+            ),
+            (
+                isChannelMuted(activeChannelId) ? "speaker.slash" : "speaker",
+                isChannelMuted(activeChannelId) ? L10n.string("Unmute Channel") : L10n.string("Mute Channel"),
+                { [weak self] in
+                    guard let self = self else { return }
+                    self.closeChannelMenu()
+                    self.setChannelNotificationPreference(
+                        channelId: self.activeChannelId,
+                        desktop: self.isChannelMuted(self.activeChannelId) ? "default" : "none"
+                    )
+                }
+            ),
+            (
+                isChannelFavorited ? "star.slash" : "star", favoriteTitle,
+                { [weak self] in
+                    guard let self = self else { return }
+                    self.closeChannelMenu()
+                    self.setChannelFavorite(!self.isChannelFavorited, channelId: self.activeChannelId)
+                }
+            ),
+            (
+                "link", "Copy Link",
+                { [weak self] in
+                    guard let self = self else { return }
+                    self.closeChannelMenu()
+                    self.copyChannelLink()
+                }
+            ),
+            (
+                "rectangle.portrait.and.arrow.right", L10n.string("Leave Channel"),
+                { [weak self] in
+                    self?.closeChannelMenu()
+                    self?.confirmLeaveChannel()
+                }
+            ),
         ]
 
         channelMenu.subviews.forEach { $0.removeFromSuperview() }
@@ -1562,7 +1619,8 @@ extension MainWindow {
             row.accessibilityRoleOverride = .menuItem
 
             row.onHoverChanged = { [weak row] isHovered in
-                row?.color = isHovered
+                row?.color =
+                    isHovered
                     ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
@@ -1614,7 +1672,8 @@ extension MainWindow {
 
     func leaveChannel(_ channel: MMChannel) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+            let team = activeTeam
+        else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
@@ -1628,7 +1687,8 @@ extension MainWindow {
                     self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
                 }
                 if self.activeChannelId == channel.id,
-                   let fallback = self.channelsByName["town-square"] ?? self.channelsById.values.first {
+                    let fallback = self.channelsByName["town-square"] ?? self.channelsById.values.first
+                {
                     self.selectedSidebarItemId = fallback.id
                     self.updateSidebarSelectionAppearance()
                     self.loadChannelPosts(forSidebarItemId: fallback.id)

@@ -10,7 +10,7 @@ build/release scripts, CI, README/AUDIT._
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
 | `./test.sh` | **287/287 pass** (coverage ≥ 50%) |
-| `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
+| `./lint.sh` | **Passes** (`swift-format --strict` across all source files) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
 | Release signing | **Automated Developer ID/hardened-runtime/notarization pipeline**; ad-hoc DMG in CI; a real notarized build still needs the certificate and notary credentials |
@@ -41,11 +41,6 @@ completed baseline remains at the end.
 ---
 
 ## P5 — Quality, tooling & documentation
-
-- [ ] **Lint only covers 15 migrated files** — `S`
-  - `lint.sh` explicitly excludes all `MainWindow+*` files, `AppDelegate`, `LoginWindow`,
-    `Theme`, `KeychainHelper`, `MMFont` and the project scripts. Reformat the remaining
-    files and add them to the allowlist; consider SwiftLint for rules swift-format misses.
 
 ---
 

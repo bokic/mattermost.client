@@ -27,9 +27,9 @@ enum KeychainHelper {
     /// True when credentials are stored in UserDefaults rather than the Keychain.
     static var usesDebugCredentialStore: Bool {
         #if DEBUG
-        return true
+            return true
         #else
-        return false
+            return false
         #endif
     }
 
@@ -40,63 +40,64 @@ enum KeychainHelper {
         }
 
         #if DEBUG
-        UserDefaults.standard.set(value, forKey: debugStorePrefix + account)
-        // Only drop the plaintext copies once the debug store accepted the value.
-        UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
-        UserDefaults.standard.removeObject(forKey: account)
-        #else
-        let data = Data(value.utf8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-
-        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if status == errSecItemNotFound {
-            var addQuery = query
-            addQuery[kSecValueData as String] = data
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            status = SecItemAdd(addQuery as CFDictionary, nil)
-        }
-
-        if status == errSecSuccess {
-            // Only drop the plaintext copy once the Keychain write succeeded.
+            UserDefaults.standard.set(value, forKey: debugStorePrefix + account)
+            // Only drop the plaintext copies once the debug store accepted the value.
             UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
             UserDefaults.standard.removeObject(forKey: account)
-        } else {
-            NSLog("KeychainHelper: failed to store \(account) (status \(status))")
-        }
+        #else
+            let data = Data(value.utf8)
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+            ]
+
+            let attributes: [String: Any] = [
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            ]
+
+            var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+            if status == errSecItemNotFound {
+                var addQuery = query
+                addQuery[kSecValueData as String] = data
+                addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+                status = SecItemAdd(addQuery as CFDictionary, nil)
+            }
+
+            if status == errSecSuccess {
+                // Only drop the plaintext copy once the Keychain write succeeded.
+                UserDefaults.standard.removeObject(forKey: legacyPrefix + account)
+                UserDefaults.standard.removeObject(forKey: account)
+            } else {
+                NSLog("KeychainHelper: failed to store \(account) (status \(status))")
+            }
         #endif
     }
 
     static func get(forKey account: String) -> String? {
         #if DEBUG
-        if let value = UserDefaults.standard.string(forKey: debugStorePrefix + account), !value.isEmpty {
-            return value
-        }
+            if let value = UserDefaults.standard.string(forKey: debugStorePrefix + account), !value.isEmpty {
+                return value
+            }
         #else
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
+            ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecSuccess,
-           let data = result as? Data,
-           let value = String(data: data, encoding: .utf8),
-           !value.isEmpty {
-            return value
-        }
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            if status == errSecSuccess,
+                let data = result as? Data,
+                let value = String(data: data, encoding: .utf8),
+                !value.isEmpty
+            {
+                return value
+            }
         #endif
 
         // Migrate values left by builds that wrote to UserDefaults in plaintext.
@@ -108,9 +109,9 @@ enum KeychainHelper {
         }
 
         #if !DEBUG
-        if status != errSecItemNotFound {
-            NSLog("KeychainHelper: failed to read \(account) (status \(status))")
-        }
+            if status != errSecItemNotFound {
+                NSLog("KeychainHelper: failed to read \(account) (status \(status))")
+            }
         #endif
         return nil
     }
@@ -118,11 +119,11 @@ enum KeychainHelper {
     /// Moves any plaintext credentials written by older builds into the active store.
     static func migrateLegacyCredentials() {
         #if !DEBUG
-        // Debug builds may have left plaintext values behind; release builds never
-        // read them, so remove them for hygiene.
-        for account in ["token", "password"] {
-            UserDefaults.standard.removeObject(forKey: debugStorePrefix + account)
-        }
+            // Debug builds may have left plaintext values behind; release builds never
+            // read them, so remove them for hygiene.
+            for account in ["token", "password"] {
+                UserDefaults.standard.removeObject(forKey: debugStorePrefix + account)
+            }
         #endif
 
         for account in ["token", "password"] {
@@ -137,12 +138,12 @@ enum KeychainHelper {
 
     static func delete(forKey account: String) {
         #if !DEBUG
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+            ]
+            SecItemDelete(query as CFDictionary)
         #endif
 
         UserDefaults.standard.removeObject(forKey: debugStorePrefix + account)

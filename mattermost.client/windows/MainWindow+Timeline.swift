@@ -56,7 +56,8 @@ extension MainWindow {
             self?.jumpToNewMessages()
         }
 
-        newMessagesPillIcon.image = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: "Jump to new messages")?
+        newMessagesPillIcon.image = NSImage(
+            systemSymbolName: "arrow.down", accessibilityDescription: "Jump to new messages")?
             .withSymbolConfiguration(.init(pointSize: 12, weight: .bold))
         newMessagesPillIcon.contentTintColor = .white
         newMessagesPill.addSubview(newMessagesPillIcon)
@@ -140,7 +141,8 @@ extension MainWindow {
             fetchAvatarForUsernameIfNeeded("system-bot")
         }
 
-        let heroAvatar = targetUserId.flatMap { userAvatarsById[$0] }
+        let heroAvatar =
+            targetUserId.flatMap { userAvatarsById[$0] }
             ?? (isBot ? userAvatarsById["system-bot"] : nil)
 
         let heroMidX = heroW / 2
@@ -177,7 +179,8 @@ extension MainWindow {
             let titleStartX = (heroW - totalTitleW) / 2
             heroTitleLabel.frame = NSRect(x: titleStartX, y: 92, width: titleTextW, height: titleTextH)
             heroTitleLabel.alignment = .left
-            heroBotBadge.frame = NSRect(x: titleStartX + titleTextW + 8, y: 92 + (titleTextH - badgeH) / 2, width: badgeW, height: badgeH)
+            heroBotBadge.frame = NSRect(
+                x: titleStartX + titleTextW + 8, y: 92 + (titleTextH - badgeH) / 2, width: badgeW, height: badgeH)
             heroBotBadgeLabel.frame = NSRect(x: 0, y: 1, width: badgeW, height: 16)
         } else {
             heroBotBadge.isHidden = true
@@ -190,7 +193,8 @@ extension MainWindow {
 
         heroInviteButton.isHidden = isDM
         if !isDM {
-            let inviteText = heroInviteLabel.stringValue.isEmpty ? "Invite others to the workspace" : heroInviteLabel.stringValue
+            let inviteText =
+                heroInviteLabel.stringValue.isEmpty ? "Invite others to the workspace" : heroInviteLabel.stringValue
             let inviteFont = heroInviteLabel.font ?? MMFont.font(ofSize: 12, weight: .semibold)
             let inviteSize = (inviteText as NSString).size(withAttributes: [.font: inviteFont])
             let inviteTextW = ceil(inviteSize.width) + 4
@@ -201,8 +205,11 @@ extension MainWindow {
             let inviteBtnW = invitePadH + inviteIconSize + inviteSpacing + inviteTextW + invitePadH
             let inviteBtnH: CGFloat = max(32, inviteTextH + 12)
             heroInviteButton.frame = NSRect(x: heroMidX - inviteBtnW / 2, y: 6, width: inviteBtnW, height: inviteBtnH)
-            heroInviteIconView.frame = NSRect(x: invitePadH, y: (inviteBtnH - inviteIconSize) / 2, width: inviteIconSize, height: inviteIconSize)
-            heroInviteLabel.frame = NSRect(x: invitePadH + inviteIconSize + inviteSpacing, y: (inviteBtnH - inviteTextH) / 2, width: inviteTextW, height: inviteTextH)
+            heroInviteIconView.frame = NSRect(
+                x: invitePadH, y: (inviteBtnH - inviteIconSize) / 2, width: inviteIconSize, height: inviteIconSize)
+            heroInviteLabel.frame = NSRect(
+                x: invitePadH + inviteIconSize + inviteSpacing, y: (inviteBtnH - inviteTextH) / 2, width: inviteTextW,
+                height: inviteTextH)
         }
     }
 
@@ -373,7 +380,8 @@ extension MainWindow {
             self?.showLightbox(image: imageView?.image, remoteURL: urlString, filename: name, authorId: authorId)
         }
 
-        loadGiphyAnimatedImage(from: urlString) { [weak self, weak container, weak imageView, weak failureLabel] image in
+        loadGiphyAnimatedImage(from: urlString) {
+            [weak self, weak container, weak imageView, weak failureLabel] image in
             guard let self = self else { return }
             guard let image = image else {
                 imageView?.isHidden = true
@@ -428,13 +436,16 @@ extension MainWindow {
             return
         }
 
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("mattermost.client/giphy", isDirectory: true)
 
         DispatchQueue.global(qos: .userInitiated).async {
             if let dir = cacheDir {
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
-                if urlString.contains("ICOgUNjpvO0PC"), let data = try? Data(contentsOf: sampleFile), let img = NSImage(data: data) {
+                if urlString.contains("ICOgUNjpvO0PC"), let data = try? Data(contentsOf: sampleFile),
+                    let img = NSImage(data: data)
+                {
                     TimelineImageCache.shared.setImage(img, forKey: inlineKey)
                     Task { @MainActor in completion(img) }
                     return
@@ -454,7 +465,8 @@ extension MainWindow {
             }
 
             var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15)
-            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+            request.setValue(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
 
             URLSession.shared.dataTask(with: request) { data, _, _ in
                 let responseData = data
@@ -478,26 +490,36 @@ extension MainWindow {
     }
 
     func pruneGiphyDiskCache() {
-        guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("mattermost.client/giphy", isDirectory: true) else { return }
+        guard
+            let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("mattermost.client/giphy", isDirectory: true)
+        else { return }
         DispatchQueue.global(qos: .utility).async {
             Self.pruneGiphyCache(dir, keeping: 200, maxTotalBytes: 50 * 1024 * 1024)
         }
     }
 
-    nonisolated static func pruneGiphyCache(_ directory: URL, keeping limit: Int = 200, maxTotalBytes: Int = 50 * 1024 * 1024) {
+    nonisolated static func pruneGiphyCache(
+        _ directory: URL, keeping limit: Int = 200, maxTotalBytes: Int = 50 * 1024 * 1024
+    ) {
         let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
+        guard
+            let files = try? fm.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+        else { return }
         let gifs = files.filter { $0.pathExtension.lowercased() == "gif" }
         guard !gifs.isEmpty else { return }
 
         let sorted = gifs.sorted {
-            let lhs = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            let rhs = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            let lhs =
+                (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                ?? .distantPast
+            let rhs =
+                (try? $1.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                ?? .distantPast
             return lhs > rhs
         }
 
@@ -517,22 +539,25 @@ extension MainWindow {
         let editFont = MMFont.font(ofSize: max(10, font.pointSize - 2))
         let editColor = Theme.shared.centerTextPlaceholder
 
-        let space = NSAttributedString(string: "  ", attributes: [
-            .font: editFont,
-            .foregroundColor: editColor
-        ])
+        let space = NSAttributedString(
+            string: "  ",
+            attributes: [
+                .font: editFont,
+                .foregroundColor: editColor,
+            ])
         attributedString.append(space)
 
         let att = NSTextAttachment()
         if let img = NSImage(systemSymbolName: "pencil", accessibilityDescription: "Edited") {
-            let cfg = NSImage.SymbolConfiguration(pointSize: editFont.pointSize - 1, weight: .regular).applying(.init(hierarchicalColor: editColor))
+            let cfg = NSImage.SymbolConfiguration(pointSize: editFont.pointSize - 1, weight: .regular).applying(
+                .init(hierarchicalColor: editColor))
             att.image = img.withSymbolConfiguration(cfg)
         }
         att.bounds = NSRect(x: 0, y: -1, width: editFont.pointSize, height: editFont.pointSize)
 
         var tooltipAttrs: [NSAttributedString.Key: Any] = [
             .font: editFont,
-            .foregroundColor: editColor
+            .foregroundColor: editColor,
         ]
         if let date = editDate {
             tooltipAttrs[.toolTip] = "Edited at \(Self.localizedTimeFormatter.string(from: date))"
@@ -605,7 +630,8 @@ extension MainWindow {
 
             let chip = RoundedEdgePanel()
             chip.cornerRadius = MMRadius.control
-            chip.color = reacted
+            chip.color =
+                reacted
                 ? Theme.shared.buttonBg.withAlphaComponent(0.08)
                 : Theme.shared.centerText.withAlphaComponent(0.08)
             chip.borderWidth = 1
@@ -616,8 +642,9 @@ extension MainWindow {
                 $0.name.caseInsensitiveCompare(emoji) == .orderedSame
             }
             if let entry = customEntry,
-               let emojiId = entry.emojiId,
-               let image = customEmojiImages[emojiId] {
+                let emojiId = entry.emojiId,
+                let image = customEmojiImages[emojiId]
+            {
                 let imageView = NSImageView(frame: NSRect(x: 5, y: 4, width: emojiW, height: 16))
                 imageView.image = image
                 imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -641,12 +668,14 @@ extension MainWindow {
             countLabel.frame = NSRect(x: 5 + emojiW + spacing, y: 5, width: countW + 1, height: 16)
             chip.addSubview(countLabel)
 
-            let names = reactions
+            let names =
+                reactions
                 .filter { $0.emoji_name == emoji }
                 .map { reaction in
                     reaction.user_id.flatMap { usersById[$0]?.username } ?? "Unknown user"
                 }
-            chip.toolTip = names.isEmpty
+            chip.toolTip =
+                names.isEmpty
                 ? ":\(emoji):"
                 : ":\(emoji): " + names.joined(separator: ", ")
             chip.accessibilityTitle = "\(emoji), \(count) reaction\(count == 1 ? "" : "s")"
@@ -656,11 +685,13 @@ extension MainWindow {
 
             chip.onHoverChanged = { [weak chip] isHovered in
                 guard let chip = chip else { return }
-                let idleFill = reacted
+                let idleFill =
+                    reacted
                     ? Theme.shared.buttonBg.withAlphaComponent(0.08)
                     : Theme.shared.centerText.withAlphaComponent(0.08)
                 chip.color = isHovered ? Theme.shared.centerBg : idleFill
-                chip.borderColor = reacted
+                chip.borderColor =
+                    reacted
                     ? blue
                     : (isHovered ? Theme.shared.centerText.withAlphaComponent(0.16) : .clear)
                 chip.setNeedsAppearanceUpdate()
@@ -693,7 +724,8 @@ extension MainWindow {
         plus.frame = NSRect(x: 0, y: 2, width: 28, height: 20)
         addChip.addSubview(plus)
         addChip.onHoverChanged = { [weak addChip] isHovered in
-            addChip?.color = isHovered
+            addChip?.color =
+                isHovered
                 ? Theme.shared.centerText.withAlphaComponent(0.12)
                 : Theme.shared.centerText.withAlphaComponent(0.08)
             addChip?.setNeedsAppearanceUpdate()
@@ -741,13 +773,19 @@ extension MainWindow {
         let postRef = post
         let entries: [(symbol: String, label: String, key: String, action: () -> Void)] = [
             ("face.smiling", L10n.string("Add Reaction"), "Add Reaction", {}),
-            ("arrowshape.turn.up.left", L10n.string("Reply"), "Reply", { [weak self] in
-                self?.showThread(for: postRef)
-            }),
-            ("ellipsis", L10n.string("More Actions"), "More", { [weak self, weak toolbar] in
-                guard let self = self, let toolbar = toolbar else { return }
-                self.showPostActionMenu(for: postRef, anchorRect: self.postToolbarAnchor(toolbar))
-            })
+            (
+                "arrowshape.turn.up.left", L10n.string("Reply"), "Reply",
+                { [weak self] in
+                    self?.showThread(for: postRef)
+                }
+            ),
+            (
+                "ellipsis", L10n.string("More Actions"), "More",
+                { [weak self, weak toolbar] in
+                    guard let self = self, let toolbar = toolbar else { return }
+                    self.showPostActionMenu(for: postRef, anchorRect: self.postToolbarAnchor(toolbar))
+                }
+            ),
         ]
 
         for (index, entry) in entries.enumerated() {
@@ -773,7 +811,8 @@ extension MainWindow {
             button.accessibilityHelp = "\(entry.label) for this message"
             button.accessibilityRoleOverride = .button
             button.onHoverChanged = { [weak button, weak icon] isHovered in
-                button?.color = isHovered
+                button?.color =
+                    isHovered
                     ? Theme.shared.centerText.withAlphaComponent(0.08)
                     : .clear
                 icon?.contentTintColor = Theme.shared.centerText.withAlphaComponent(isHovered ? 0.8 : 0.64)
@@ -820,17 +859,21 @@ extension MainWindow {
 
     func toggleReaction(postId: String, emojiName: String) {
         guard let ws = webService, ws.isLogged(),
-              let userId = currentUserId() else { return }
-        let post = currentChannelPosts.first(where: { $0.id == postId })
+            let userId = currentUserId()
+        else { return }
+        let post =
+            currentChannelPosts.first(where: { $0.id == postId })
             ?? threadPosts.first(where: { $0.id == postId })
         guard let original = post, (original.delete_at ?? 0) == 0 else { return }
         let reacted = currentUserReacted(original, emoji: emojiName)
-        guard let optimistic = reactionPost(
-            original,
-            adding: !reacted,
-            userId: userId,
-            emojiName: emojiName
-        ) else { return }
+        guard
+            let optimistic = reactionPost(
+                original,
+                adding: !reacted,
+                userId: userId,
+                emojiName: emojiName
+            )
+        else { return }
         applyUpdatedPost(optimistic)
 
         Task { @MainActor [weak self] in
@@ -859,12 +902,13 @@ extension MainWindow {
     ) -> MMPost? {
         var reactions = post.metadata?.reactions ?? []
         if adding {
-            reactions.append(MMReaction(
-                user_id: userId,
-                post_id: post.id,
-                emoji_name: emojiName,
-                create_at: Int64(Date().timeIntervalSince1970 * 1000)
-            ))
+            reactions.append(
+                MMReaction(
+                    user_id: userId,
+                    post_id: post.id,
+                    emoji_name: emojiName,
+                    create_at: Int64(Date().timeIntervalSince1970 * 1000)
+                ))
         } else {
             reactions.removeAll { $0.user_id == userId && $0.emoji_name == emojiName }
         }
@@ -905,9 +949,11 @@ extension MainWindow {
 
     @discardableResult
     func updatePostRowInTimeline(_ post: MMPost) -> Bool {
-        guard let oldRow = timelineDocView.subviews.first(where: {
-            $0.identifier?.rawValue == "postRow_\(post.id)"
-        }) else { return false }
+        guard
+            let oldRow = timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_\(post.id)"
+            })
+        else { return false }
 
         guard let postIndex = currentChannelPosts.firstIndex(where: { $0.id == post.id }) else { return false }
 
@@ -918,9 +964,11 @@ extension MainWindow {
         var isConsecutive = false
         if postIndex > 0 {
             let prev = currentChannelPosts[postIndex - 1]
-            let prevIsSystem = (prev.type?.hasPrefix("system_") ?? false) || (usersById[prev.user_id]?.username == "System")
+            let prevIsSystem =
+                (prev.type?.hasPrefix("system_") ?? false) || (usersById[prev.user_id]?.username == "System")
             let withinGrouping = (post.create_at - prev.create_at) <= 5 * 60 * 1000
-            isConsecutive = !isSystem && !prevIsSystem && post.user_id == prev.user_id && !post.user_id.isEmpty && withinGrouping
+            isConsecutive =
+                !isSystem && !prevIsSystem && post.user_id == prev.user_id && !post.user_id.isEmpty && withinGrouping
         }
 
         let (newRow, newHeight) = createPostRow(
@@ -992,9 +1040,11 @@ extension MainWindow {
 
     @discardableResult
     func deletePostRowFromTimeline(_ postId: String) -> Bool {
-        guard let row = timelineDocView.subviews.first(where: {
-            $0.identifier?.rawValue == "postRow_\(postId)"
-        }) else { return false }
+        guard
+            let row = timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_\(postId)"
+            })
+        else { return false }
 
         let rowH = row.frame.height
         let originY = row.frame.origin.y
@@ -1215,7 +1265,8 @@ extension MainWindow {
         lightboxScale = 1
         lightboxTitleLabel.stringValue = filename
         let resolvedAuthorId = authorId ?? file?.user_id
-        let author = resolvedAuthorId.flatMap { usersById[$0]?.username }
+        let author =
+            resolvedAuthorId.flatMap { usersById[$0]?.username }
             ?? currentUser?.username
             ?? UserDefaults.standard.string(forKey: "username")
             ?? ""
@@ -1250,9 +1301,10 @@ extension MainWindow {
                 lightboxFetchTask = Task { @MainActor [weak self] in
                     defer { self?.lightboxFetchTask = nil }
                     guard let self = self, self.lightboxLoadToken == token,
-                          let data = try? await ws.fetchFileData(fileId: file.id),
-                          !Task.isCancelled,
-                          let full = NSImage(data: data) else { return }
+                        let data = try? await ws.fetchFileData(fileId: file.id),
+                        !Task.isCancelled,
+                        let full = NSImage(data: data)
+                    else { return }
                     TimelineImageCache.shared.setImage(full, forKey: fullKey)
                     self.lightboxImageView.image = full
                     self.lightboxNaturalSize = self.pixelSize(of: full)
@@ -1261,12 +1313,14 @@ extension MainWindow {
             }
         } else if let remoteURL = remoteURL, let url = URL(string: remoteURL) {
             var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
-            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+            request.setValue(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
             URLSession.shared.dataTask(with: request) { data, _, _ in
                 guard let data = data else { return }
                 Task { @MainActor in
                     guard self.lightboxLoadToken == token,
-                          let full = NSImage(data: data) else { return }
+                        let full = NSImage(data: data)
+                    else { return }
                     self.lightboxImageView.image = full
                     self.lightboxNaturalSize = self.pixelSize(of: full)
                     self.layoutLightboxImage()
@@ -1338,12 +1392,17 @@ extension MainWindow {
         lightboxContentPanel.frame = NSRect(x: 0, y: 0, width: width, height: max(0, height - headerH - zoomH))
         lightboxScrollView.frame = lightboxContentPanel.bounds
 
-        lightboxAvatarPanel.frame = NSRect(x: 16, y: 16, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
+        lightboxAvatarPanel.frame = NSRect(
+            x: 16, y: 16, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
         lightboxAvatarView.frame = NSRect(x: 0, y: 0, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
         lightboxTitleLabel.frame = NSRect(x: 68, y: headerH - 16 - 24, width: max(40, width - 68 - 120), height: 24)
         lightboxSubtitleLabel.frame = NSRect(x: 68, y: headerH - 40 - 20, width: max(40, width - 68 - 120), height: 20)
-        lightboxCloseButton.frame = NSRect(x: width - 16 - MMMetric.lightboxButton, y: 18, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
-        lightboxDownloadButton.frame = NSRect(x: lightboxCloseButton.frame.minX - 8 - MMMetric.lightboxButton, y: 18, width: MMMetric.lightboxButton, height: MMMetric.lightboxButton)
+        lightboxCloseButton.frame = NSRect(
+            x: width - 16 - MMMetric.lightboxButton, y: 18, width: MMMetric.lightboxButton,
+            height: MMMetric.lightboxButton)
+        lightboxDownloadButton.frame = NSRect(
+            x: lightboxCloseButton.frame.minX - 8 - MMMetric.lightboxButton, y: 18, width: MMMetric.lightboxButton,
+            height: MMMetric.lightboxButton)
 
         let zoomButtonSize: CGFloat = 28
         let zoomGap: CGFloat = 12
@@ -1351,8 +1410,10 @@ extension MainWindow {
         let zoomStartX = (width - zoomTotal) / 2
         let zoomY = (zoomH - zoomButtonSize) / 2
         lightboxZoomOutButton.frame = NSRect(x: zoomStartX, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
-        lightboxZoomFitButton.frame = NSRect(x: zoomStartX + zoomButtonSize + zoomGap, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
-        lightboxZoomInButton.frame = NSRect(x: zoomStartX + (zoomButtonSize + zoomGap) * 2, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
+        lightboxZoomFitButton.frame = NSRect(
+            x: zoomStartX + zoomButtonSize + zoomGap, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
+        lightboxZoomInButton.frame = NSRect(
+            x: zoomStartX + (zoomButtonSize + zoomGap) * 2, y: zoomY, width: zoomButtonSize, height: zoomButtonSize)
 
         layoutLightboxImage()
     }
@@ -1382,10 +1443,11 @@ extension MainWindow {
         )
         if canvasWidth > stage.width || canvasHeight > stage.height {
             let clip = lightboxScrollView.contentView
-            clip.scroll(to: NSPoint(
-                x: max(0, (canvasWidth - stage.width) / 2),
-                y: max(0, (canvasHeight - stage.height) / 2)
-            ))
+            clip.scroll(
+                to: NSPoint(
+                    x: max(0, (canvasWidth - stage.width) / 2),
+                    y: max(0, (canvasHeight - stage.height) / 2)
+                ))
             lightboxScrollView.reflectScrolledClipView(clip)
         }
     }
@@ -1458,7 +1520,8 @@ extension MainWindow {
             }
             entries = Array(ordered.prefix(160))
         } else {
-            entries = allEntries
+            entries =
+                allEntries
                 .filter { $0.name.lowercased().contains(query) }
                 .prefix(160)
                 .map { $0 }
@@ -1486,8 +1549,9 @@ extension MainWindow {
                 height: cell
             )
             if entry.isCustom,
-               let emojiId = entry.emojiId,
-               let image = customEmojiImages[emojiId] {
+                let emojiId = entry.emojiId,
+                let image = customEmojiImages[emojiId]
+            {
                 let imageView = NSImageView(frame: NSRect(x: 6, y: 6, width: 20, height: 20))
                 imageView.image = image
                 imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -1502,7 +1566,8 @@ extension MainWindow {
                 button.addSubview(label)
             }
             button.onHoverChanged = { [weak button] isHovered in
-                button?.color = isHovered
+                button?.color =
+                    isHovered
                     ? Theme.shared.centerText.withAlphaComponent(0.08)
                     : .clear
                 button?.setNeedsAppearanceUpdate()
@@ -1558,29 +1623,47 @@ extension MainWindow {
         let isMine = !post.user_id.isEmpty && post.user_id == myId
         let canEdit = isMine && (post.delete_at ?? 0) == 0
         var rows: [(symbol: String, title: String, action: () -> Void)] = [
-            ("arrowshape.turn.up.left", "Reply", { [weak self] in
-                self?.closePostActionMenu()
-                self?.showThread(for: post)
-            }),
-            ("link", "Copy Link", { [weak self] in
-                self?.closePostActionMenu()
-                self?.copyPostLink(post)
-            }),
-            (self.savedPostIds.contains(post.id) ? "bookmark.slash" : "bookmark",
-             self.savedPostIds.contains(post.id) ? "Unsave" : "Save", { [weak self] in
-                self?.closePostActionMenu()
-                self?.toggleSaved(post)
-            })
+            (
+                "arrowshape.turn.up.left", "Reply",
+                { [weak self] in
+                    self?.closePostActionMenu()
+                    self?.showThread(for: post)
+                }
+            ),
+            (
+                "link", "Copy Link",
+                { [weak self] in
+                    self?.closePostActionMenu()
+                    self?.copyPostLink(post)
+                }
+            ),
+            (
+                self.savedPostIds.contains(post.id) ? "bookmark.slash" : "bookmark",
+                self.savedPostIds.contains(post.id) ? "Unsave" : "Save",
+                { [weak self] in
+                    self?.closePostActionMenu()
+                    self?.toggleSaved(post)
+                }
+            ),
         ]
         if canEdit {
-            rows.append((post.is_pinned == true ? "pin.slash" : "pin", post.is_pinned == true ? "Unpin from Channel" : "Pin to Channel", { [weak self] in
-                self?.closePostActionMenu()
-                self?.togglePin(post)
-            }))
-            rows.append(("trash", "Delete", { [weak self] in
-                self?.closePostActionMenu()
-                self?.confirmDeletePost(post)
-            }))
+            rows.append(
+                (
+                    post.is_pinned == true ? "pin.slash" : "pin",
+                    post.is_pinned == true ? "Unpin from Channel" : "Pin to Channel",
+                    { [weak self] in
+                        self?.closePostActionMenu()
+                        self?.togglePin(post)
+                    }
+                ))
+            rows.append(
+                (
+                    "trash", "Delete",
+                    { [weak self] in
+                        self?.closePostActionMenu()
+                        self?.confirmDeletePost(post)
+                    }
+                ))
         }
 
         postActionMenu.subviews.forEach { $0.removeFromSuperview() }
@@ -1627,7 +1710,8 @@ extension MainWindow {
             row.addSubview(label)
 
             row.onHoverChanged = { [weak row] isHovered in
-                row?.color = isHovered
+                row?.color =
+                    isHovered
                     ? Theme.shared.centerHover
                     : .clear
                 row?.setNeedsAppearanceUpdate()
@@ -1840,7 +1924,9 @@ extension MainWindow {
         download.shadowOpacity = 0.08
         download.shadowRadius = 3
         download.shadowOffset = CGSize(width: 0, height: -2)
-        download.frame = NSRect(x: displaySize.width - 8 - MMMetric.iconButtonSmall, y: displaySize.height - 8 - MMMetric.iconButtonSmall, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
+        download.frame = NSRect(
+            x: displaySize.width - 8 - MMMetric.iconButtonSmall, y: displaySize.height - 8 - MMMetric.iconButtonSmall,
+            width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         download.isHidden = true
         let downloadIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
@@ -1856,13 +1942,15 @@ extension MainWindow {
 
         container.onHoverChanged = { [weak container, weak download] isHovered in
             download?.isHidden = !isHovered
-            container?.borderColor = isHovered
+            container?.borderColor =
+                isHovered
                 ? Theme.shared.centerText.withAlphaComponent(0.3)
                 : Theme.shared.centerText.withAlphaComponent(0.16)
             container?.setNeedsAppearanceUpdate()
         }
         container.onClick = { [weak self, weak imageView] in
-            self?.showLightbox(image: imageView?.image, file: file, filename: file.name ?? "Image", authorId: file.user_id)
+            self?.showLightbox(
+                image: imageView?.image, file: file, filename: file.name ?? "Image", authorId: file.user_id)
         }
 
         if let ws = webService {
@@ -1879,8 +1967,9 @@ extension MainWindow {
                     let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
                     let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
                     guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
-                          !Task.isCancelled,
-                          let decoded = NSImage(data: data) else { return }
+                        !Task.isCancelled,
+                        let decoded = NSImage(data: data)
+                    else { return }
                     TimelineImageCache.shared.setImage(decoded, forKey: cacheKey)
                     image = decoded
                 }
@@ -1892,9 +1981,10 @@ extension MainWindow {
                 let isAnimated = (file.mime_type ?? "") == "image/gif"
                 var measuredFromOriginal = isAnimated
                 if natural == .zero, !isAnimated,
-                   let fullData = try? await ws.fetchFileData(fileId: file.id),
-                   !Task.isCancelled,
-                   let fullImage = NSImage(data: fullData) {
+                    let fullData = try? await ws.fetchFileData(fileId: file.id),
+                    !Task.isCancelled,
+                    let fullImage = NSImage(data: fullData)
+                {
                     TimelineImageCache.shared.setImage(fullImage, forKey: "attachment_full_\(file.id)")
                     measured = self?.pixelSize(of: fullImage) ?? previewPixels
                     measuredFromOriginal = true
@@ -1906,7 +1996,8 @@ extension MainWindow {
                 // not trigger an endless relayout loop.
                 guard measuredFromOriginal else { return }
                 self?.attachmentSizeCache[file.id] = measured
-                let fitted = self?.fitImageSize(natural: measured, maxWidth: maxW, maxHeight: maxH)
+                let fitted =
+                    self?.fitImageSize(natural: measured, maxWidth: maxW, maxHeight: maxH)
                     ?? displaySize
                 container?.frame.size = fitted
                 imageView?.frame = NSRect(x: 1, y: 1, width: fitted.width - 2, height: fitted.height - 2)
@@ -1970,7 +2061,8 @@ extension MainWindow {
 
         container.onHoverChanged = { [weak container, weak download] isHovered in
             download?.isHidden = !isHovered
-            container?.borderColor = isHovered
+            container?.borderColor =
+                isHovered
                 ? Theme.shared.centerText.withAlphaComponent(0.3)
                 : Theme.shared.centerText.withAlphaComponent(0.16)
             container?.setNeedsAppearanceUpdate()
@@ -1998,8 +2090,8 @@ extension MainWindow {
                 let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
                 let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
                 guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
-                      !Task.isCancelled,
-                      let image = NSImage(data: data)
+                    !Task.isCancelled,
+                    let image = NSImage(data: data)
                 else { return }
                 TimelineImageCache.shared.setImage(image, forKey: cacheKey)
                 guard !Task.isCancelled else { return }
@@ -2022,7 +2114,8 @@ extension MainWindow {
         card.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
         card.frame = NSRect(x: 0, y: 0, width: cardW, height: cardH)
         card.onHoverChanged = { [weak card] isHovered in
-            card?.color = isHovered
+            card?.color =
+                isHovered
                 ? Theme.shared.centerHoverSubtle
                 : Theme.shared.centerBg
             card?.setNeedsAppearanceUpdate()
@@ -2068,7 +2161,8 @@ extension MainWindow {
         let downloadButton = RoundedEdgePanel()
         downloadButton.cornerRadius = MMRadius.control
         downloadButton.color = .clear
-        downloadButton.frame = NSRect(x: cardW - 45, y: 16, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        downloadButton.frame = NSRect(
+            x: cardW - 45, y: 16, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
         let downloadIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Download") {
             downloadIcon.image = image.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
@@ -2077,7 +2171,8 @@ extension MainWindow {
         downloadIcon.frame = NSRect(x: 8, y: 8, width: 16, height: 16)
         downloadButton.addSubview(downloadIcon)
         downloadButton.onHoverChanged = { [weak downloadButton] isHovered in
-            downloadButton?.color = isHovered
+            downloadButton?.color =
+                isHovered
                 ? Theme.shared.centerText.withAlphaComponent(0.08)
                 : .clear
             downloadButton?.setNeedsAppearanceUpdate()
@@ -2157,7 +2252,8 @@ extension MainWindow {
             lastComponent.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
                 .map(Character.init)
         )
-        let cleaned = withoutControlCharacters
+        let cleaned =
+            withoutControlCharacters
             .replacingOccurrences(of: ":", with: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty, cleaned != ".", cleaned != ".." else { return fallback }
@@ -2167,16 +2263,19 @@ extension MainWindow {
     func pruneAttachmentTempFiles() {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("mattermost.client", isDirectory: true)
-        guard let entries = try? fm.contentsOfDirectory(
-            at: dir,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
+        guard
+            let entries = try? fm.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            )
+        else { return }
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
         for entry in entries {
             guard let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey]),
-                  let modified = values.contentModificationDate,
-                  modified < cutoff else { continue }
+                let modified = values.contentModificationDate,
+                modified < cutoff
+            else { continue }
             try? fm.removeItem(at: entry)
         }
     }
@@ -2354,7 +2453,8 @@ extension MainWindow {
     func appendRenderedPostRow(_ post: MMPost, wasNearBottom: Bool) -> Bool {
         guard pendingOutgoingPosts.allSatisfy({ $0.channelId != activeChannelId }) else { return false }
         guard currentChannelPosts.last?.id == post.id,
-              let previousPost = currentChannelPosts.dropLast().last else { return false }
+            let previousPost = currentChannelPosts.dropLast().last
+        else { return false }
         let chatW = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
         let chatH = chatPanel.bounds.height
         let composerTop = 24 + composerTotalHeight
@@ -2383,12 +2483,15 @@ extension MainWindow {
             insertionY += 40
         }
 
-        let isSystem = (post.type?.hasPrefix("system_") ?? false)
+        let isSystem =
+            (post.type?.hasPrefix("system_") ?? false)
             || (usersById[post.user_id]?.username == "System")
-        let previousWasSystem = (previousPost.type?.hasPrefix("system_") ?? false)
+        let previousWasSystem =
+            (previousPost.type?.hasPrefix("system_") ?? false)
             || (usersById[previousPost.user_id]?.username == "System")
         let withinGroupingWindow = (post.create_at - previousPost.create_at) <= 5 * 60 * 1000
-        let isConsecutive = !isSystem && !previousWasSystem
+        let isConsecutive =
+            !isSystem && !previousWasSystem
             && post.user_id == previousPost.user_id
             && !post.user_id.isEmpty && withinGroupingWindow
         let (row, rowHeight) = createPostRow(
@@ -2440,7 +2543,8 @@ extension MainWindow {
         let identifier = "avatar_\(userId)"
         func update(_ view: NSView) {
             if view.identifier?.rawValue == identifier,
-               let panel = view as? RoundedEdgePanel {
+                let panel = view as? RoundedEdgePanel
+            {
                 panel.color = .clear
                 panel.subviews.forEach { $0.removeFromSuperview() }
                 let imageView = NSImageView(frame: NSRect(origin: .zero, size: panel.frame.size))
@@ -2514,7 +2618,8 @@ extension MainWindow {
         let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
 
         // Parse message for text & Giphy GIF URLs
-        let rawMessage = post.message.isEmpty
+        let rawMessage =
+            post.message.isEmpty
             ? (isSystem ? SystemMessageText.text(for: post) : "")
             : post.message
         let parsed = parseGiphyInMessage(rawMessage)
@@ -2523,10 +2628,12 @@ extension MainWindow {
         let gifURLs = isDeleted ? [] : parsed.gifURLs
         let hasBodyText = !bodyText.isEmpty
         let replyCount = post.reply_count ?? 0
-        let showsReplyFooter = showsThreadFooter
+        let showsReplyFooter =
+            showsThreadFooter
             && (post.root_id ?? "").isEmpty
             && replyCount > 0
-        let linkPreviewURL = (!isSystem && !isDeleted && linkPreviewsEnabled)
+        let linkPreviewURL =
+            (!isSystem && !isDeleted && linkPreviewsEnabled)
             ? LinkPreviewParser.firstURL(in: bodyText)
             : nil
         if let linkPreviewURL = linkPreviewURL {
@@ -2542,10 +2649,12 @@ extension MainWindow {
 
         let formattedBody: NSAttributedString
         if hasBodyText {
-            let bodyColor = isDeleted
+            let bodyColor =
+                isDeleted
                 ? Theme.shared.centerTextMuted.withAlphaComponent(0.9)
                 : Theme.shared.centerText.withAlphaComponent(0.75)
-            let mutable = NSMutableAttributedString(attributedString: formattedMessage(bodyText, font: bodyFont, color: bodyColor))
+            let mutable = NSMutableAttributedString(
+                attributedString: formattedMessage(bodyText, font: bodyFont, color: bodyColor))
             if isEdited {
                 appendEditedIndicator(to: mutable, font: bodyFont, editDate: editDate)
             }
@@ -2562,7 +2671,8 @@ extension MainWindow {
         let bodyH: CGFloat
         if hasDisplayableText {
             let textStorage = NSTextStorage(attributedString: formattedBody)
-            let textContainer = NSTextContainer(containerSize: NSSize(width: bodyMaxW, height: CGFloat.greatestFiniteMagnitude))
+            let textContainer = NSTextContainer(
+                containerSize: NSSize(width: bodyMaxW, height: CGFloat.greatestFiniteMagnitude))
             textContainer.lineFragmentPadding = 0
             let layoutManager = NSLayoutManager()
             layoutManager.addTextContainer(textContainer)
@@ -2601,7 +2711,7 @@ extension MainWindow {
                 bodyView.linkTextAttributes = [
                     .foregroundColor: Theme.shared.buttonBg,
                     .underlineStyle: NSUnderlineStyle.single.rawValue,
-                    .cursor: NSCursor.pointingHand
+                    .cursor: NSCursor.pointingHand,
                 ]
                 bodyView.textStorage?.setAttributedString(formattedBody)
                 row.addSubview(bodyView)
@@ -2609,7 +2719,8 @@ extension MainWindow {
             }
 
             for gifURL in gifURLs {
-                let (giphyView, gifH) = createInlineImageView(urlString: gifURL, maxWidth: bodyMaxW, authorId: post.user_id)
+                let (giphyView, gifH) = createInlineImageView(
+                    urlString: gifURL, maxWidth: bodyMaxW, authorId: post.user_id)
                 giphyView.frame.origin = CGPoint(x: 79, y: contentY)
                 row.addSubview(giphyView)
                 contentY += gifH + 6
@@ -2654,7 +2765,8 @@ extension MainWindow {
             let mentionHoverBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.28) : msgHoverBg
             row.color = mentionBaseBg
 
-            let toolbar = (isSystem || isDeleted)
+            let toolbar =
+                (isSystem || isDeleted)
                 ? nil
                 : addHoverToolbar(for: post, to: row, width: width, compact: true)
 
@@ -2680,7 +2792,8 @@ extension MainWindow {
         }
 
         let userObj = usersById[post.user_id]
-        let isBotUser = isBotAccount(userObj)
+        let isBotUser =
+            isBotAccount(userObj)
             || (userObj == nil && authorName.lowercased() == "system-bot")
 
         // Post header/body metrics mirror the web client:
@@ -2774,7 +2887,9 @@ extension MainWindow {
         }
         row.addSubview(avatarCircle)
 
-        let isCurrentUser = (post.user_id == currentUser?.id) || (!authorName.isEmpty && authorName == currentUser?.username) || (post.user_id == "usr" || post.user_id == "sample_usr")
+        let isCurrentUser =
+            (post.user_id == currentUser?.id) || (!authorName.isEmpty && authorName == currentUser?.username)
+            || (post.user_id == "usr" || post.user_id == "sample_usr")
 
         // Author label
         let authorLabel = NSTextField(labelWithString: authorName)
@@ -2798,7 +2913,8 @@ extension MainWindow {
         let authorH = max(20, ceil(authorSize.height))
         let authorButton = RoundedEdgePanel()
         authorButton.color = .clear
-        authorButton.frame = NSRect(x: contentX, y: headerTopY + (headerH - authorH) / 2, width: authorW, height: authorH)
+        authorButton.frame = NSRect(
+            x: contentX, y: headerTopY + (headerH - authorH) / 2, width: authorW, height: authorH)
         authorLabel.frame = NSRect(x: 0, y: 0, width: authorW, height: authorH)
         authorButton.addSubview(authorLabel)
         if !post.user_id.isEmpty {
@@ -2815,7 +2931,8 @@ extension MainWindow {
         var headerRightX = contentX + authorW + 8
         if isBotUser {
             let botBadge = createBotBadge()
-            botBadge.frame = NSRect(x: contentX + authorW + 4, y: headerTopY + (headerH - 16) / 2, width: 32, height: 16)
+            botBadge.frame = NSRect(
+                x: contentX + authorW + 4, y: headerTopY + (headerH - 16) / 2, width: 32, height: 16)
             row.addSubview(botBadge)
             headerRightX = botBadge.frame.maxX + 8
         }
@@ -2872,7 +2989,8 @@ extension MainWindow {
                     width: pillW,
                     height: pillH
                 )
-                statusPromptIcon.frame = NSRect(x: pillPadH, y: (pillH - iconSize) / 2, width: iconSize, height: iconSize)
+                statusPromptIcon.frame = NSRect(
+                    x: pillPadH, y: (pillH - iconSize) / 2, width: iconSize, height: iconSize)
                 statusPromptLabel.frame = NSRect(
                     x: pillPadH + iconSize + iconSpacing,
                     y: (pillH - promptTextH) / 2,
@@ -2908,7 +3026,7 @@ extension MainWindow {
             bodyView.linkTextAttributes = [
                 .foregroundColor: Theme.shared.linkColor,
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .cursor: NSCursor.pointingHand
+                .cursor: NSCursor.pointingHand,
             ]
             bodyView.textStorage?.setAttributedString(formattedBody)
             row.addSubview(bodyView)
@@ -2980,7 +3098,8 @@ extension MainWindow {
         let mentionHoverBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.28) : msgHoverBg
         row.color = mentionBaseBg
 
-        let toolbar = (isSystem || isDeleted)
+        let toolbar =
+            (isSystem || isDeleted)
             ? nil
             : addHoverToolbar(for: post, to: row, width: width)
         row.onHoverChanged = { [weak row, weak toolbar] isHovered in
@@ -3100,10 +3219,11 @@ extension MainWindow {
                 )
             case .heading(let level, let text):
                 let pointSize = font.pointSize + (level == 1 ? 8 : level == 2 ? 4 : 2)
-                let headingFont = NSFont(
-                    descriptor: font.fontDescriptor.withSymbolicTraits(.bold),
-                    size: pointSize
-                ) ?? NSFont.boldSystemFont(ofSize: pointSize)
+                let headingFont =
+                    NSFont(
+                        descriptor: font.fontDescriptor.withSymbolicTraits(.bold),
+                        size: pointSize
+                    ) ?? NSFont.boldSystemFont(ofSize: pointSize)
                 appendInlineBlock(
                     text,
                     font: headingFont,
@@ -3209,10 +3329,11 @@ extension MainWindow {
         )
         result.append(attributed)
         if !attributed.string.hasSuffix("\n") {
-            result.append(NSAttributedString(
-                string: "\n",
-                attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style]
-            ))
+            result.append(
+                NSAttributedString(
+                    string: "\n",
+                    attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style]
+                ))
         }
     }
 
@@ -3250,11 +3371,13 @@ extension MainWindow {
         )
         let copyRange = (header.string as NSString).range(of: "Copy")
         if copyRange.location != NSNotFound,
-           let link = URL(string: "mattermost-copy-code://\(id)") {
-            header.addAttributes([
-                .link: link,
-                .foregroundColor: Theme.shared.buttonBg,
-            ], range: copyRange)
+            let link = URL(string: "mattermost-copy-code://\(id)")
+        {
+            header.addAttributes(
+                [
+                    .link: link,
+                    .foregroundColor: Theme.shared.buttonBg,
+                ], range: copyRange)
         }
         header.addAttribute(
             Self.markdownCodeAttribute,
@@ -3262,10 +3385,11 @@ extension MainWindow {
             range: NSRange(location: 0, length: header.length)
         )
         result.append(header)
-        result.append(NSAttributedString(
-            string: "\n",
-            attributes: [.font: captionFont, .backgroundColor: codeColor, .paragraphStyle: style]
-        ))
+        result.append(
+            NSAttributedString(
+                string: "\n",
+                attributes: [.font: captionFont, .backgroundColor: codeColor, .paragraphStyle: style]
+            ))
 
         let body = NSMutableAttributedString(
             string: text,
@@ -3296,10 +3420,11 @@ extension MainWindow {
             range: NSRange(location: 0, length: body.length)
         )
         result.append(body)
-        result.append(NSAttributedString(
-            string: "\n",
-            attributes: [.font: codeFont, .backgroundColor: codeColor, .paragraphStyle: style]
-        ))
+        result.append(
+            NSAttributedString(
+                string: "\n",
+                attributes: [.font: codeFont, .backgroundColor: codeColor, .paragraphStyle: style]
+            ))
     }
 
     func appendTable(
@@ -3324,22 +3449,25 @@ extension MainWindow {
             .map { pad($0.element, width: widths[$0.offset]) }
             .joined(separator: " │ ")
         let separator = widths.map { String(repeating: "─", count: $0) }.joined(separator: "─┼─")
-        result.append(NSAttributedString(
-            string: headerLine + "\n",
-            attributes: [.font: headerFont, .foregroundColor: Theme.shared.centerText, .paragraphStyle: style]
-        ))
-        result.append(NSAttributedString(
-            string: separator + "\n",
-            attributes: [.font: monoFont, .foregroundColor: Theme.shared.centerTextMuted, .paragraphStyle: style]
-        ))
+        result.append(
+            NSAttributedString(
+                string: headerLine + "\n",
+                attributes: [.font: headerFont, .foregroundColor: Theme.shared.centerText, .paragraphStyle: style]
+            ))
+        result.append(
+            NSAttributedString(
+                string: separator + "\n",
+                attributes: [.font: monoFont, .foregroundColor: Theme.shared.centerTextMuted, .paragraphStyle: style]
+            ))
         for row in rows {
             let line = headers.indices
                 .map { pad(row[$0], width: widths[$0]) }
                 .joined(separator: " │ ")
-            result.append(NSAttributedString(
-                string: line + "\n",
-                attributes: [.font: monoFont, .foregroundColor: color, .paragraphStyle: style]
-            ))
+            result.append(
+                NSAttributedString(
+                    string: line + "\n",
+                    attributes: [.font: monoFont, .foregroundColor: color, .paragraphStyle: style]
+                ))
         }
     }
 
@@ -3362,11 +3490,13 @@ extension MainWindow {
         }
 
         guard let attr = try? AttributedString(markdown: message, options: options) else {
-            return NSAttributedString(string: message, attributes: [
-                .font: font,
-                .foregroundColor: color,
-                .paragraphStyle: resolvedStyle,
-            ])
+            return NSAttributedString(
+                string: message,
+                attributes: [
+                    .font: font,
+                    .foregroundColor: color,
+                    .paragraphStyle: resolvedStyle,
+                ])
         }
 
         let brandBlue = Theme.shared.buttonBg
@@ -3420,16 +3550,19 @@ extension MainWindow {
         if let regex = try? NSRegularExpression(pattern: #"(?<![\w@])@([A-Za-z0-9._-]+)"#) {
             for match in regex.matches(in: result.string, options: [], range: fullRange) where !isCode(match.range) {
                 let matchText = string.substring(with: match.range).lowercased()
-                let isMyMention = (myUsername != nil && matchText == "@\(myUsername!)")
+                let isMyMention =
+                    (myUsername != nil && matchText == "@\(myUsername!)")
                     || matchText == "@all" || matchText == "@channel" || matchText == "@here"
                 let fgColor = isMyMention ? Theme.shared.mentionHighlightLink : brandBlue
-                let bgColor = isMyMention
+                let bgColor =
+                    isMyMention
                     ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.35)
                     : Theme.shared.buttonBg.withAlphaComponent(0.10)
-                result.addAttributes([
-                    .foregroundColor: fgColor,
-                    .backgroundColor: bgColor
-                ], range: match.range)
+                result.addAttributes(
+                    [
+                        .foregroundColor: fgColor,
+                        .backgroundColor: bgColor,
+                    ], range: match.range)
             }
         }
 
@@ -3437,12 +3570,15 @@ extension MainWindow {
         if let regex = try? NSRegularExpression(pattern: #"(?<![\w/#])[~#]([A-Za-z0-9][A-Za-z0-9_-]+)"#) {
             for match in regex.matches(in: result.string, options: [], range: fullRange) where !isCode(match.range) {
                 let name = string.substring(with: match.range(at: 1)).lowercased()
-                guard channelsByName[name] != nil || channelsByName[name.replacingOccurrences(of: "-", with: " ")] != nil else { continue }
-                result.addAttributes([
-                    .foregroundColor: brandBlue,
-                    .link: URL(string: "mattermost-channel://\(name)") as Any,
-                    .underlineStyle: NSUnderlineStyle.single.rawValue
-                ], range: match.range)
+                guard
+                    channelsByName[name] != nil || channelsByName[name.replacingOccurrences(of: "-", with: " ")] != nil
+                else { continue }
+                result.addAttributes(
+                    [
+                        .foregroundColor: brandBlue,
+                        .link: URL(string: "mattermost-channel://\(name)") as Any,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    ], range: match.range)
             }
         }
 
@@ -3453,8 +3589,9 @@ extension MainWindow {
                 let token = (result.string as NSString).substring(with: match.range)
                 let name = String(token.dropFirst().dropLast())
                 if let entry = customEmojiEntries.first(where: { $0.name.lowercased() == name.lowercased() }),
-                   let id = entry.emojiId,
-                   let image = customEmojiImages[id] {
+                    let id = entry.emojiId,
+                    let image = customEmojiImages[id]
+                {
                     let attachment = NSTextAttachment()
                     attachment.image = image
                     attachment.bounds = NSRect(x: 0, y: -3, width: 18, height: 18)
@@ -3518,7 +3655,8 @@ extension MainWindow {
         loadRow.cornerRadius = MMRadius.control
         loadRow.color = .clear
         loadRow.frame = NSRect(x: 0, y: 0, width: width, height: 32)
-        let loadLabel = NSTextField(labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")
+        let loadLabel = NSTextField(
+            labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")
         loadLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
         loadLabel.textColor = Theme.shared.centerTextMuted
         loadLabel.alignment = .center
@@ -3527,7 +3665,8 @@ extension MainWindow {
         loadLabel.frame = NSRect(x: 0, y: 7, width: width, height: 18)
         loadRow.addSubview(loadLabel)
         loadRow.onHoverChanged = { [weak loadRow] isHovered in
-            loadRow?.color = isHovered
+            loadRow?.color =
+                isHovered
                 ? Theme.shared.centerHover
                 : .clear
             loadRow?.setNeedsAppearanceUpdate()
@@ -3557,9 +3696,9 @@ extension MainWindow {
         let heroW: CGFloat = min(chatW - 40, 480)
         let heroH: CGFloat = 216
         #if DEBUG
-        let isDemoArg = CommandLine.arguments.contains("--demo")
+            let isDemoArg = CommandLine.arguments.contains("--demo")
         #else
-        let isDemoArg = false
+            let isDemoArg = false
         #endif
         let showHero = currentChannelPosts.isEmpty && !isDemoArg
         if showHero {
@@ -3599,7 +3738,7 @@ extension MainWindow {
             postsToRender = [
                 MMPost(
                     id: "sample_sys",
-                    create_at: nowMs - 86400000 * 10,
+                    create_at: nowMs - 86_400_000 * 10,
                     update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
                     user_id: "system", channel_id: activeChannelId, root_id: nil, original_id: nil,
                     message: "You joined the team.", type: "system_join_channel"
@@ -3619,22 +3758,28 @@ extension MainWindow {
                     delete_at: nil,
                     is_pinned: false,
                     user_id: currentUser?.id ?? "usr", channel_id: activeChannelId, root_id: nil, original_id: nil,
-                    message: "Welcome! Message formatting supports **bold**, *italic*, ~~strikethrough~~, and [clickable links](https://mattermost.com).\n> Quoted blockquote text\n- First bullet item\n- Second bullet with **bold**", type: nil
+                    message:
+                        "Welcome! Message formatting supports **bold**, *italic*, ~~strikethrough~~, and [clickable links](https://mattermost.com).\n> Quoted blockquote text\n- First bullet item\n- Second bullet with **bold**",
+                    type: nil
                 ),
                 MMPost(
                     id: "sample_usr_giphy",
                     create_at: nowMs - 30000,
                     update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
                     user_id: currentUser?.id ?? "usr", channel_id: activeChannelId, root_id: nil, original_id: nil,
-                    message: "Check out this animated Giphy icon:\n![waving cat](https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif)", type: nil
+                    message:
+                        "Check out this animated Giphy icon:\n![waving cat](https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif)",
+                    type: nil
                 ),
                 MMPost(
                     id: "sample_usr_2",
                     create_at: nowMs,
                     update_at: nil, edit_at: nil, delete_at: nil, is_pinned: false,
                     user_id: currentUser?.id ?? "usr", channel_id: activeChannelId, root_id: nil, original_id: nil,
-                    message: "This is a consecutive message from the same person. It prints only the chat text without repeating the icon or name, exactly like Mattermost.", type: nil
-                )
+                    message:
+                        "This is a consecutive message from the same person. It prints only the chat text without repeating the icon or name, exactly like Mattermost.",
+                    type: nil
+                ),
             ]
         }
 
@@ -3703,8 +3848,9 @@ extension MainWindow {
             // Group with the previous post only when it is the same author and
             // within five minutes (matching the web client).
             let withinGroupingWindow = (post.create_at - lastPostTimestamp) <= 5 * 60 * 1000
-            let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId
-                && !post.user_id.isEmpty && withinGroupingWindow)
+            let isConsecutive =
+                (!isSystem && !lastWasSystem && post.user_id == lastUserId
+                    && !post.user_id.isEmpty && withinGroupingWindow)
 
             let reactions = post.metadata?.reactions ?? []
             let reactionsHash = reactions.reduce(into: 17) { hash, r in
@@ -3731,7 +3877,8 @@ extension MainWindow {
                 rowH = cached.height
             } else {
                 let timeStr = Self.localizedTimeFormatter.string(from: postDate)
-                let (createdView, createdH) = createPostRow(post: post, width: chatW, timeStr: timeStr, isConsecutive: isConsecutive)
+                let (createdView, createdH) = createPostRow(
+                    post: post, width: chatW, timeStr: timeStr, isConsecutive: isConsecutive)
                 renderedPostRows[post.id] = (createdView, createdH, key)
                 rowView = createdView
                 rowH = createdH
@@ -3803,15 +3950,19 @@ extension MainWindow {
     func saveChannelScrollPosition(for channelId: String) {
         guard !channelId.isEmpty else { return }
         let top = timelineScrollView.contentView.bounds.minY
-        let row = timelineDocView.subviews.compactMap { view -> (id: String, y: CGFloat)? in
-            guard let identifier = view.identifier?.rawValue,
-                  identifier.hasPrefix("postRow_") else { return nil }
-            return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
-        }.last(where: { $0.y <= top + 8 }) ?? timelineDocView.subviews.compactMap { view -> (id: String, y: CGFloat)? in
-            guard let identifier = view.identifier?.rawValue,
-                  identifier.hasPrefix("postRow_") else { return nil }
-            return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
-        }.min(by: { $0.y < $1.y })
+        let row =
+            timelineDocView.subviews.compactMap { view -> (id: String, y: CGFloat)? in
+                guard let identifier = view.identifier?.rawValue,
+                    identifier.hasPrefix("postRow_")
+                else { return nil }
+                return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
+            }.last(where: { $0.y <= top + 8 })
+            ?? timelineDocView.subviews.compactMap { view -> (id: String, y: CGFloat)? in
+                guard let identifier = view.identifier?.rawValue,
+                    identifier.hasPrefix("postRow_")
+                else { return nil }
+                return (String(identifier.dropFirst("postRow_".count)), view.frame.minY)
+            }.min(by: { $0.y < $1.y })
         guard let row = row else { return }
         let position = ChannelScrollPosition(postId: row.id, offset: top - row.y)
         channelScrollPositions[channelId] = position
@@ -3822,9 +3973,10 @@ extension MainWindow {
     func restoreChannelScrollPosition(for channelId: String) -> Bool {
         let saved = settingsStore.scrollPosition(for: channelId) ?? channelScrollPositions[channelId]
         guard let saved = saved,
-              let row = timelineDocView.subviews.first(where: {
-                  $0.identifier?.rawValue == "postRow_\(saved.postId)"
-              }) else { return false }
+            let row = timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_\(saved.postId)"
+            })
+        else { return false }
         channelScrollPositions[channelId] = saved
         let clip = timelineScrollView.contentView
         let maxY = max(0, timelineDocView.frame.height - clip.bounds.height)

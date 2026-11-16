@@ -119,7 +119,7 @@ final class ComposerIntegrationTests: XCTestCase {
     // MARK: - Attachment Validation in Composer
 
     func testAttachmentExceedsLimitValidation() {
-        let limit: Int64 = 50 * 1024 * 1024 // 50 MB
+        let limit: Int64 = 50 * 1024 * 1024  // 50 MB
         let acceptableFile = PendingAttachment(id: "att-ok", name: "image.png", size: 10 * 1024 * 1024)
         let oversizedFile = PendingAttachment(id: "att-big", name: "video.mov", size: 60 * 1024 * 1024)
 

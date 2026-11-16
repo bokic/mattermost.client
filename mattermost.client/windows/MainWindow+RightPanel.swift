@@ -103,7 +103,8 @@ extension MainWindow {
             self?.uploadThreadFiles(urls)
         }
         threadReplyTextView.onDropStateChanged = { [weak self] active in
-            self?.threadReplyPanel.borderColor = active
+            self?.threadReplyPanel.borderColor =
+                active
                 ? Theme.shared.buttonBg
                 : Theme.shared.divider
             self?.threadReplyPanel.setNeedsAppearanceUpdate()
@@ -284,7 +285,8 @@ extension MainWindow {
         case .thread:
             if let post = threadPosts.first(where: { $0.id == threadRootId })
                 ?? threadPosts.first,
-               let channel = channelsById[post.channel_id] {
+                let channel = channelsById[post.channel_id]
+            {
                 return channelDisplayName(for: channel)
             }
             return channelName
@@ -337,7 +339,8 @@ extension MainWindow {
 
     func loadThreads(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else {
+            let team = activeTeam
+        else {
             if reset { renderRightPanel(empty: "Sign in to see your threads", rows: []) }
             return
         }
@@ -372,7 +375,7 @@ extension MainWindow {
                     perPage: pageSize
                 )
                 guard token == self.threadsRequestToken,
-                      self.rightPanelMode == .threads
+                    self.rightPanelMode == .threads
                 else { return }
                 if reset {
                     self.threadItems = response.threads
@@ -397,7 +400,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.threadsRequestToken,
-                      self.rightPanelMode == .threads
+                    self.rightPanelMode == .threads
                 else { return }
                 self.threadItemsLoading = false
                 if reset {
@@ -495,12 +498,14 @@ extension MainWindow {
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
-            guard let response = try? await ws.fetchThreadsPage(
-                userId: userId,
-                teamId: team.id,
-                page: 0,
-                perPage: 1
-            ) else { return }
+            guard
+                let response = try? await ws.fetchThreadsPage(
+                    userId: userId,
+                    teamId: team.id,
+                    page: 0,
+                    perPage: 1
+                )
+            else { return }
             if let unread = response.total_unread_threads {
                 self.totalUnreadThreads = unread
                 self.updateSidebarBadges()
@@ -560,7 +565,8 @@ extension MainWindow {
 
     func loadThread() {
         guard let ws = webService, ws.isLogged(),
-              !threadRootId.isEmpty else {
+            !threadRootId.isEmpty
+        else {
             renderThreadPanel(empty: "Could not load thread")
             return
         }
@@ -694,8 +700,9 @@ extension MainWindow {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
             let isSystem = (post.type?.hasPrefix("system_") ?? false)
             let withinGroupingWindow = (post.create_at - lastTimestamp) <= 5 * 60 * 1000
-            let isConsecutive = (!isSystem && post.user_id == lastUserId
-                && !post.user_id.isEmpty && withinGroupingWindow)
+            let isConsecutive =
+                (!isSystem && post.user_id == lastUserId
+                    && !post.user_id.isEmpty && withinGroupingWindow)
             let (rowView, rowH) = createPostRow(
                 post: post,
                 width: contentWidth,
@@ -752,7 +759,8 @@ extension MainWindow {
                 )
                 continue
             }
-            let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+            let mime =
+                UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
                 ?? "application/octet-stream"
             enqueueUpload(
                 ActiveAttachmentUpload(
@@ -880,10 +888,12 @@ extension MainWindow {
             $0.threadRootId == threadRootId && $0.isInProgress
         }
         let enabled = !threadComposerSending && !hasUploads && (hasText || hasAttachments)
-        threadSendButton.color = enabled
+        threadSendButton.color =
+            enabled
             ? Theme.shared.buttonBg
             : Theme.shared.centerText.withAlphaComponent(0.08)
-        threadSendIconView.contentTintColor = enabled
+        threadSendIconView.contentTintColor =
+            enabled
             ? .white
             : Theme.shared.centerText.withAlphaComponent(0.32)
         threadSendButton.setNeedsAppearanceUpdate()
@@ -901,8 +911,9 @@ extension MainWindow {
 
     @objc func sendThreadReply() {
         guard let ws = webService, ws.isLogged(),
-              !threadRootId.isEmpty,
-              !threadComposerSending else { return }
+            !threadRootId.isEmpty,
+            !threadComposerSending
+        else { return }
         let rootId = threadRootId
         let channelId = threadChannelId()
         let text = threadReplyTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -942,7 +953,8 @@ extension MainWindow {
 
     func loadChannelMembers(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
-              !activeChannelId.isEmpty else {
+            !activeChannelId.isEmpty
+        else {
             renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
@@ -973,8 +985,8 @@ extension MainWindow {
                     perPage: pageSize
                 )
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.activeChannelId == channelId,
-                      self.rightPanelMode == .members
+                    self.activeChannelId == channelId,
+                    self.rightPanelMode == .members
                 else { return }
                 let existing = Set(reset ? [] : self.channelMembers.map(\.user_id))
                 let newMembers = members.filter { !existing.contains($0.user_id) }
@@ -983,7 +995,8 @@ extension MainWindow {
                 self.rhsHasMoreByMode[key] = members.count == pageSize
                 self.rhsLoadingByMode[key] = false
                 self.channelMembersCountLabel.stringValue =
-                    self.rhsHasMoreByMode[key] == true ? "\(self.channelMembers.count)+" : "\(self.channelMembers.count)"
+                    self.rhsHasMoreByMode[key] == true
+                    ? "\(self.channelMembers.count)+" : "\(self.channelMembers.count)"
                 self.layoutRightChatPanel()
                 self.hydrateUsers(members.map { $0.user_id }) { [weak self] in
                     guard let self = self, token == self.rhsRequestTokenByMode[key] else { return }
@@ -991,7 +1004,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .members
+                    self.rightPanelMode == .members
                 else { return }
                 self.rhsLoadingByMode[key] = false
                 if reset {
@@ -1055,48 +1068,56 @@ extension MainWindow {
 
         var rows: [RightPanelRow] = []
         for (title, members) in groups where !members.isEmpty {
-            rows.append(RightPanelRow(
-                title: title,
-                subtitle: "",
-                meta: "\(members.count)",
-                action: nil,
-                isSectionHeader: true
-            ))
+            rows.append(
+                RightPanelRow(
+                    title: title,
+                    subtitle: "",
+                    meta: "\(members.count)",
+                    action: nil,
+                    isSectionHeader: true
+                ))
             for member in members {
                 let user = usersById[member.user_id]
                 let name = user?.username ?? "Unknown user"
                 let roles = member.roles ?? ""
-                let role = user?.is_bot == true ? "Bot"
-                    : roles.contains("system_admin") ? "System Admin"
-                    : roles.contains("team_admin") ? "Team Admin"
-                    : roles.contains("channel_admin") ? "Channel Admin"
-                    : roles.contains("guest") ? "Guest"
-                    : "Member"
+                let role =
+                    user?.is_bot == true
+                    ? "Bot"
+                    : roles.contains("system_admin")
+                        ? "System Admin"
+                        : roles.contains("team_admin")
+                            ? "Team Admin"
+                            : roles.contains("channel_admin")
+                                ? "Channel Admin"
+                                : roles.contains("guest")
+                                    ? "Guest"
+                                    : "Member"
                 let status = userStatusById[member.user_id] ?? "offline"
                 let fullName = [user?.first_name, user?.last_name]
                     .compactMap { $0 }
                     .joined(separator: " ")
-                rows.append(RightPanelRow(
-                    title: name,
-                    subtitle: fullName,
-                    meta: "\(role) · \(status.capitalized)",
-                    action: { [weak self] in
-                        guard let self = self else { return }
-                        if let user = self.usersById[member.user_id] {
-                            self.showUserProfile(user: user)
-                        } else {
-                            self.showUserProfile(userId: member.user_id)
+                rows.append(
+                    RightPanelRow(
+                        title: name,
+                        subtitle: fullName,
+                        meta: "\(role) · \(status.capitalized)",
+                        action: { [weak self] in
+                            guard let self = self else { return }
+                            if let user = self.usersById[member.user_id] {
+                                self.showUserProfile(user: user)
+                            } else {
+                                self.showUserProfile(userId: member.user_id)
+                            }
+                        },
+                        secondaryActionTitle: "Message",
+                        secondaryAction: { [weak self] in
+                            guard let self = self else { return }
+                            if let user = self.usersById[member.user_id] {
+                                self.startDirectMessage(with: user)
+                                self.closeRightPanel()
+                            }
                         }
-                    },
-                    secondaryActionTitle: "Message",
-                    secondaryAction: { [weak self] in
-                        guard let self = self else { return }
-                        if let user = self.usersById[member.user_id] {
-                            self.startDirectMessage(with: user)
-                            self.closeRightPanel()
-                        }
-                    }
-                ))
+                    ))
             }
         }
         renderRightPanel(empty: L10n.string("No members"), rows: rows)
@@ -1104,7 +1125,8 @@ extension MainWindow {
 
     func loadTeamMembers(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else {
+            let team = activeTeam
+        else {
             renderRightPanel(empty: "Sign in to see team members", rows: [])
             return
         }
@@ -1135,8 +1157,8 @@ extension MainWindow {
                     perPage: pageSize
                 )
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.activeTeam?.id == teamId,
-                      self.rightPanelMode == .teamMembers
+                    self.activeTeam?.id == teamId,
+                    self.rightPanelMode == .teamMembers
                 else { return }
                 let existing = Set(reset ? [] : self.teamMembers.map(\.user_id))
                 let newMembers = members.filter { !existing.contains($0.user_id) }
@@ -1150,7 +1172,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .teamMembers
+                    self.rightPanelMode == .teamMembers
                 else { return }
                 self.rhsLoadingByMode[key] = false
                 if reset {
@@ -1173,14 +1195,15 @@ extension MainWindow {
         }
         var rows: [RightPanelRow] = []
 
-        rows.append(RightPanelRow(
-            title: "Add Members",
-            subtitle: "Invite or add a user to this team",
-            meta: "+ Add",
-            action: { [weak self] in
-                self?.showAddTeamMemberDialog()
-            }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: "Add Members",
+                subtitle: "Invite or add a user to this team",
+                meta: "+ Add",
+                action: { [weak self] in
+                    self?.showAddTeamMemberDialog()
+                }
+            ))
 
         let query = memberSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = teamMembers.filter { member in
@@ -1212,18 +1235,20 @@ extension MainWindow {
         }
 
         for (title, members) in groups where !members.isEmpty {
-            rows.append(RightPanelRow(
-                title: title,
-                subtitle: "",
-                meta: "\(members.count)",
-                action: nil,
-                isSectionHeader: true
-            ))
+            rows.append(
+                RightPanelRow(
+                    title: title,
+                    subtitle: "",
+                    meta: "\(members.count)",
+                    action: nil,
+                    isSectionHeader: true
+                ))
             for member in members {
                 let user = usersById[member.user_id]
                 let name = user?.username ?? "Unknown user"
                 let roles = member.roles ?? ""
-                let isAdmin = roles.contains("team_admin") || member.scheme_admin == true
+                let isAdmin =
+                    roles.contains("team_admin") || member.scheme_admin == true
                     || roles.contains("system_admin")
                 let role = isAdmin ? "Team Admin" : "Member"
                 let status = userStatusById[member.user_id] ?? "offline"
@@ -1231,18 +1256,19 @@ extension MainWindow {
                     .compactMap { $0 }
                     .joined(separator: " ")
 
-                rows.append(RightPanelRow(
-                    title: name,
-                    subtitle: fullName,
-                    meta: "\(role) · \(status.capitalized)",
-                    action: { [weak self] in
-                        self?.showTeamMemberActionsAlert(member: member)
-                    },
-                    secondaryActionTitle: "Manage",
-                    secondaryAction: { [weak self] in
-                        self?.showTeamMemberActionsAlert(member: member)
-                    }
-                ))
+                rows.append(
+                    RightPanelRow(
+                        title: name,
+                        subtitle: fullName,
+                        meta: "\(role) · \(status.capitalized)",
+                        action: { [weak self] in
+                            self?.showTeamMemberActionsAlert(member: member)
+                        },
+                        secondaryActionTitle: "Manage",
+                        secondaryAction: { [weak self] in
+                            self?.showTeamMemberActionsAlert(member: member)
+                        }
+                    ))
             }
         }
 
@@ -1364,7 +1390,8 @@ extension MainWindow {
 
     func loadPinnedPosts() {
         guard let ws = webService, ws.isLogged(),
-              !activeChannelId.isEmpty else {
+            !activeChannelId.isEmpty
+        else {
             renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
@@ -1382,8 +1409,8 @@ extension MainWindow {
             do {
                 let list = try await ws.fetchPinnedPosts(channelId: channelId)
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.activeChannelId == channelId,
-                      self.rightPanelMode == .pinned
+                    self.activeChannelId == channelId,
+                    self.rightPanelMode == .pinned
                 else { return }
                 self.pinnedPosts = list.order.compactMap { list.posts[$0] }
                 self.rhsLoadingByMode[key] = false
@@ -1393,7 +1420,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .pinned
+                    self.rightPanelMode == .pinned
                 else { return }
                 self.rhsLoadingByMode[key] = false
                 self.renderRightPanel(empty: "Could not load pinned posts", rows: [])
@@ -1440,7 +1467,8 @@ extension MainWindow {
 
     func loadChannelFiles(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam, !activeChannelId.isEmpty else {
+            let team = activeTeam, !activeChannelId.isEmpty
+        else {
             renderFilesPanel([], empty: "Sign in to see files")
             return
         }
@@ -1472,8 +1500,8 @@ extension MainWindow {
                     perPage: pageSize
                 )
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.activeChannelId == channelId,
-                      self.rightPanelMode == .files
+                    self.activeChannelId == channelId,
+                    self.rightPanelMode == .files
                 else { return }
                 let existing = Set(reset ? [] : self.channelFiles.map(\.id))
                 let newFiles = files.filter { !existing.contains($0.id) }
@@ -1492,7 +1520,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .files
+                    self.rightPanelMode == .files
                 else { return }
                 self.rhsLoadingByMode[key] = false
                 if reset {
@@ -1585,7 +1613,8 @@ extension MainWindow {
             card.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
             card.frame = NSRect(x: 14, y: y, width: rowWidth, height: rowHeight)
             card.onHoverChanged = { [weak card] isHovered in
-                card?.color = isHovered
+                card?.color =
+                    isHovered
                     ? Theme.shared.centerHoverSubtle
                     : Theme.shared.centerBg
                 card?.setNeedsAppearanceUpdate()
@@ -1618,8 +1647,9 @@ extension MainWindow {
                         }
                         guard !Task.isCancelled else { return }
                         if let data = try? await ws.fetchFileData(fileId: fileId, preview: true),
-                           !Task.isCancelled,
-                           let image = NSImage(data: data) {
+                            !Task.isCancelled,
+                            let image = NSImage(data: data)
+                        {
                             self?.filePreviewImages[fileId] = image
                             imageView?.image = image
                             thumbImage = image
@@ -1677,7 +1707,8 @@ extension MainWindow {
 
             card.onClick = { [weak self] in
                 if isImage {
-                    self?.showLightbox(image: thumbImage, file: file, filename: file.name ?? "Image", authorId: file.user_id)
+                    self?.showLightbox(
+                        image: thumbImage, file: file, filename: file.name ?? "Image", authorId: file.user_id)
                 } else {
                     self?.openAttachment(file)
                 }
@@ -1708,7 +1739,8 @@ extension MainWindow {
 
     func loadMentions(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else {
+            let team = activeTeam
+        else {
             renderRightPanel(empty: "Sign in to see mentions", rows: [])
             return
         }
@@ -1744,7 +1776,7 @@ extension MainWindow {
                     perPage: pageSize
                 )
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .mentions
+                    self.rightPanelMode == .mentions
                 else { return }
                 let posts = list.order.compactMap { list.posts[$0] }
                 let existing = Set(reset ? [] : self.mentionPosts.map(\.id))
@@ -1759,7 +1791,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .mentions
+                    self.rightPanelMode == .mentions
                 else { return }
                 self.rhsLoadingByMode[key] = false
                 if reset {
@@ -1787,7 +1819,8 @@ extension MainWindow {
 
     func loadSavedPosts(reset: Bool = true) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else {
+            let team = activeTeam
+        else {
             renderRightPanel(empty: "Sign in to see saved posts", rows: [])
             return
         }
@@ -1823,7 +1856,7 @@ extension MainWindow {
                     perPage: pageSize
                 )
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .saved
+                    self.rightPanelMode == .saved
                 else { return }
                 let posts = list.order.compactMap { list.posts[$0] }
                 let existing = Set(reset ? [] : self.savedPosts.map(\.id))
@@ -1839,7 +1872,7 @@ extension MainWindow {
                 }
             } catch {
                 guard token == self.rhsRequestTokenByMode[key],
-                      self.rightPanelMode == .saved
+                    self.rightPanelMode == .saved
                 else { return }
                 self.rhsLoadingByMode[key] = false
                 if reset {
@@ -1889,9 +1922,10 @@ extension MainWindow {
                     self.closeRightPanel()
                 },
                 secondaryActionTitle: hasUser ? "Profile" : "",
-                secondaryAction: hasUser ? { [weak self] in
-                    self?.showUserProfile(userId: post.user_id)
-                } : nil
+                secondaryAction: hasUser
+                    ? { [weak self] in
+                        self?.showUserProfile(userId: post.user_id)
+                    } : nil
             )
         }
         renderRightPanel(empty: empty, rows: rows)
@@ -1905,7 +1939,8 @@ extension MainWindow {
         }
         for (id, membership) in membershipsByChannel {
             if membership.notify_props?.desktop?.lowercased() == "none"
-                || membership.notify_props?.mark_unread?.lowercased() == "mention" {
+                || membership.notify_props?.mark_unread?.lowercased() == "mention"
+            {
                 ids.insert(id)
             }
         }
@@ -1919,7 +1954,8 @@ extension MainWindow {
     func editMentionKeys() {
         let alert = NSAlert()
         alert.messageText = "Mention Keys"
-        alert.informativeText = "Comma-separated keywords or phrases that trigger a notification when mentioned in channels."
+        alert.informativeText =
+            "Comma-separated keywords or phrases that trigger a notification when mentioned in channels."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
 
@@ -1969,7 +2005,7 @@ extension MainWindow {
             "User ID: \(userId)",
             "Email: \(email.isEmpty ? "None" : email)",
             "Active Team: \(team)",
-            "Client Version: \(version)"
+            "Client Version: \(version)",
         ]
         let fullText = infoLines.joined(separator: "\n")
         alert.informativeText = fullText
@@ -1994,83 +2030,93 @@ extension MainWindow {
         var rows: [RightPanelRow] = []
 
         // ACCOUNT & CONNECTION
-        rows.append(RightPanelRow(
-            title: L10n.string("ACCOUNT & CONNECTION"),
-            subtitle: "",
-            meta: "",
-            action: nil,
-            isSectionHeader: true
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Account"),
-            subtitle: username.isEmpty ? L10n.string("Not logged in") : "@\(username)",
-            meta: server,
-            action: nil
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Connection details"),
-            subtitle: L10n.string("Server URL, WebSocket and session diagnostics"),
-            meta: L10n.string("View"),
-            action: { [weak self] in self?.showConnectionDetails() }
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Reconnect"),
-            subtitle: webService?.isWebSocketConnected == true
-                ? L10n.string("Connected")
-                : L10n.string("Reconnecting…"),
-            meta: "Connection",
-            action: { [weak self] in
-                guard let self = self else { return }
-                self.settingsAwaitingReconnect = self.webService?.isWebSocketConnected != true
-                self.webService?.reconnectIfNeeded()
-                self.loadSettingsPanel()
-            }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("ACCOUNT & CONNECTION"),
+                subtitle: "",
+                meta: "",
+                action: nil,
+                isSectionHeader: true
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Account"),
+                subtitle: username.isEmpty ? L10n.string("Not logged in") : "@\(username)",
+                meta: server,
+                action: nil
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Connection details"),
+                subtitle: L10n.string("Server URL, WebSocket and session diagnostics"),
+                meta: L10n.string("View"),
+                action: { [weak self] in self?.showConnectionDetails() }
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Reconnect"),
+                subtitle: webService?.isWebSocketConnected == true
+                    ? L10n.string("Connected")
+                    : L10n.string("Reconnecting…"),
+                meta: "Connection",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.settingsAwaitingReconnect = self.webService?.isWebSocketConnected != true
+                    self.webService?.reconnectIfNeeded()
+                    self.loadSettingsPanel()
+                }
+            ))
 
         // NOTIFICATIONS & MUTE
-        rows.append(RightPanelRow(
-            title: L10n.string("NOTIFICATIONS & MUTE"),
-            subtitle: "",
-            meta: "",
-            action: nil,
-            isSectionHeader: true
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Desktop notifications"),
-            subtitle: desktopNotificationModeLabel(),
-            meta: L10n.string("Change"),
-            action: { [weak self] in self?.cycleDesktopNotificationMode() }
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Notification sound"),
-            subtitle: desktopSoundsEnabled() ? L10n.string("On") : L10n.string("Off"),
-            meta: L10n.string("Toggle"),
-            action: { [weak self] in self?.toggleDesktopNotificationSound() }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("NOTIFICATIONS & MUTE"),
+                subtitle: "",
+                meta: "",
+                action: nil,
+                isSectionHeader: true
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Desktop notifications"),
+                subtitle: desktopNotificationModeLabel(),
+                meta: L10n.string("Change"),
+                action: { [weak self] in self?.cycleDesktopNotificationMode() }
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Notification sound"),
+                subtitle: desktopSoundsEnabled() ? L10n.string("On") : L10n.string("Off"),
+                meta: L10n.string("Toggle"),
+                action: { [weak self] in self?.toggleDesktopNotificationSound() }
+            ))
         let mentionKeys = currentUser?.notify_props?.mention_keys?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        rows.append(RightPanelRow(
-            title: L10n.string("Mention keys"),
-            subtitle: mentionKeys.isEmpty ? L10n.string("None configured") : mentionKeys,
-            meta: L10n.string("Edit"),
-            action: { [weak self] in self?.editMentionKeys() }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Mention keys"),
+                subtitle: mentionKeys.isEmpty ? L10n.string("None configured") : mentionKeys,
+                meta: L10n.string("Edit"),
+                action: { [weak self] in self?.editMentionKeys() }
+            ))
 
         // MUTED CHANNELS
         let mutedChannels = allMutedChannelIds()
-        rows.append(RightPanelRow(
-            title: L10n.string("MUTED CHANNELS"),
-            subtitle: "",
-            meta: "\(mutedChannels.count)",
-            action: nil,
-            isSectionHeader: true
-        ))
-        if mutedChannels.isEmpty {
-            rows.append(RightPanelRow(
-                title: L10n.string("No muted channels"),
-                subtitle: L10n.string("All channels currently follow your default notification settings"),
-                meta: "",
-                action: nil
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("MUTED CHANNELS"),
+                subtitle: "",
+                meta: "\(mutedChannels.count)",
+                action: nil,
+                isSectionHeader: true
             ))
+        if mutedChannels.isEmpty {
+            rows.append(
+                RightPanelRow(
+                    title: L10n.string("No muted channels"),
+                    subtitle: L10n.string("All channels currently follow your default notification settings"),
+                    meta: "",
+                    action: nil
+                ))
         } else {
             for chId in mutedChannels {
                 let channel = channelsById[chId]
@@ -2086,143 +2132,157 @@ extension MainWindow {
                 } else {
                     prefix = "Channel • "
                 }
-                rows.append(RightPanelRow(
-                    title: name,
-                    subtitle: "\(prefix)Notifications muted",
-                    meta: "",
-                    action: nil,
-                    secondaryActionTitle: L10n.string("Unmute"),
-                    secondaryAction: { [weak self] in
-                        guard let self = self else { return }
-                        self.setChannelNotificationPreference(channelId: chId, desktop: "default")
-                        self.loadSettingsPanel()
-                    }
-                ))
+                rows.append(
+                    RightPanelRow(
+                        title: name,
+                        subtitle: "\(prefix)Notifications muted",
+                        meta: "",
+                        action: nil,
+                        secondaryActionTitle: L10n.string("Unmute"),
+                        secondaryAction: { [weak self] in
+                            guard let self = self else { return }
+                            self.setChannelNotificationPreference(channelId: chId, desktop: "default")
+                            self.loadSettingsPanel()
+                        }
+                    ))
             }
         }
 
         // APPEARANCE
-        rows.append(RightPanelRow(
-            title: L10n.string("APPEARANCE"),
-            subtitle: "",
-            meta: "",
-            action: nil,
-            isSectionHeader: true
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Theme override"),
-            subtitle: ThemeManager.shared.themeOverride.displayName,
-            meta: L10n.string("Change"),
-            action: { [weak self] in self?.cycleThemeOverride() }
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Reset zoom"),
-            subtitle: "Currently \(zoomPercent)%",
-            meta: "Appearance",
-            action: { [weak self] in
-                ZoomManager.shared.resetZoom()
-                self?.loadSettingsPanel()
-            }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("APPEARANCE"),
+                subtitle: "",
+                meta: "",
+                action: nil,
+                isSectionHeader: true
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Theme override"),
+                subtitle: ThemeManager.shared.themeOverride.displayName,
+                meta: L10n.string("Change"),
+                action: { [weak self] in self?.cycleThemeOverride() }
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Reset zoom"),
+                subtitle: "Currently \(zoomPercent)%",
+                meta: "Appearance",
+                action: { [weak self] in
+                    ZoomManager.shared.resetZoom()
+                    self?.loadSettingsPanel()
+                }
+            ))
 
         // PRIVACY & MEDIA
-        rows.append(RightPanelRow(
-            title: L10n.string("PRIVACY & MEDIA"),
-            subtitle: "",
-            meta: "",
-            action: nil,
-            isSectionHeader: true
-        ))
-        rows.append(RightPanelRow(
-            title: loadRemoteImagesAutomatically ? L10n.string("Disable automatic remote images") : L10n.string("Enable automatic remote images"),
-            subtitle: L10n.string("When off, inline/Giphy images are not fetched from third-party hosts"),
-            meta: "Privacy",
-            action: { [weak self] in
-                guard let self = self else { return }
-                self.loadRemoteImagesAutomatically.toggle()
-                UserDefaults.standard.set(
-                    self.loadRemoteImagesAutomatically,
-                    forKey: "loadRemoteImagesAutomatically"
-                )
-                self.rebuildTimelineContent(scrollToBottom: false)
-                self.loadSettingsPanel()
-            }
-        ))
-        rows.append(RightPanelRow(
-            title: linkPreviewsEnabled ? "Disable link previews" : "Enable link previews",
-            subtitle: linkPreviewsEnabled
-                ? "Linked pages are summarized in the timeline"
-                : "Off by default; enabling contacts linked sites or the server",
-            meta: "Privacy",
-            action: { [weak self] in
-                guard let self = self else { return }
-                self.linkPreviewsEnabled.toggle()
-                UserDefaults.standard.set(
-                    self.linkPreviewsEnabled,
-                    forKey: "linkPreviewsEnabled"
-                )
-                if self.linkPreviewsEnabled {
-                    self.linkPreviewFailures.removeAll()
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("PRIVACY & MEDIA"),
+                subtitle: "",
+                meta: "",
+                action: nil,
+                isSectionHeader: true
+            ))
+        rows.append(
+            RightPanelRow(
+                title: loadRemoteImagesAutomatically
+                    ? L10n.string("Disable automatic remote images") : L10n.string("Enable automatic remote images"),
+                subtitle: L10n.string("When off, inline/Giphy images are not fetched from third-party hosts"),
+                meta: "Privacy",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.loadRemoteImagesAutomatically.toggle()
+                    UserDefaults.standard.set(
+                        self.loadRemoteImagesAutomatically,
+                        forKey: "loadRemoteImagesAutomatically"
+                    )
+                    self.rebuildTimelineContent(scrollToBottom: false)
+                    self.loadSettingsPanel()
                 }
-                self.rebuildTimelineContent(scrollToBottom: false)
-                self.loadSettingsPanel()
-            }
-        ))
+            ))
+        rows.append(
+            RightPanelRow(
+                title: linkPreviewsEnabled ? "Disable link previews" : "Enable link previews",
+                subtitle: linkPreviewsEnabled
+                    ? "Linked pages are summarized in the timeline"
+                    : "Off by default; enabling contacts linked sites or the server",
+                meta: "Privacy",
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    self.linkPreviewsEnabled.toggle()
+                    UserDefaults.standard.set(
+                        self.linkPreviewsEnabled,
+                        forKey: "linkPreviewsEnabled"
+                    )
+                    if self.linkPreviewsEnabled {
+                        self.linkPreviewFailures.removeAll()
+                    }
+                    self.rebuildTimelineContent(scrollToBottom: false)
+                    self.loadSettingsPanel()
+                }
+            ))
 
         // UPDATES
-        rows.append(RightPanelRow(
-            title: L10n.string("UPDATES"),
-            subtitle: "",
-            meta: "",
-            action: nil,
-            isSectionHeader: true
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Check for updates"),
-            subtitle: L10n.format("Current version: %@", AppVersion.versionString),
-            meta: L10n.string("Check"),
-            action: { [weak self] in
-                guard let self = self else { return }
-                UpdateChecker.shared.checkForUpdates(userInitiated: true, presentingWindow: self)
-            }
-        ))
-        rows.append(RightPanelRow(
-            title: L10n.string("Automatic updates"),
-            subtitle: UpdateChecker.shared.automaticallyChecksForUpdates
-                ? L10n.string("Check daily for new versions")
-                : L10n.string("Disabled"),
-            meta: L10n.string("Toggle"),
-            action: { [weak self] in
-                guard let self = self else { return }
-                UpdateChecker.shared.automaticallyChecksForUpdates.toggle()
-                self.loadSettingsPanel()
-            }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("UPDATES"),
+                subtitle: "",
+                meta: "",
+                action: nil,
+                isSectionHeader: true
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Check for updates"),
+                subtitle: L10n.format("Current version: %@", AppVersion.versionString),
+                meta: L10n.string("Check"),
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    UpdateChecker.shared.checkForUpdates(userInitiated: true, presentingWindow: self)
+                }
+            ))
+        rows.append(
+            RightPanelRow(
+                title: L10n.string("Automatic updates"),
+                subtitle: UpdateChecker.shared.automaticallyChecksForUpdates
+                    ? L10n.string("Check daily for new versions")
+                    : L10n.string("Disabled"),
+                meta: L10n.string("Toggle"),
+                action: { [weak self] in
+                    guard let self = self else { return }
+                    UpdateChecker.shared.automaticallyChecksForUpdates.toggle()
+                    self.loadSettingsPanel()
+                }
+            ))
 
         // SESSION & DIAGNOSTICS
-        rows.append(RightPanelRow(
-            title: "SESSION & DIAGNOSTICS",
-            subtitle: "",
-            meta: "",
-            action: nil,
-            isSectionHeader: true
-        ))
-        rows.append(RightPanelRow(
-            title: "Export diagnostics",
-            subtitle: "Redacted log and build information for support",
-            meta: "Support",
-            action: { [weak self] in
-                self?.exportDiagnostics()
-            }
-        ))
-        rows.append(RightPanelRow(
-            title: "Log out",
-            subtitle: "Clear credentials and return to sign in",
-            meta: "",
-            action: { [weak self] in
-                self?.confirmLogout()
-            }
-        ))
+        rows.append(
+            RightPanelRow(
+                title: "SESSION & DIAGNOSTICS",
+                subtitle: "",
+                meta: "",
+                action: nil,
+                isSectionHeader: true
+            ))
+        rows.append(
+            RightPanelRow(
+                title: "Export diagnostics",
+                subtitle: "Redacted log and build information for support",
+                meta: "Support",
+                action: { [weak self] in
+                    self?.exportDiagnostics()
+                }
+            ))
+        rows.append(
+            RightPanelRow(
+                title: "Log out",
+                subtitle: "Clear credentials and return to sign in",
+                meta: "",
+                action: { [weak self] in
+                    self?.confirmLogout()
+                }
+            ))
 
         renderRightPanel(empty: "", rows: rows)
     }
@@ -2245,7 +2305,7 @@ extension MainWindow {
         let redactions = [
             defaults.string(forKey: "host") ?? "",
             defaults.string(forKey: "username") ?? "",
-            KeychainHelper.get(forKey: "token") ?? ""
+            KeychainHelper.get(forKey: "token") ?? "",
         ].filter { !$0.isEmpty }
         for secret in redactions {
             log = log.replacingOccurrences(of: secret, with: "<redacted>")
@@ -2257,7 +2317,7 @@ extension MainWindow {
             "Generated: \(ISO8601DateFormatter().string(from: Date()))",
             "",
             "--- log ---",
-            log.isEmpty ? "(no log entries)" : log
+            log.isEmpty ? "(no log entries)" : log,
         ].joined(separator: "\n")
 
         let panel = NSSavePanel()
@@ -2275,7 +2335,8 @@ extension MainWindow {
 
     func loadChannelInfo() {
         guard let ws = webService, ws.isLogged(),
-              let channel = channelsById[activeChannelId] else {
+            let channel = channelsById[activeChannelId]
+        else {
             renderRightPanel(empty: L10n.string("No channel selected"), rows: [])
             return
         }
@@ -2293,7 +2354,8 @@ extension MainWindow {
                 if let creator = self.usersById[creatorId] {
                     creatorName = creator.username
                 } else if let users = try? await ws.fetchUsersByIds([creatorId]),
-                          let creator = users.first {
+                    let creator = users.first
+                {
                     self.usersById[creator.id] = creator
                     self.usersByUsername[creator.username.lowercased()] = creator
                     creatorName = creator.username
@@ -2307,9 +2369,10 @@ extension MainWindow {
             case "G": typeLabel = "Group message"
             default: typeLabel = "Public channel"
             }
-            let created = channel.create_at.map {
-                Self.localizedDateTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0) / 1000))
-            } ?? "Unknown"
+            let created =
+                channel.create_at.map {
+                    Self.localizedDateTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0) / 1000))
+                } ?? "Unknown"
             let header = (channel.header ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let purpose = (channel.purpose ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let rows: [RightPanelRow] = [
@@ -2348,7 +2411,7 @@ extension MainWindow {
                     subtitle: "Messages pinned in this channel",
                     meta: "View",
                     action: { [weak self] in self?.showRightPanel(mode: .pinned) }
-                )
+                ),
             ]
             self.renderRightPanel(empty: "", rows: rows)
         }
@@ -2356,7 +2419,8 @@ extension MainWindow {
 
     func loadBrowseChannels() {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else {
+            let team = activeTeam
+        else {
             renderRightPanel(empty: L10n.string("Sign in to browse channels"), rows: [])
             return
         }
@@ -2373,7 +2437,7 @@ extension MainWindow {
             var seenIds = Set<String>()
             var allDiscovered: [MMChannel] = []
             for ch in (publicList + privateList + Array(localTeamChannels)) {
-                guard (ch.type == "O" || ch.type == "P"), !seenIds.contains(ch.id) else { continue }
+                guard ch.type == "O" || ch.type == "P", !seenIds.contains(ch.id) else { continue }
                 seenIds.insert(ch.id)
                 allDiscovered.append(ch)
             }
@@ -2443,7 +2507,8 @@ extension MainWindow {
 
     func requestToJoinChannel(_ channel: MMChannel) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+            let team = activeTeam
+        else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
 
@@ -2456,7 +2521,8 @@ extension MainWindow {
                 try await ws.requestToJoinChannel(channelId: channel.id)
                 // If the user was actually joined immediately (e.g. admin or open join policy):
                 if let updatedChannels = try? await ws.fetchChannels(teamId: team.id),
-                   let joined = updatedChannels.first(where: { $0.id == channel.id }) {
+                    let joined = updatedChannels.first(where: { $0.id == channel.id })
+                {
                     self.pendingJoinRequestChannelIds.remove(channel.id)
                     self.channelsById[channel.id] = joined
                     self.channelsByName[joined.name.lowercased()] = joined
@@ -2467,19 +2533,22 @@ extension MainWindow {
                     self.loadBrowseChannels()
                     self.showInfoAlert("You have joined \(channel.display_name).")
                 } else {
-                    self.showInfoAlert("Your request to join \(channel.display_name) has been submitted to channel administrators.")
+                    self.showInfoAlert(
+                        "Your request to join \(channel.display_name) has been submitted to channel administrators.")
                 }
             } catch {
                 self.pendingJoinRequestChannelIds.remove(channel.id)
                 self.loadBrowseChannels()
-                self.showInfoAlert("Could not submit request to join \(channel.display_name): \(error.localizedDescription)")
+                self.showInfoAlert(
+                    "Could not submit request to join \(channel.display_name): \(error.localizedDescription)")
             }
         }
     }
 
     func joinChannel(_ channel: MMChannel) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+            let team = activeTeam
+        else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
@@ -2564,7 +2633,8 @@ extension MainWindow {
         }
 
         if let key = rhsKey(for: rightPanelMode), !rows.isEmpty,
-           (rhsHasMoreByMode[key] == true || rhsLoadingByMode[key] == true) {
+            rhsHasMoreByMode[key] == true || rhsLoadingByMode[key] == true
+        {
             let mode = rightPanelMode
             let loading = rhsLoadingByMode[key] == true
             let footer = makeRightPanelFooter(
@@ -2578,7 +2648,8 @@ extension MainWindow {
         }
 
         if rightPanelMode == .threads, !rows.isEmpty,
-           threadItemsHasMore || threadItemsLoading {
+            threadItemsHasMore || threadItemsLoading
+        {
             let footer = makeRightPanelFooter(
                 title: threadItemsLoading ? "Loading more threads…" : "Load more threads",
                 width: width - 24,
@@ -2674,7 +2745,8 @@ extension MainWindow {
         }
 
         row.onHoverChanged = { [weak row] isHovered in
-            row?.color = isHovered
+            row?.color =
+                isHovered
                 ? Theme.shared.centerHover
                 : .clear
             row?.setNeedsAppearanceUpdate()

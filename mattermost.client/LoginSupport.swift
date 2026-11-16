@@ -28,7 +28,7 @@ enum LoginSupport {
         "hotmail.com", "outlook.com", "live.com", "msn.com",
         "icloud.com", "me.com", "mac.com", "aol.com",
         "proton.me", "protonmail.com", "zoho.com", "mail.com",
-        "gmx.com", "gmx.net", "fastmail.com", "tutanota.com"
+        "gmx.com", "gmx.net", "fastmail.com", "tutanota.com",
     ]
 
     static func isPublicWebmail(domain: String) -> Bool {
@@ -87,7 +87,8 @@ enum LoginSupport {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  (json["status"] as? String)?.uppercased() == "OK" else {
+                (json["status"] as? String)?.uppercased() == "OK"
+            else {
                 return nil
             }
 
@@ -99,8 +100,9 @@ enum LoginSupport {
                 configReq.timeoutInterval = 2.0
                 configReq.setValue("application/json", forHTTPHeaderField: "Accept")
                 if let (cfgData, cfgResp) = try? await session.data(for: configReq),
-                   let cfgHttp = cfgResp as? HTTPURLResponse, cfgHttp.statusCode == 200,
-                   let cfgJson = try? JSONSerialization.jsonObject(with: cfgData) as? [String: Any] {
+                    let cfgHttp = cfgResp as? HTTPURLResponse, cfgHttp.statusCode == 200,
+                    let cfgJson = try? JSONSerialization.jsonObject(with: cfgData) as? [String: Any]
+                {
                     siteName = cfgJson["SiteName"] as? String
                 }
             }
@@ -150,7 +152,8 @@ enum LoginSupport {
             guard let settings = json[key] as? [String: Any] else { return nil }
             if let enabled = settings["Enable"] as? Bool, enabled { return settings }
             if let enabled = settings["Enable"] as? String,
-               enabled.caseInsensitiveCompare("true") == .orderedSame {
+                enabled.caseInsensitiveCompare("true") == .orderedSame
+            {
                 return settings
             }
             return nil
@@ -172,7 +175,8 @@ enum LoginSupport {
             )
         }
         if let settings = enabledSettings("OpenIdConnectSettings") {
-            let title = (settings["ButtonText"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let title =
+                (settings["ButtonText"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 ?? "OpenID Connect"
             providers.append(
                 SSOProvider(id: "openid", title: title, path: "/oauth/openid/login")
@@ -208,7 +212,8 @@ enum LoginSupport {
         let names = ["MMAUTHTOKEN", "MMTOKEN"]
         for cookie in cookies {
             if names.contains(where: { $0.caseInsensitiveCompare(cookie.name) == .orderedSame }),
-               !cookie.value.isEmpty {
+                !cookie.value.isEmpty
+            {
                 return cookie.value
             }
         }

@@ -1,0 +1,28 @@
+# SwiftLint configuration for mattermost.client
+
+included:
+  - mattermost.client
+  - mattermost.clientTests
+  - tools
+
+excluded:
+  - build
+  - .build
+  - DerivedData
+
+disabled_rules:
+  - identifier_name # Backend API uses snake_case in MM models (e.g. create_at)
+  - line_length # Handled by swift-format (120 chars)
+  - type_body_length
+  - file_length
+  - function_body_length
+  - cyclomatic_complexity
+  - large_tuple
+  - function_parameter_count
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - fatal_error_message
+  - redundant_nil_coalescing
+  - unneeded_break_in_switch

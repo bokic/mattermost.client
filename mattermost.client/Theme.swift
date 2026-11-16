@@ -339,8 +339,12 @@ struct MMTheme {
                 hex = hex.map { "\($0)\($0)" }.joined()
             }
             guard hex.count == 6 || hex.count == 8,
-                  let value = UInt64(hex, radix: 16) else { return nil }
-            let red, green, blue, alpha: CGFloat
+                let value = UInt64(hex, radix: 16)
+            else { return nil }
+            let red: CGFloat
+            let green: CGFloat
+            let blue: CGFloat
+            let alpha: CGFloat
             if hex.count == 8 {
                 red = CGFloat((value >> 24) & 0xFF) / 255
                 green = CGFloat((value >> 16) & 0xFF) / 255
@@ -364,8 +368,9 @@ struct MMTheme {
             let parts = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             if parts.count == 3 || parts.count == 4 {
                 guard let r = Double(parts[0]),
-                      let g = Double(parts[1]),
-                      let b = Double(parts[2]) else { return nil }
+                    let g = Double(parts[1]),
+                    let b = Double(parts[2])
+                else { return nil }
                 let a = parts.count == 4 ? (Double(parts[3]) ?? 1.0) : 1.0
                 let red = CGFloat(max(0, min(255, r))) / 255.0
                 let green = CGFloat(max(0, min(255, g))) / 255.0
@@ -430,7 +435,8 @@ final class ThemeManager {
     var themeOverride: ThemeOverride {
         get {
             guard let raw = UserDefaults.standard.string(forKey: "themeOverride"),
-                  let override = ThemeOverride(rawValue: raw) else {
+                let override = ThemeOverride(rawValue: raw)
+            else {
                 return .server
             }
             return override
@@ -468,11 +474,13 @@ final class ThemeManager {
 
         let themePreferences = preferences.filter { $0["category"] == "theme" }
         let teamKey = teamId ?? ""
-        let preference = themePreferences.first { $0["name"] == teamKey }
+        let preference =
+            themePreferences.first { $0["name"] == teamKey }
             ?? themePreferences.first { $0["name"] == "" }
         guard let raw = preference?["value"],
-              let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let data = raw.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
             applySystemTheme()
             return
         }

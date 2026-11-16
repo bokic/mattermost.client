@@ -473,7 +473,8 @@ extension MainWindow {
         composerSendButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
             if self.composerSendEnabled {
-                self.composerSendButton.color = isHovered
+                self.composerSendButton.color =
+                    isHovered
                     ? Theme.shared.buttonBg.blended(withFraction: 0.2, of: .black) ?? Theme.shared.buttonBg
                     : Theme.shared.buttonBg
             } else {
@@ -545,7 +546,9 @@ extension MainWindow {
                 width: max(0, panelWidth - titleWidth - 100),
                 height: 20
             )
-            rightPanelCloseButton.frame = NSRect(x: panelWidth - 48, y: panelHeight - 44, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+            rightPanelCloseButton.frame = NSRect(
+                x: panelWidth - 48, y: panelHeight - 44, width: MMMetric.iconButtonRegular,
+                height: MMMetric.iconButtonRegular)
             rightPanelResizeHandle.frame = NSRect(x: 0, y: 0, width: 6, height: panelHeight)
 
             let isThreadMode = (rightPanelMode == .thread)
@@ -615,7 +618,8 @@ extension MainWindow {
         chatTimelineContainer.frame = NSRect(x: 0, y: 0, width: chatW, height: headerY)
 
         // 1. Channel Header Bar (web: 56pt tall, 12pt padding, 12pt top corners)
-        channelStarButton.frame = NSRect(x: 14, y: headerY + 16, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
+        channelStarButton.frame = NSRect(
+            x: 14, y: headerY + 16, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
         channelStarIconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
 
         let isBot = isCurrentChannelBot()
@@ -631,13 +635,16 @@ extension MainWindow {
         let botBadgeSpacing: CGFloat = isBot ? 6 : 0
         let titleBtnW = titleTextW + botBadgeSpacing + botBadgeW + 28
         let titleBtnH: CGFloat = 24
-        channelTitleButton.frame = NSRect(x: 40, y: headerY + (headerH - titleBtnH) / 2, width: titleBtnW, height: titleBtnH)
+        channelTitleButton.frame = NSRect(
+            x: 40, y: headerY + (headerH - titleBtnH) / 2, width: titleBtnW, height: titleBtnH)
         channelTitleLabel.frame = NSRect(x: 4, y: (titleBtnH - titleTextH) / 2, width: titleTextW, height: titleTextH)
         if isBot {
             channelHeaderBotBadge.frame = NSRect(x: 4 + titleTextW + 4, y: (titleBtnH - 16) / 2, width: 32, height: 16)
             channelHeaderBotBadgeLabel.frame = NSRect(x: 0, y: 1, width: 32, height: 14)
         }
-        channelTitleChevron.frame = NSRect(x: 4 + titleTextW + 4 + (isBot ? (botBadgeW + botBadgeSpacing) : 0), y: (titleBtnH - 10) / 2, width: 10, height: 10)
+        channelTitleChevron.frame = NSRect(
+            x: 4 + titleTextW + 4 + (isBot ? (botBadgeW + botBadgeSpacing) : 0), y: (titleBtnH - 10) / 2, width: 10,
+            height: 10)
 
         let membersX = channelTitleButton.frame.maxX + 2
         let countFont = channelMembersCountLabel.font ?? MMFont.font(ofSize: 12, weight: .semibold)
@@ -647,21 +654,29 @@ extension MainWindow {
         let countTextH = ceil(countSize.height)
         let countBtnW = 6 + 12 + 4 + countTextW + 6
         let countBtnH: CGFloat = 24
-        channelMembersButton.frame = NSRect(x: membersX, y: headerY + (headerH - countBtnH) / 2, width: max(34, countBtnW), height: countBtnH)
+        channelMembersButton.frame = NSRect(
+            x: membersX, y: headerY + (headerH - countBtnH) / 2, width: max(34, countBtnW), height: countBtnH)
         channelMembersIconView.frame = NSRect(x: 6, y: (countBtnH - 12) / 2, width: 12, height: 12)
-        channelMembersCountLabel.frame = NSRect(x: 22, y: (countBtnH - countTextH) / 2, width: countTextW, height: countTextH)
+        channelMembersCountLabel.frame = NSRect(
+            x: 22, y: (countBtnH - countTextH) / 2, width: countTextW, height: countTextH)
 
-        channelPinsButton.frame = NSRect(x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
+        channelPinsButton.frame = NSRect(
+            x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact,
+            height: MMMetric.iconButtonCompact)
         channelPinsIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
 
-        channelFilesButton.frame = NSRect(x: channelPinsButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
+        channelFilesButton.frame = NSRect(
+            x: channelPinsButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact,
+            height: MMMetric.iconButtonCompact)
         channelFilesIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
 
         // Web: 32pt icon buttons at the trailing edge, 4pt apart, 12pt from the right.
-        channelInfoButton.frame = NSRect(x: chatW - 44, y: headerY + 12, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        channelInfoButton.frame = NSRect(
+            x: chatW - 44, y: headerY + 12, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
         channelInfoIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
 
-        channelSidebarButton.frame = NSRect(x: chatW - 80, y: headerY + 12, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        channelSidebarButton.frame = NSRect(
+            x: chatW - 80, y: headerY + 12, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
         channelSidebarIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
 
         // 2. Composer at bottom (web: 2pt border, 4pt radius, 50pt editor + 24pt footer)
@@ -694,17 +709,25 @@ extension MainWindow {
         }
 
         composerSendButton.frame = NSRect(x: composerW - 9 - 48, y: toolY, width: 48, height: 32)
-        composerEmojiButton.frame = NSRect(x: composerSendButton.frame.minX - 4 - MMMetric.iconButtonRegular, y: toolY, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
-        composerAttachButton.frame = NSRect(x: composerEmojiButton.frame.minX - 4 - MMMetric.iconButtonRegular, y: toolY, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
-        composerRightSeparator.frame = NSRect(x: composerAttachButton.frame.minX - 6, y: toolY + 4, width: 1, height: 24)
+        composerEmojiButton.frame = NSRect(
+            x: composerSendButton.frame.minX - 4 - MMMetric.iconButtonRegular, y: toolY,
+            width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        composerAttachButton.frame = NSRect(
+            x: composerEmojiButton.frame.minX - 4 - MMMetric.iconButtonRegular, y: toolY,
+            width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        composerRightSeparator.frame = NSRect(
+            x: composerAttachButton.frame.minX - 6, y: toolY + 4, width: 1, height: 24)
 
         let aaText = "Aa"
-        let aaFont = composerAaButton.subviews.compactMap { ($0 as? NSTextField)?.font }.first ?? MMFont.font(ofSize: 14, weight: .semibold)
+        let aaFont =
+            composerAaButton.subviews.compactMap { ($0 as? NSTextField)?.font }.first
+            ?? MMFont.font(ofSize: 14, weight: .semibold)
         let aaSize = (aaText as NSString).size(withAttributes: [.font: aaFont])
         let aaBtnW = max(44, ceil(aaSize.width) + 26)
         let aaX = composerRightSeparator.frame.minX - 4 - aaBtnW
         composerAaButton.frame = NSRect(x: aaX, y: toolY, width: aaBtnW, height: 32)
-        composerGifButton.frame = NSRect(x: aaX - 36, y: toolY, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        composerGifButton.frame = NSRect(
+            x: aaX - 36, y: toolY, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
 
         // 3. Scrollable Timeline
         let composerTop = composerBottom + composerH
@@ -738,7 +761,8 @@ extension MainWindow {
         let chatPanelX: CGFloat = MMMetric.chatPanelLeading
         mainPanel.frame = NSRect(x: gutter, y: gutter, width: size.width - gutter * 2, height: topBarY - gutter)
         mainPanel.cornerRadius = MMRadius.window
-        chatPanel.frame = NSRect(x: chatPanelX, y: gutter, width: size.width - chatPanelX - gutter, height: topBarY - gutter)
+        chatPanel.frame = NSRect(
+            x: chatPanelX, y: gutter, width: size.width - chatPanelX - gutter, height: topBarY - gutter)
         chatPanel.cornerRadius = MMRadius.window
 
         layoutLeftSidebar(topBarY: mainPanel.bounds.height)
@@ -778,7 +802,9 @@ extension MainWindow {
         searchIconView.frame = NSRect(x: 4, y: 5, width: 18, height: 18)
         searchLabel.frame = NSRect(x: 29, y: 4, width: searchWidth - 37, height: 20)
 
-        helpPanel.frame = NSRect(x: searchX + searchWidth + 8, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
+        helpPanel.frame = NSRect(
+            x: searchX + searchWidth + 8, y: topBarY + 8, width: MMMetric.iconButtonSmall,
+            height: MMMetric.iconButtonSmall)
         helpIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         helpMenu.frame = NSRect(x: helpPanel.frame.minX, y: topBarY - 178, width: 204, height: 176)
 
@@ -792,15 +818,19 @@ extension MainWindow {
         statusDotPanel.frame = NSRect(x: 21, y: 1, width: 16, height: 16)
         updateStatusCheck(in: statusDotPanel, status: currentUserStatus)
         statusMenu.frame = NSRect(x: size.width - 259, y: topBarY - 356, width: 248, height: 354)
-        dndSubMenu.frame = NSRect(x: statusMenu.frame.minX - 210, y: statusMenu.frame.minY - 50, width: 212, height: 232)
+        dndSubMenu.frame = NSRect(
+            x: statusMenu.frame.minX - 210, y: statusMenu.frame.minY - 50, width: 212, height: 232)
 
-        settingsPanel.frame = NSRect(x: size.width - 80, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
+        settingsPanel.frame = NSRect(
+            x: size.width - 80, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         settingsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
 
-        savedPostsPanel.frame = NSRect(x: size.width - 116, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
+        savedPostsPanel.frame = NSRect(
+            x: size.width - 116, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         savedPostsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
 
-        mentionsPanel.frame = NSRect(x: size.width - 152, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
+        mentionsPanel.frame = NSRect(
+            x: size.width - 152, y: topBarY + 8, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         mentionsIconView.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
 
         // Search results float below the search field.
@@ -813,7 +843,9 @@ extension MainWindow {
             height: resultsHeight
         )
         searchResultsTitle.frame = NSRect(x: 16, y: resultsHeight - 34, width: resultsWidth - 60, height: 20)
-        searchResultsCloseButton.frame = NSRect(x: resultsWidth - 36, y: resultsHeight - 38, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
+        searchResultsCloseButton.frame = NSRect(
+            x: resultsWidth - 36, y: resultsHeight - 38, width: MMMetric.iconButtonCompact,
+            height: MMMetric.iconButtonCompact)
         if !searchResultsPanel.isHidden {
             searchResultsScroll.frame = NSRect(x: 0, y: 0, width: resultsWidth, height: resultsHeight - 44)
         }

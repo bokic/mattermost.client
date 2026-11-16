@@ -42,12 +42,15 @@ enum MarkdownBlockParser {
                 var codeLines: [String] = []
                 index += 1
                 while index < lines.count,
-                      !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("```")
+                {
                     codeLines.append(lines[index])
                     index += 1
                 }
                 if index < lines.count { index += 1 }
-                blocks.append(.code(language: language?.isEmpty == true ? nil : language, text: codeLines.joined(separator: "\n")))
+                blocks.append(
+                    .code(language: language?.isEmpty == true ? nil : language, text: codeLines.joined(separator: "\n"))
+                )
                 continue
             }
 
@@ -103,7 +106,8 @@ enum MarkdownBlockParser {
             while index < lines.count {
                 let candidate = lines[index]
                 if candidate.trimmingCharacters(in: .whitespaces).isEmpty
-                    || isBlockStart(candidate) {
+                    || isBlockStart(candidate)
+                {
                     break
                 }
                 paragraphLines.append(candidate)
@@ -162,7 +166,7 @@ enum MarkdownBlockParser {
         var cursor = 0
         while cursor < characters.count, characters[cursor].isNumber { cursor += 1 }
         guard cursor > 0, cursor < characters.count,
-              characters[cursor] == "." || characters[cursor] == ")"
+            characters[cursor] == "." || characters[cursor] == ")"
         else { return nil }
         let number = Int(String(characters[0..<cursor])) ?? 1
         cursor += 1
@@ -195,8 +199,8 @@ enum MarkdownBlockParser {
         let headers = splitTableRow(headerLine)
         let separators = splitTableRow(separatorLine)
         guard !headers.isEmpty,
-              headers.count == separators.count,
-              separators.allSatisfy(isTableSeparator)
+            headers.count == separators.count,
+            separators.allSatisfy(isTableSeparator)
         else { return nil }
 
         var rows: [[String]] = []
@@ -295,7 +299,9 @@ enum MarkdownSyntaxHighlighter {
         var output: [(NSRange, TokenKind)] = []
 
         func collect(_ pattern: String, kind: TokenKind, skipOccupied: Bool) {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return }
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+                return
+            }
             for match in regex.matches(in: code, options: [], range: full) {
                 if skipOccupied, occupied.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) {
                     continue

@@ -154,10 +154,11 @@ class RoundedEdgePanel: NSView {
         if onHoverChanged != nil {
             setHovered(isInside)
         }
-        
+
         for subview in subviews {
             if let panel = subview as? RoundedEdgePanel {
-                panel.updateHoverRecursively(windowMouseLocation: windowMouseLocation, isWindowActiveAndInScrollView: isInside)
+                panel.updateHoverRecursively(
+                    windowMouseLocation: windowMouseLocation, isWindowActiveAndInScrollView: isInside)
             }
         }
     }
@@ -212,21 +213,21 @@ class RoundedEdgePanel: NSView {
             return
         }
         switch event.keyCode {
-        case 36, 49, 76: // Return, Space, Enter
+        case 36, 49, 76:  // Return, Space, Enter
             onClick?()
-        case 123: // Left Arrow
+        case 123:  // Left Arrow
             if !(onArrowKey?(.left) ?? false) {
                 window?.selectKeyView(preceding: self)
             }
-        case 124: // Right Arrow
+        case 124:  // Right Arrow
             if !(onArrowKey?(.right) ?? false) {
                 window?.selectKeyView(following: self)
             }
-        case 125: // Down Arrow
+        case 125:  // Down Arrow
             if !(onArrowKey?(.down) ?? false) {
                 window?.selectKeyView(following: self)
             }
-        case 126: // Up Arrow
+        case 126:  // Up Arrow
             if !(onArrowKey?(.up) ?? false) {
                 window?.selectKeyView(preceding: self)
             }
@@ -270,8 +271,9 @@ class RoundedEdgePanel: NSView {
                 return
             }
             if let imageView = subview as? NSImageView,
-               let description = imageView.image?.accessibilityDescription ?? imageView.accessibilityLabel(),
-               !description.isEmpty {
+                let description = imageView.image?.accessibilityDescription ?? imageView.accessibilityLabel(),
+                !description.isEmpty
+            {
                 setAccessibilityLabel(description)
                 return
             }
@@ -345,7 +347,8 @@ class RoundedEdgePanel: NSView {
         let hasShadow = (shadowColor != nil && shadowOpacity > 0 && shadowRadius > 0)
         baseLayer.backgroundColor = color.cgColor
         baseLayer.cornerRadius = cornerRadius
-        baseLayer.masksToBounds = clipContentToBounds ?? !hasShadow // allow shadow to render outside bounds when active
+        // Allow shadow to render outside bounds when active.
+        baseLayer.masksToBounds = clipContentToBounds ?? !hasShadow
 
         let increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         let isFocused = (window?.firstResponder === self)
@@ -370,7 +373,8 @@ class RoundedEdgePanel: NSView {
             baseLayer.shadowRadius = shadowRadius
             baseLayer.shadowOffset = CGSize(width: shadowOffset.width, height: shadowOffset.height)
             // Use a path for better performance and to match rounded corners
-            baseLayer.shadowPath = CGPath(roundedRect: baseLayer.bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+            baseLayer.shadowPath = CGPath(
+                roundedRect: baseLayer.bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
         } else {
             baseLayer.shadowOpacity = 0
             baseLayer.shadowColor = nil

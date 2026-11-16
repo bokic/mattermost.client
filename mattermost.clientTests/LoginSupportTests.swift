@@ -129,11 +129,13 @@ final class LoginSupportTests: XCTestCase {
         MockURLProtocol.responseProvider = { request in
             guard let url = request.url else { return nil }
             if url.host == "chat.acme.com" && url.path == "/api/v4/system/ping" {
-                let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let response = HTTPURLResponse(
+                    url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (response, Data(#"{"status":"OK"}"#.utf8))
             }
             if url.host == "chat.acme.com" && url.path == "/api/v4/config/client" {
-                let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let response = HTTPURLResponse(
+                    url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (response, Data(#"{"SiteName":"Acme Workspace"}"#.utf8))
             }
             let notFound = HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!
@@ -160,7 +162,8 @@ final class LoginSupportTests: XCTestCase {
 
         override func startLoading() {
             guard let handler = Self.responseProvider,
-                  let (response, data) = handler(request) else {
+                let (response, data) = handler(request)
+            else {
                 client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
                 return
             }

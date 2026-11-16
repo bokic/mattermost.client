@@ -157,7 +157,7 @@ final class WorkspaceRepositoryTests: XCTestCase {
 
         let result = repo.computeNewMessagesBaseline(for: "c1", posts: [p1, p2, p3, threadReply])
         XCTAssertEqual(result.baseline, 1_500)
-        XCTAssertEqual(result.unreadCount, 2) // p2 and p3 (p4 is thread reply)
+        XCTAssertEqual(result.unreadCount, 2)  // p2 and p3 (p4 is thread reply)
         XCTAssertEqual(result.dividerPostId, "p2")
     }
 
@@ -215,7 +215,8 @@ final class WorkspaceRepositoryTests: XCTestCase {
             mention_count: 0,
             last_viewed_at: 0,
             last_update_at: 0,
-            notify_props: MMChannelMembership.NotifyProps(desktop: "none", mark_unread: "all", ignore_channel_mentions: nil)
+            notify_props: MMChannelMembership.NotifyProps(
+                desktop: "none", mark_unread: "all", ignore_channel_mentions: nil)
         )
         model.membershipsByChannel["c_membership"] = membership
         XCTAssertTrue(repo.isChannelMuted("c_membership"))
@@ -226,7 +227,8 @@ final class WorkspaceRepositoryTests: XCTestCase {
             mention_count: 0,
             last_viewed_at: 0,
             last_update_at: 0,
-            notify_props: MMChannelMembership.NotifyProps(desktop: "all", mark_unread: "mention", ignore_channel_mentions: nil)
+            notify_props: MMChannelMembership.NotifyProps(
+                desktop: "all", mark_unread: "mention", ignore_channel_mentions: nil)
         )
         model.membershipsByChannel["c_mention_only"] = mentionOnlyMembership
         XCTAssertTrue(repo.isChannelMuted("c_mention_only"))
@@ -240,7 +242,7 @@ final class WorkspaceRepositoryTests: XCTestCase {
 
         let longText = String(repeating: "A", count: 200)
         let excerpt = repo.notificationExcerpt(from: longText)
-        XCTAssertEqual(excerpt.count, 161) // 160 + "…"
+        XCTAssertEqual(excerpt.count, 161)  // 160 + "…"
         XCTAssertTrue(excerpt.hasSuffix("…"))
 
         XCTAssertEqual(repo.notificationExcerpt(from: "   \n\n  "), "New message")
@@ -352,20 +354,20 @@ final class WorkspaceRepositoryTests: XCTestCase {
 
         let existing = [
             makePost(id: "p2", createAt: 200, userId: "u1"),
-            makePost(id: "p3", createAt: 300, userId: "u1")
+            makePost(id: "p3", createAt: 300, userId: "u1"),
         ]
         model.currentChannelPosts = existing
 
         let older = [
             makePost(id: "p1", createAt: 100, userId: "u_missing"),
-            makePost(id: "p2", createAt: 200, userId: "u1") // duplicate / refresh
+            makePost(id: "p2", createAt: 200, userId: "u1"),  // duplicate / refresh
         ]
 
         let result = repo.mergeOlderPosts(older: older, pageSize: 60)
 
         XCTAssertEqual(result.posts.map(\.id), ["p1", "p2", "p3"])
-        XCTAssertEqual(result.insertedCount, 1) // p1 inserted
-        XCTAssertTrue(result.didReachEnd) // older.count (2) < pageSize (60)
+        XCTAssertEqual(result.insertedCount, 1)  // p1 inserted
+        XCTAssertTrue(result.didReachEnd)  // older.count (2) < pageSize (60)
         XCTAssertEqual(result.missingUserIds, ["u_missing"])
         XCTAssertEqual(model.currentChannelPosts.map(\.id), ["p1", "p2", "p3"])
         XCTAssertTrue(model.didLoadAllHistory)
@@ -489,15 +491,18 @@ final class WorkspaceRepositoryTests: XCTestCase {
         let channels = [c1, cTown, cBot]
 
         // 1. System bot arg takes precedence if requested
-        let botResult = repo.resolveDefaultChannel(teamId: "t1", channels: channels, savedChannelId: "c1", systemBotArg: true)
+        let botResult = repo.resolveDefaultChannel(
+            teamId: "t1", channels: channels, savedChannelId: "c1", systemBotArg: true)
         XCTAssertEqual(botResult?.id, "c3")
 
         // 2. Saved channel ID takes precedence otherwise
-        let savedResult = repo.resolveDefaultChannel(teamId: "t1", channels: channels, savedChannelId: "c1", systemBotArg: false)
+        let savedResult = repo.resolveDefaultChannel(
+            teamId: "t1", channels: channels, savedChannelId: "c1", systemBotArg: false)
         XCTAssertEqual(savedResult?.id, "c1")
 
         // 3. Fallback to town-square
-        let townResult = repo.resolveDefaultChannel(teamId: "t1", channels: channels, savedChannelId: nil, systemBotArg: false)
+        let townResult = repo.resolveDefaultChannel(
+            teamId: "t1", channels: channels, savedChannelId: nil, systemBotArg: false)
         XCTAssertEqual(townResult?.id, "c2")
     }
 

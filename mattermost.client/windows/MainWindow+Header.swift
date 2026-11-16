@@ -190,7 +190,8 @@ extension MainWindow {
         logo.alphaValue = active ? 1.0 : 0.94
         editionBadgePanel.color = Theme.shared.sidebarText.withAlphaComponent(active ? 0.16 : 0.12)
         editionBadgePanel.setNeedsAppearanceUpdate()
-        editionBadgeLabel.textColor = active ? Theme.shared.sidebarText : Theme.shared.sidebarText.withAlphaComponent(0.72)
+        editionBadgeLabel.textColor =
+            active ? Theme.shared.sidebarText : Theme.shared.sidebarText.withAlphaComponent(0.72)
     }
 
     func updateHelpButtonAppearance() {
@@ -290,8 +291,8 @@ extension MainWindow {
 
     func rerunSearchForActiveTab() {
         guard !searchResultsAreRecents,
-              !searchResultsPanel.isHidden,
-              !searchResultsTerms.isEmpty
+            !searchResultsPanel.isHidden,
+            !searchResultsTerms.isEmpty
         else { return }
         startSearch(terms: searchResultsTerms)
     }
@@ -643,8 +644,8 @@ extension MainWindow {
 
     @objc func searchResultsDidScroll() {
         guard !searchResultsPanel.isHidden,
-              searchResultsHasMore,
-              !searchResultsLoading
+            searchResultsHasMore,
+            !searchResultsLoading
         else { return }
         let clip = searchResultsScroll.contentView.bounds
         if clip.maxY >= searchResultsDoc.frame.height - 120 {
@@ -659,9 +660,10 @@ extension MainWindow {
 
         let uploader = file.user_id.flatMap { usersById[$0]?.username } ?? "Unknown"
         let channelName = file.channel_id.flatMap { channelsById[$0] }.map { channelDisplayName(for: $0) } ?? ""
-        let date = file.create_at.map {
-            Self.localizedDateTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0) / 1000))
-        } ?? ""
+        let date =
+            file.create_at.map {
+                Self.localizedDateTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval($0) / 1000))
+            } ?? ""
         let meta = [uploader, channelName, date].filter { !$0.isEmpty }.joined(separator: " · ")
 
         let icon = NSImageView()
@@ -674,13 +676,14 @@ extension MainWindow {
         icon.frame = NSRect(x: 12, y: 18, width: 20, height: 20)
         row.addSubview(icon)
 
-        let nameLabel = NSTextField(labelWithAttributedString: SearchSupport.attributedSnippet(
-            file.name ?? file.id,
-            query: searchResultsTerms,
-            font: MMFont.font(ofSize: 13, weight: .semibold),
-            textColor: Theme.shared.centerText,
-            highlightColor: Theme.shared.centerText
-        ))
+        let nameLabel = NSTextField(
+            labelWithAttributedString: SearchSupport.attributedSnippet(
+                file.name ?? file.id,
+                query: searchResultsTerms,
+                font: MMFont.font(ofSize: 13, weight: .semibold),
+                textColor: Theme.shared.centerText,
+                highlightColor: Theme.shared.centerText
+            ))
         nameLabel.isEditable = false
         nameLabel.isSelectable = false
         nameLabel.lineBreakMode = .byTruncatingMiddle
@@ -751,17 +754,19 @@ extension MainWindow {
         metaLabel.isEditable = false
         metaLabel.isSelectable = false
         metaLabel.lineBreakMode = .byTruncatingTail
-        metaLabel.frame = NSRect(x: authorBtn.frame.maxX, y: 6, width: max(40, width - authorBtn.frame.maxX - 12), height: 16)
+        metaLabel.frame = NSRect(
+            x: authorBtn.frame.maxX, y: 6, width: max(40, width - authorBtn.frame.maxX - 12), height: 16)
         row.addSubview(metaLabel)
 
         let snippetText = post.message.replacingOccurrences(of: "\n", with: " ")
-        let snippet = NSTextField(labelWithAttributedString: SearchSupport.attributedSnippet(
-            snippetText,
-            query: searchResultsTerms,
-            font: MMFont.font(ofSize: 13),
-            textColor: Theme.shared.centerText.withAlphaComponent(0.9),
-            highlightColor: Theme.shared.centerText
-        ))
+        let snippet = NSTextField(
+            labelWithAttributedString: SearchSupport.attributedSnippet(
+                snippetText,
+                query: searchResultsTerms,
+                font: MMFont.font(ofSize: 13),
+                textColor: Theme.shared.centerText.withAlphaComponent(0.9),
+                highlightColor: Theme.shared.centerText
+            ))
         snippet.isEditable = false
         snippet.isSelectable = false
         snippet.lineBreakMode = .byTruncatingTail
@@ -779,10 +784,12 @@ extension MainWindow {
     }
 
     func insertSearchFilter(_ pill: String) {
-        guard let insertion = SearchSupport.filterInsertion(
-            for: pill,
-            channelName: channelsById[activeChannelId]?.name
-        ) else { return }
+        guard
+            let insertion = SearchSupport.filterInsertion(
+                for: pill,
+                channelName: channelsById[activeChannelId]?.name
+            )
+        else { return }
         if !isSearchPopoverOpen {
             setSearchPopoverOpen(true)
         }
@@ -850,23 +857,74 @@ extension MainWindow {
     }
 
     func closeTopOverlay() -> Bool {
-        if isProfilePopoverOpen { closeProfilePopover(); return true }
-        if isCompletionVisible { closeCompletion(); return true }
-        if isLightboxVisible { closeLightbox(); return true }
-        if isDMPickerOpen { closeDMPicker(); return true }
-        if isEmojiPanelOpen { closeEmojiPanel(); return true }
-        if isReactionPickerOpen { closeReactionPicker(); return true }
-        if isPostActionMenuOpen { closePostActionMenu(); return true }
-        if isChannelMenuOpen { closeChannelMenu(); return true }
-        if isProductMenuOpen { setProductSwitcherMenuOpen(false); return true }
-        if isHelpMenuOpen { setHelpMenuOpen(false); return true }
-        if isStatusMenuOpen { setStatusMenuOpen(false); return true }
-        if isTeamMenuOpen { setTeamMenuOpen(false); return true }
-        if isFilterMenuOpen { setFilterMenuOpen(false); return true }
-        if isSearchPopoverOpen { setSearchPopoverOpen(false); return true }
-        if !searchResultsPanel.isHidden { closeSearchResults(); return true }
-        if isRightPanelVisible { closeRightPanel(); return true }
-        if editingPostId != nil { _ = cancelEditing(); return true }
+        if isProfilePopoverOpen {
+            closeProfilePopover()
+            return true
+        }
+        if isCompletionVisible {
+            closeCompletion()
+            return true
+        }
+        if isLightboxVisible {
+            closeLightbox()
+            return true
+        }
+        if isDMPickerOpen {
+            closeDMPicker()
+            return true
+        }
+        if isEmojiPanelOpen {
+            closeEmojiPanel()
+            return true
+        }
+        if isReactionPickerOpen {
+            closeReactionPicker()
+            return true
+        }
+        if isPostActionMenuOpen {
+            closePostActionMenu()
+            return true
+        }
+        if isChannelMenuOpen {
+            closeChannelMenu()
+            return true
+        }
+        if isProductMenuOpen {
+            setProductSwitcherMenuOpen(false)
+            return true
+        }
+        if isHelpMenuOpen {
+            setHelpMenuOpen(false)
+            return true
+        }
+        if isStatusMenuOpen {
+            setStatusMenuOpen(false)
+            return true
+        }
+        if isTeamMenuOpen {
+            setTeamMenuOpen(false)
+            return true
+        }
+        if isFilterMenuOpen {
+            setFilterMenuOpen(false)
+            return true
+        }
+        if isSearchPopoverOpen {
+            setSearchPopoverOpen(false)
+            return true
+        }
+        if !searchResultsPanel.isHidden {
+            closeSearchResults()
+            return true
+        }
+        if isRightPanelVisible {
+            closeRightPanel()
+            return true
+        }
+        if editingPostId != nil {
+            _ = cancelEditing()
+            return true
+        }
         return false
     }
 
@@ -981,7 +1039,8 @@ extension MainWindow {
         let filesPadH: CGFloat = 8
         let filesW = ceil(filesSize.width) + (filesPadH * 2)
         filesTabPanel.cornerRadius = MMRadius.control
-        filesTabPanel.frame = NSRect(x: messagesTabPanel.frame.maxX + 4, y: popoverHeight - 31, width: filesW, height: tabH)
+        filesTabPanel.frame = NSRect(
+            x: messagesTabPanel.frame.maxX + 4, y: popoverHeight - 31, width: filesW, height: tabH)
         filesTabLabel.frame = NSRect(x: 0, y: (tabH - 16) / 2, width: filesW, height: 16)
         filesTabPanel.addSubview(filesTabLabel)
         filesTabPanel.onHoverChanged = { [weak self] _ in
@@ -998,7 +1057,9 @@ extension MainWindow {
         let closeBtn = RoundedEdgePanel()
         closeBtn.cornerRadius = MMRadius.control
         closeBtn.color = .clear
-        closeBtn.frame = NSRect(x: popoverWidth - 36, y: popoverHeight - 32, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
+        closeBtn.frame = NSRect(
+            x: popoverWidth - 36, y: popoverHeight - 32, width: MMMetric.iconButtonCompact,
+            height: MMMetric.iconButtonCompact)
         let closeIcon = NSImageView()
         if let xImg = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close") {
             closeIcon.image = xImg.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))

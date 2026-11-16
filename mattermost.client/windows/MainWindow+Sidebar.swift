@@ -29,7 +29,8 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             if let preferences = try? await ws.fetchUserPreferences(userId: userId) {
-                let favorites = preferences
+                let favorites =
+                    preferences
                     .filter { $0["category"] == "favorite_channel" }
                     .compactMap { $0["name"] }
                 for favId in favorites {
@@ -54,7 +55,8 @@ extension MainWindow {
         let starGold = Theme.shared.awayIndicator
         let muted = Theme.shared.centerTextMuted
         let dark = Theme.shared.centerText
-        channelStarIconView.contentTintColor = isChannelFavorited
+        channelStarIconView.contentTintColor =
+            isChannelFavorited
             ? starGold
             : (channelStarButton.isHovered ? dark : muted)
     }
@@ -79,17 +81,20 @@ extension MainWindow {
         refreshFavoriteState()
         rebuildFavoritesCategory()
 
-        let preference: [[String: String]] = [[
-            "user_id": userId,
-            "category": "favorite_channel",
-            "name": channelId,
-            "value": ""
-        ]]
+        let preference: [[String: String]] = [
+            [
+                "user_id": userId,
+                "category": "favorite_channel",
+                "name": channelId,
+                "value": "",
+            ]
+        ]
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
                 if let team = self.activeTeam,
-                   let favCatId = self.serverFavoritesCategoryId {
+                    let favCatId = self.serverFavoritesCategoryId
+                {
                     if favorite {
                         try await ws.addChannelToSidebarCategory(
                             teamId: team.id,
@@ -123,7 +128,8 @@ extension MainWindow {
 
     func loadUnreadState() {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam else { return }
+            let team = activeTeam
+        else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
@@ -131,18 +137,21 @@ extension MainWindow {
             var memberships: [MMChannelMembership] = []
             var page = 0
             while true {
-                guard let batch = try? await ws.fetchChannelMemberships(
-                    userId: userId,
-                    teamId: team.id,
-                    page: page,
-                    perPage: 200
-                ) else { return }
+                guard
+                    let batch = try? await ws.fetchChannelMemberships(
+                        userId: userId,
+                        teamId: team.id,
+                        page: page,
+                        perPage: 200
+                    )
+                else { return }
                 memberships += batch
                 if batch.count < 200 { break }
                 page += 1
             }
             guard self.activeTeam?.id == team.id else { return }
-            self.membershipsByChannel = Dictionary(memberships.map { ($0.channel_id, $0) }, uniquingKeysWith: { _, latest in latest })
+            self.membershipsByChannel = Dictionary(
+                memberships.map { ($0.channel_id, $0) }, uniquingKeysWith: { _, latest in latest })
             var unread: [String: Int] = [:]
             var mentions: [String: Int] = [:]
             var viewed: [String: Int64] = [:]
@@ -171,7 +180,8 @@ extension MainWindow {
                 self.totalUnreadThreads = threadResp.total_unread_threads ?? 0
             }
             if let teamsUnread = try? await ws.fetchTeamsUnread(userId: userId) {
-                self.teamUnreadById = Dictionary(teamsUnread.map { ($0.team_id, $0) }, uniquingKeysWith: { _, latest in latest })
+                self.teamUnreadById = Dictionary(
+                    teamsUnread.map { ($0.team_id, $0) }, uniquingKeysWith: { _, latest in latest })
                 self.rebuildTeamMenu()
             }
             self.updateSidebarBadges()
@@ -181,7 +191,8 @@ extension MainWindow {
     }
 
     func updateSidebarBadges() {
-        let allItems: [SidebarItemView] = (threadsSidebarItem.map { [$0] } ?? [])
+        let allItems: [SidebarItemView] =
+            (threadsSidebarItem.map { [$0] } ?? [])
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         for item in allItems {
@@ -193,7 +204,8 @@ extension MainWindow {
             }
             let unread = item.id == "threads" ? totalUnreadThreads : (unreadByChannel[item.id] ?? 0)
             let mentions = item.id == "threads" ? 0 : (mentionsByChannel[item.id] ?? 0)
-            let badgeX = (item.hoverCloseView != nil)
+            let badgeX =
+                (item.hoverCloseView != nil)
                 ? (MMMetric.sidebarWidth - 28 - 34 - 4)
                 : (MMMetric.sidebarWidth - 16 - 34)
             item.badgePanel.frame = NSRect(x: badgeX, y: 6, width: 34, height: 20)
@@ -232,9 +244,13 @@ extension MainWindow {
             }
         }
         let remainingIds = favoriteChannelIds.subtracting(orderedChannels.map(\.id))
-        let remainingChannels = remainingIds
+        let remainingChannels =
+            remainingIds
             .compactMap { channelsById[$0] }
-            .sorted { channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1)) == .orderedAscending }
+            .sorted {
+                channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1))
+                    == .orderedAscending
+            }
         let channels = orderedChannels + remainingChannels
 
         guard !channels.isEmpty else {
@@ -321,7 +337,8 @@ extension MainWindow {
             guard let self = self else { return }
             self.teamHeaderButton.color = isHovered ? hoverBg : Theme.shared.sidebarHeaderBg
             self.teamHeaderButton.setNeedsAppearanceUpdate()
-            self.teamHeaderChevron.contentTintColor = isHovered ? Theme.shared.sidebarHeaderText : Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
+            self.teamHeaderChevron.contentTintColor =
+                isHovered ? Theme.shared.sidebarHeaderText : Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
         }
         teamHeaderButton.onClick = { [weak self] in
             self?.toggleTeamMenu()
@@ -444,9 +461,13 @@ extension MainWindow {
         let teamId = activeTeam?.id ?? ""
         let channels = channelsById.values
             .filter { channelBelongsToTeam($0, teamId: teamId) }
-            .sorted { channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1)) == .orderedAscending }
+            .sorted {
+                channelDisplayName(for: $0).localizedCaseInsensitiveCompare(channelDisplayName(for: $1))
+                    == .orderedAscending
+            }
 
-        var channelsItems: [SidebarItemView] = channels
+        var channelsItems: [SidebarItemView] =
+            channels
             .filter { !isDirectMessageType($0) }
             .map { ch in
                 createSidebarItem(
@@ -459,12 +480,16 @@ extension MainWindow {
                 )
             }
         channelsItems.append(
-            createSidebarItem(id: "add-channels", symbolName: "plus", title: L10n.string("Add Channels"), isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
+            createSidebarItem(
+                id: "add-channels", symbolName: "plus", title: L10n.string("Add Channels"), isSelectable: false,
+                isBotBadge: false, showsCloseOnHover: false)
         )
-        let channelsCat = createSidebarCategory(id: "channels", title: L10n.string("CHANNELS"), showsAddButton: false, items: channelsItems)
+        let channelsCat = createSidebarCategory(
+            id: "channels", title: L10n.string("CHANNELS"), showsAddButton: false, items: channelsItems)
         sidebarCategories.append(channelsCat)
 
-        var dmItems: [SidebarItemView] = channels
+        var dmItems: [SidebarItemView] =
+            channels
             .filter { isDirectMessageType($0) }
             .map { ch in
                 createSidebarItem(
@@ -477,9 +502,12 @@ extension MainWindow {
                 )
             }
         dmItems.append(
-            createSidebarItem(id: "invite-members", symbolName: "plus", title: L10n.string("Invite Members"), isSelectable: false, isBotBadge: false, showsCloseOnHover: false)
+            createSidebarItem(
+                id: "invite-members", symbolName: "plus", title: L10n.string("Invite Members"), isSelectable: false,
+                isBotBadge: false, showsCloseOnHover: false)
         )
-        let dmCat = createSidebarCategory(id: "direct_messages", title: L10n.string("DIRECT MESSAGES"), showsAddButton: true, items: dmItems)
+        let dmCat = createSidebarCategory(
+            id: "direct_messages", title: L10n.string("DIRECT MESSAGES"), showsAddButton: true, items: dmItems)
         wireDMCategoryAddButton(dmCat)
         sidebarCategories.append(dmCat)
 
@@ -528,7 +556,8 @@ extension MainWindow {
         }
         sidebarCategories.removeAll()
 
-        sidebarCategoryOrderIds = response.order.isEmpty
+        sidebarCategoryOrderIds =
+            response.order.isEmpty
             ? response.categories.map(\.id)
             : response.order
         let orderedCategories: [MMSidebarCategory]
@@ -559,7 +588,9 @@ extension MainWindow {
         var placedChannelIds = Set<String>()
 
         for cat in orderedCategories {
-            if cat.type == "favorites" || cat.id == (self.serverFavoritesCategoryId ?? "") || cat.id.lowercased().contains("favorites") {
+            if cat.type == "favorites" || cat.id == (self.serverFavoritesCategoryId ?? "")
+                || cat.id.lowercased().contains("favorites")
+            {
                 for channelId in cat.channel_ids {
                     placedChannelIds.insert(channelId)
                 }
@@ -908,7 +939,8 @@ extension MainWindow {
             btn.onHoverChanged = { [weak btn, weak xView] isHovered in
                 btn?.color = isHovered ? Theme.shared.sidebarText.withAlphaComponent(0.16) : .clear
                 btn?.setNeedsAppearanceUpdate()
-                xView?.contentTintColor = isHovered ? Theme.shared.sidebarText : Theme.shared.sidebarText.withAlphaComponent(0.72)
+                xView?.contentTintColor =
+                    isHovered ? Theme.shared.sidebarText : Theme.shared.sidebarText.withAlphaComponent(0.72)
             }
             btn.onClick = { [weak self] in
                 self?.closeDirectChannel(channelId: id)
@@ -982,26 +1014,32 @@ extension MainWindow {
             guard let self = self else { return }
             do {
                 try await ws.leaveChannel(channelId: channel.id, userId: userId)
-                let pref: [[String: String]] = [[
-                    "user_id": userId,
-                    "category": channel.type == "G" ? "group_channel_show" : "direct_channel_show",
-                    "name": (channel.type == "D" ? (self.resolveDMTargetUserId(for: channel) ?? channel.id) : channel.id),
-                    "value": "false"
-                ]]
+                let pref: [[String: String]] = [
+                    [
+                        "user_id": userId,
+                        "category": channel.type == "G" ? "group_channel_show" : "direct_channel_show",
+                        "name":
+                            (channel.type == "D"
+                            ? (self.resolveDMTargetUserId(for: channel) ?? channel.id) : channel.id),
+                        "value": "false",
+                    ]
+                ]
                 _ = try? await ws.saveUserPreferences(userId: userId, preferences: pref)
 
                 self.channelsById.removeValue(forKey: channel.id)
                 self.channelsByName.removeValue(forKey: channel.name.lowercased())
                 self.channelsByName.removeValue(forKey: channel.display_name.lowercased())
                 if let team = self.activeTeam,
-                   let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                    let categories = try? await ws.fetchSidebarCategories(teamId: team.id)
+                {
                     self.populateSidebarCategories(from: categories, channels: Array(self.channelsById.values))
                 } else {
                     self.rebuildFavoritesCategory()
                     self.layoutLeftSidebar(topBarY: self.mainPanel.bounds.height)
                 }
                 if self.activeChannelId == channel.id || self.selectedSidebarItemId == channel.id {
-                    let fallback = self.channelsByName["town-square"]
+                    let fallback =
+                        self.channelsByName["town-square"]
                         ?? self.channelsByName["town square"]
                         ?? self.channelsById.values.first
                     if let fallback = fallback {
@@ -1023,8 +1061,11 @@ extension MainWindow {
         setSidebarCollapsedState(collapsed, categoryId: categoryId)
         persistSidebarCategoryCollapsed(collapsed, categoryId: categoryId)
         let symbolName = collapsed ? "chevron.right" : "chevron.down"
-        if let chevImg = NSImage(systemSymbolName: symbolName, accessibilityDescription: sidebarCategories[idx].titleLabel.stringValue) {
-            sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(.init(pointSize: 8.5, weight: .bold))
+        if let chevImg = NSImage(
+            systemSymbolName: symbolName, accessibilityDescription: sidebarCategories[idx].titleLabel.stringValue)
+        {
+            sidebarCategories[idx].chevronView.image = chevImg.withSymbolConfiguration(
+                .init(pointSize: 8.5, weight: .bold))
         }
         if contentView != nil {
             layoutLeftSidebar(topBarY: mainPanel.bounds.height)
@@ -1032,7 +1073,8 @@ extension MainWindow {
     }
 
     func updateSidebarSelectionAppearance() {
-        let allItems: [SidebarItemView] = (threadsSidebarItem.map { [$0] } ?? [])
+        let allItems: [SidebarItemView] =
+            (threadsSidebarItem.map { [$0] } ?? [])
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         // Web: selected and hovered rows both use 8% white, labels are 14pt regular.
@@ -1078,17 +1120,20 @@ extension MainWindow {
                     }
                 } else {
                     item.label.font = MMFont.font(ofSize: 14, weight: .regular)
-                    item.label.textColor = muted
+                    item.label.textColor =
+                        muted
                         ? Theme.shared.sidebarText.withAlphaComponent(0.42)
                         : defaultText
                     if item.hasCustomAvatar {
                         item.iconView.contentTintColor = nil
                     } else if item.isBotBadge {
-                        item.iconView.contentTintColor = muted
+                        item.iconView.contentTintColor =
+                            muted
                             ? Theme.shared.sidebarText.withAlphaComponent(0.42)
                             : Theme.shared.sidebarText.withAlphaComponent(0.85)
                     } else {
-                        item.iconView.contentTintColor = muted
+                        item.iconView.contentTintColor =
+                            muted
                             ? Theme.shared.sidebarText.withAlphaComponent(0.42)
                             : defaultIcon
                     }
@@ -1103,7 +1148,9 @@ extension MainWindow {
     }
 
     func layoutTeamHeader(topBarY: CGFloat? = nil) {
-        let top = topBarY ?? (mainPanel.bounds.height > 0 ? mainPanel.bounds.height : (contentView?.bounds.height ?? 800) - 44)
+        let top =
+            topBarY
+            ?? (mainPanel.bounds.height > 0 ? mainPanel.bounds.height : (contentView?.bounds.height ?? 800) - 44)
         teamHeaderLabel.lineBreakMode = .byTruncatingTail
         teamHeaderLabel.maximumNumberOfLines = 1
         let textWidth = ceil(teamHeaderLabel.attributedStringValue.size().width)
@@ -1159,7 +1206,8 @@ extension MainWindow {
             scrollView.autohidesScrollers = true
             scrollView.borderType = .noBorder
             scrollView.drawsBackground = false
-            scrollView.frame = NSRect(x: 0, y: menuHeight - 6 - teamsListHeight, width: menuWidth, height: teamsListHeight)
+            scrollView.frame = NSRect(
+                x: 0, y: menuHeight - 6 - teamsListHeight, width: menuWidth, height: teamsListHeight)
 
             let totalTeamsHeight = max(teamsListHeight, CGFloat(teamsCount) * rowHeight)
             let docView = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: totalTeamsHeight))
@@ -1288,7 +1336,8 @@ extension MainWindow {
             row.onHoverChanged = { [weak row, weak iconView] isHovered in
                 row?.color = isHovered ? Theme.shared.centerText.withAlphaComponent(0.08) : .clear
                 row?.setNeedsAppearanceUpdate()
-                iconView?.contentTintColor = isHovered ? Theme.shared.centerText : Theme.shared.centerText.withAlphaComponent(0.75)
+                iconView?.contentTintColor =
+                    isHovered ? Theme.shared.centerText : Theme.shared.centerText.withAlphaComponent(0.75)
             }
 
             row.onClick = { [weak self] in
@@ -1560,15 +1609,17 @@ extension MainWindow {
                 self.refreshServerTheme(teamId: team.id)
                 let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
                 let savedChannel = savedChannelId.flatMap { self.channelsById[$0] }
-                let botCh = self.channelsByName["system-bot"]
+                let botCh =
+                    self.channelsByName["system-bot"]
                     ?? self.channelsByName["system bot"]
                     ?? allChannels.first(where: { self.isChannelBot(for: $0) })
                 #if DEBUG
-                let isSystemBotArg = CommandLine.arguments.contains("--system-bot")
+                    let isSystemBotArg = CommandLine.arguments.contains("--system-bot")
                 #else
-                let isSystemBotArg = false
+                    let isSystemBotArg = false
                 #endif
-                let defaultCh = (isSystemBotArg ? botCh : nil)
+                let defaultCh =
+                    (isSystemBotArg ? botCh : nil)
                     ?? savedChannel
                     ?? self.channelsByName["town-square"]
                     ?? self.channelsByName["town square"]
@@ -1597,11 +1648,13 @@ extension MainWindow {
         // Row 1: Team header button + "+" button
         layoutTeamHeader(topBarY: topBarY)
 
-        teamAddButton.frame = NSRect(x: sidebarX + 216, y: topBarY - 43.5, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
+        teamAddButton.frame = NSRect(
+            x: sidebarX + 216, y: topBarY - 43.5, width: MMMetric.iconButtonRegular, height: MMMetric.iconButtonRegular)
         teamAddIconView.frame = NSRect(x: 7, y: 7, width: 18, height: 18)
 
         // Row 2: Filter button + "Find channel" pill
-        filterChannelButton.frame = NSRect(x: sidebarX + 16, y: topBarY - 83, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
+        filterChannelButton.frame = NSRect(
+            x: sidebarX + 16, y: topBarY - 83, width: MMMetric.iconButtonSmall, height: MMMetric.iconButtonSmall)
         filterChannelIconView.frame = NSRect(x: 4, y: 4, width: 20, height: 20)
         filterMenu.frame = NSRect(x: sidebarX + 16, y: topBarY - 83 - 8 - 68, width: 180, height: 68)
 
@@ -1630,7 +1683,8 @@ extension MainWindow {
         if let threads = threadsSidebarItem {
             if matches(threads.label.stringValue)
                 && !sidebarFavoritesOnly
-                && (!sidebarUnreadOnly || totalUnreadThreads > 0) {
+                && (!sidebarUnreadOnly || totalUnreadThreads > 0)
+            {
                 hasVisibleUnreadContent = hasVisibleUnreadContent || sidebarUnreadOnly
                 threads.row.isHidden = false
                 threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
@@ -1672,7 +1726,8 @@ extension MainWindow {
                 for item in favorites.items {
                     if !matches(item.label.stringValue)
                         || isFavoritesCollapsed
-                        || (sidebarUnreadOnly && !hasUnread(item.id)) {
+                        || (sidebarUnreadOnly && !hasUnread(item.id))
+                    {
                         item.row.isHidden = true
                         continue
                     }
@@ -1704,7 +1759,8 @@ extension MainWindow {
 
         // Categories & items (the server's own favorites group is replaced by
         // the locally derived FAVORITES branch above)
-        for category in sidebarCategories where !category.id.lowercased().contains("favorites") && category.id != (serverFavoritesCategoryId ?? "") {
+        for category in sidebarCategories
+        where !category.id.lowercased().contains("favorites") && category.id != (serverFavoritesCategoryId ?? "") {
             let visibleItems = category.items.filter {
                 matches($0.label.stringValue)
                     && !favoriteChannelIds.contains($0.id)
@@ -1713,7 +1769,8 @@ extension MainWindow {
             // Favorites-only and unread-only filters hide empty categories.
             if sidebarFavoritesOnly
                 || (!query.isEmpty && visibleItems.isEmpty)
-                || (sidebarUnreadOnly && visibleItems.isEmpty) {
+                || (sidebarUnreadOnly && visibleItems.isEmpty)
+            {
                 category.headerRow.isHidden = true
                 category.items.forEach { $0.row.isHidden = true }
                 continue
@@ -1730,7 +1787,8 @@ extension MainWindow {
                 if !matches(item.label.stringValue)
                     || favoriteChannelIds.contains(item.id)
                     || (sidebarFavoritesOnly && !favoriteChannelIds.contains(item.id))
-                    || (sidebarUnreadOnly && !hasUnread(item.id)) {
+                    || (sidebarUnreadOnly && !hasUnread(item.id))
+                {
                     item.row.isHidden = true
                 } else if category.isCollapsed && item.id != selectedSidebarItemId {
                     item.row.isHidden = true
@@ -1748,7 +1806,8 @@ extension MainWindow {
         }
 
         if sidebarUnreadOnly && !hasVisibleUnreadContent {
-            sidebarEmptyStateLabel.stringValue = query.isEmpty
+            sidebarEmptyStateLabel.stringValue =
+                query.isEmpty
                 ? "No unread channels"
                 : "No unread channels match your filter"
             sidebarEmptyStateLabel.isHidden = false
@@ -1774,11 +1833,12 @@ extension MainWindow {
     }
 
     func scrollSidebarSelectionIntoView() {
-        let items = (threadsSidebarItem.map { [$0] } ?? [])
+        let items =
+            (threadsSidebarItem.map { [$0] } ?? [])
             + (favoritesCategory?.items ?? [])
             + sidebarCategories.flatMap { $0.items }
         guard let item = items.first(where: { $0.id == selectedSidebarItemId }),
-              !item.row.isHidden
+            !item.row.isHidden
         else { return }
         let visible = sidebarScroll.contentView.bounds.insetBy(dx: 0, dy: -8)
         if !visible.contains(item.row.frame) {

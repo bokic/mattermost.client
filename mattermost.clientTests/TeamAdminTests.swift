@@ -192,7 +192,7 @@ final class TeamAdminTests: XCTestCase {
                 scheme_user: true,
                 scheme_admin: false,
                 explicit_roles: nil
-            ),
+            )
         ]
 
         window.memberSearchQuery = "char"

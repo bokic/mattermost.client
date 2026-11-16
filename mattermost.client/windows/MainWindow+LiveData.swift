@@ -26,7 +26,8 @@ extension MainWindow {
 
     func markActiveChannelViewed() {
         guard !activeChannelId.isEmpty,
-              let ws = webService, ws.isLogged() else { return }
+            let ws = webService, ws.isLogged()
+        else { return }
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -57,7 +58,9 @@ extension MainWindow {
                 }
                 self.composerHelpLabel.stringValue = "All channels marked as read"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-                    guard let self = self, self.composerHelpLabel.stringValue == "All channels marked as read" else { return }
+                    guard let self = self, self.composerHelpLabel.stringValue == "All channels marked as read" else {
+                        return
+                    }
                     self.composerHelpLabel.stringValue = self.defaultComposerStatusText()
                 }
             } catch {
@@ -77,8 +80,9 @@ extension MainWindow {
 
     func markActiveChannelUnread() {
         guard let ws = webService, ws.isLogged(),
-              !activeChannelId.isEmpty,
-              let lastPost = currentChannelPosts.last(where: { ($0.root_id ?? "").isEmpty }) else { return }
+            !activeChannelId.isEmpty,
+            let lastPost = currentChannelPosts.last(where: { ($0.root_id ?? "").isEmpty })
+        else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
         let channelId = activeChannelId
@@ -119,7 +123,8 @@ extension MainWindow {
         ws.onReactionChanged = { [weak self] postId in
             Task { @MainActor [weak self] in
                 guard let self = self,
-                      let ws = self.webService else { return }
+                    let ws = self.webService
+                else { return }
                 if let updated = try? await ws.fetchPost(postId: postId) {
                     self.applyUpdatedPost(updated)
                 }
@@ -161,14 +166,16 @@ extension MainWindow {
                     if userId == myId {
                         self.loadUnreadState()
                         if let team = self.activeTeam, let ws = self.webService,
-                           let categories = try? await ws.fetchSidebarCategories(teamId: team.id) {
+                            let categories = try? await ws.fetchSidebarCategories(teamId: team.id)
+                        {
                             self.populateSidebarCategories(
                                 from: categories,
                                 channels: Array(self.channelsById.values)
                             )
                         }
                     } else if self.isRightPanelVisible && self.rightPanelMode == .members
-                        && (channelId.isEmpty || channelId == self.activeChannelId) {
+                        && (channelId.isEmpty || channelId == self.activeChannelId)
+                    {
                         self.loadChannelMembers()
                     }
                 case .channelUpdated(let channel):
@@ -197,7 +204,9 @@ extension MainWindow {
                 case .emojiAdded:
                     self.loadCustomEmojis()
                 case .other(let eventName, _):
-                    if eventName == "custom_status_set" || eventName == "custom_status_removed" || eventName == "user_updated" {
+                    if eventName == "custom_status_set" || eventName == "custom_status_removed"
+                        || eventName == "user_updated"
+                    {
                         self.refreshCustomStatus()
                     }
                 default:
@@ -262,7 +271,8 @@ extension MainWindow {
                 self.threadReplyTextView.placeholderString = typingPlaceholder
                 let work = DispatchWorkItem { [weak self] in
                     guard let self = self,
-                          self.threadReplyTextView.placeholderString == typingPlaceholder else { return }
+                        self.threadReplyTextView.placeholderString == typingPlaceholder
+                    else { return }
                     self.threadReplyTextView.placeholderString = "Reply to thread…"
                 }
                 self.threadTypingIndicatorWorkItem = work
@@ -274,10 +284,11 @@ extension MainWindow {
 
             let currentStatus = self.composerHelpLabel.stringValue
             guard self.editingPostId == nil,
-                  !currentStatus.hasPrefix("Uploading"),
-                  !currentStatus.hasPrefix("Sending"),
-                  !currentStatus.hasPrefix("Saving"),
-                  currentStatus != "Drop files to attach" else { return }
+                !currentStatus.hasPrefix("Uploading"),
+                !currentStatus.hasPrefix("Sending"),
+                !currentStatus.hasPrefix("Saving"),
+                currentStatus != "Drop files to attach"
+            else { return }
 
             self.typingIndicatorWorkItem?.cancel()
             let typingStatus = "\(typer) is typing..."
@@ -347,9 +358,9 @@ extension MainWindow {
                 let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
                 let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
                 #if DEBUG
-                let isSystemBotArg = CommandLine.arguments.contains("--system-bot")
+                    let isSystemBotArg = CommandLine.arguments.contains("--system-bot")
                 #else
-                let isSystemBotArg = false
+                    let isSystemBotArg = false
                 #endif
                 let initial = try await self.repository.loadInitialWorkspaceData(
                     savedTeamId: savedTeamId,
@@ -420,11 +431,14 @@ extension MainWindow {
         composerPlaceholderLabel.stringValue = L10n.format("Write to %@", resolvedTitle)
         entryView.placeholderString = composerPlaceholderLabel.stringValue
         if ch.type == "D" {
-            heroDescriptionLabel.stringValue = "This is the start of your direct message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
+            heroDescriptionLabel.stringValue =
+                "This is the start of your direct message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
         } else if ch.type == "G" {
-            heroDescriptionLabel.stringValue = "This is the start of your group message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
+            heroDescriptionLabel.stringValue =
+                "This is the start of your group message history with \(resolvedTitle). Messages and files shared here are not shown to people outside this conversation."
         } else {
-            heroDescriptionLabel.stringValue = "Welcome to \(resolvedTitle). Post messages here that you want everyone to see. Everyone\nautomatically becomes a member of this channel when they join the team."
+            heroDescriptionLabel.stringValue =
+                "Welcome to \(resolvedTitle). Post messages here that you want everyone to see. Everyone\nautomatically becomes a member of this channel when they join the team."
         }
         if channelChanged {
             restoreComposerDraft(for: ch.id)
@@ -444,8 +458,9 @@ extension MainWindow {
         guard let ws = webService, ws.isLogged(), !channelId.isEmpty else { return }
         Task { @MainActor [weak self] in
             guard let self = self,
-                  let members = try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200),
-                  self.activeChannelId == channelId else { return }
+                let members = try? await ws.fetchChannelMembers(channelId: channelId, perPage: 200),
+                self.activeChannelId == channelId
+            else { return }
             self.channelMembersCountLabel.stringValue = members.count >= 200 ? "200+" : "\(members.count)"
             self.layoutRightChatPanel()
         }
@@ -459,7 +474,8 @@ extension MainWindow {
                 fetchAvatarIfNeeded(for: post.user_id)
             }
             if !result.missingUserIds.isEmpty,
-               let fetchedUsers = try? await ws.fetchUsersByIds(result.missingUserIds) {
+                let fetchedUsers = try? await ws.fetchUsersByIds(result.missingUserIds)
+            {
                 for u in fetchedUsers {
                     usersById[u.id] = u
                     usersByUsername[u.username.lowercased()] = u
@@ -519,9 +535,11 @@ extension MainWindow {
         guard let postId = pendingJumpPostId else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.pendingJumpPostId == postId else { return }
-            guard let row = self.timelineDocView.subviews.first(where: {
-                $0.identifier?.rawValue == "postRow_\(postId)"
-            }) else {
+            guard
+                let row = self.timelineDocView.subviews.first(where: {
+                    $0.identifier?.rawValue == "postRow_\(postId)"
+                })
+            else {
                 self.pendingJumpPostId = nil
                 return
             }
@@ -572,7 +590,7 @@ extension MainWindow {
             return nil
         }
         guard let footer = findFooter(in: timelineDocView),
-              let label = footer.subviews.compactMap({ $0 as? NSTextField }).first
+            let label = footer.subviews.compactMap({ $0 as? NSTextField }).first
         else { return }
         label.stringValue = "\(count) \(count == 1 ? "reply" : "replies")"
         footer.isHidden = count == 0
@@ -642,7 +660,8 @@ extension MainWindow {
                 me = try? await ws.fetchCurrentUser()
             }
             guard let userId = me?.id,
-                  let preferences = try? await ws.fetchUserPreferences(userId: userId) else { return }
+                let preferences = try? await ws.fetchUserPreferences(userId: userId)
+            else { return }
             ThemeManager.shared.apply(preferences: preferences, teamId: teamId)
             self.applyCurrentTheme()
         }
@@ -748,9 +767,10 @@ extension MainWindow {
 
     func loadOlderPosts() {
         guard !isLoadingOlderPosts, !didLoadAllHistory,
-              let before = currentChannelPosts.first?.id,
-              !activeChannelId.isEmpty,
-              let ws = webService, ws.isLogged() else { return }
+            let before = currentChannelPosts.first?.id,
+            !activeChannelId.isEmpty,
+            let ws = webService, ws.isLogged()
+        else { return }
         let channelId = activeChannelId
         isLoadingOlderPosts = true
 

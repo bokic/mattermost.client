@@ -24,12 +24,14 @@ final class SettingsPreferencesTests: XCTestCase {
 
     private func makeChannel(id: String, displayName: String, type: String = "O") -> MMChannel {
         let json = """
-        {"id": "\(id)", "type": "\(type)", "display_name": "\(displayName)", "name": "\(displayName.lowercased())"}
-        """.data(using: .utf8)!
+            {"id": "\(id)", "type": "\(type)", "display_name": "\(displayName)", "name": "\(displayName.lowercased())"}
+            """.data(using: .utf8)!
         return try! JSONDecoder().decode(MMChannel.self, from: json)
     }
 
-    private func makeMembership(channelId: String, desktop: String? = nil, markUnread: String? = nil) -> MMChannelMembership {
+    private func makeMembership(channelId: String, desktop: String? = nil, markUnread: String? = nil)
+        -> MMChannelMembership
+    {
         var notifyDict: [String: String] = [:]
         if let desktop = desktop { notifyDict["desktop"] = desktop }
         if let markUnread = markUnread { notifyDict["mark_unread"] = markUnread }
@@ -37,8 +39,8 @@ final class SettingsPreferencesTests: XCTestCase {
         let notifyStr = String(data: notifyJSON, encoding: .utf8) ?? "{}"
 
         let json = """
-        {"channel_id": "\(channelId)", "notify_props": \(notifyStr)}
-        """.data(using: .utf8)!
+            {"channel_id": "\(channelId)", "notify_props": \(notifyStr)}
+            """.data(using: .utf8)!
         return try! JSONDecoder().decode(MMChannelMembership.self, from: json)
     }
 
@@ -66,7 +68,7 @@ final class SettingsPreferencesTests: XCTestCase {
             "chA": chA,
             "chB": chB,
             "chC": chC,
-            "chD": chD
+            "chD": chD,
         ]
 
         // chC is in mutedChannelIds
@@ -94,8 +96,8 @@ final class SettingsPreferencesTests: XCTestCase {
         window.mutedChannelIds.insert("c1")
 
         let userJson = """
-        {"id": "u1", "username": "tester", "email": "tester@example.com", "notify_props": {"mention_keys": "urgent, review", "desktop": "mention", "desktop_sound": "true"}}
-        """.data(using: .utf8)!
+            {"id": "u1", "username": "tester", "email": "tester@example.com", "notify_props": {"mention_keys": "urgent, review", "desktop": "mention", "desktop_sound": "true"}}
+            """.data(using: .utf8)!
         window.currentUser = try! JSONDecoder().decode(MMUser.self, from: userJson)
 
         window.loadSettingsPanel()
@@ -226,13 +228,13 @@ final class SettingsPreferencesTests: XCTestCase {
         defer { window.close() }
 
         let userJson = """
-        {"id": "user123", "username": "alice"}
-        """.data(using: .utf8)!
+            {"id": "user123", "username": "alice"}
+            """.data(using: .utf8)!
         window.currentUser = try! JSONDecoder().decode(MMUser.self, from: userJson)
 
         let postJson = """
-        {"id": "p1", "create_at": 100000, "channel_id": "c1", "user_id": "user456", "message": "Hey @alice check this out"}
-        """.data(using: .utf8)!
+            {"id": "p1", "create_at": 100000, "channel_id": "c1", "user_id": "user456", "message": "Hey @alice check this out"}
+            """.data(using: .utf8)!
         let post = try! JSONDecoder().decode(MMPost.self, from: postJson)
 
         let (rowView, _) = window.createPostRow(post: post, width: 600, timeStr: "12:00 PM")
@@ -252,14 +254,14 @@ final class SettingsPreferencesTests: XCTestCase {
 
         let future = ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
         let userJson = """
-        {
-            "id": "u1",
-            "username": "bob",
-            "props": {
-                "customStatus": "{\\\"emoji\\\":\\\"calendar\\\",\\\"text\\\":\\\"In a meeting\\\",\\\"expires_at\\\":\\\"\(future)\\\"}"
+            {
+                "id": "u1",
+                "username": "bob",
+                "props": {
+                    "customStatus": "{\\\"emoji\\\":\\\"calendar\\\",\\\"text\\\":\\\"In a meeting\\\",\\\"expires_at\\\":\\\"\(future)\\\"}"
+                }
             }
-        }
-        """.data(using: .utf8)!
+            """.data(using: .utf8)!
         let user = try! JSONDecoder().decode(MMUser.self, from: userJson)
 
         window.applyServerCustomStatus(from: user)
@@ -283,12 +285,12 @@ final class SettingsPreferencesTests: XCTestCase {
         UserDefaults.standard.set("calendar", forKey: "customStatusEmoji")
 
         let userJson = """
-        {
-            "id": "u1",
-            "username": "bob",
-            "props": {}
-        }
-        """.data(using: .utf8)!
+            {
+                "id": "u1",
+                "username": "bob",
+                "props": {}
+            }
+            """.data(using: .utf8)!
         let user = try! JSONDecoder().decode(MMUser.self, from: userJson)
 
         window.applyServerCustomStatus(from: user)
@@ -311,14 +313,14 @@ final class SettingsPreferencesTests: XCTestCase {
 
         let past = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
         let userJson = """
-        {
-            "id": "u1",
-            "username": "bob",
-            "props": {
-                "customStatus": "{\\\"emoji\\\":\\\"palm_tree\\\",\\\"text\\\":\\\"Past Status\\\",\\\"expires_at\\\":\\\"\(past)\\\"}"
+            {
+                "id": "u1",
+                "username": "bob",
+                "props": {
+                    "customStatus": "{\\\"emoji\\\":\\\"palm_tree\\\",\\\"text\\\":\\\"Past Status\\\",\\\"expires_at\\\":\\\"\(past)\\\"}"
+                }
             }
-        }
-        """.data(using: .utf8)!
+            """.data(using: .utf8)!
         let user = try! JSONDecoder().decode(MMUser.self, from: userJson)
 
         window.applyServerCustomStatus(from: user)
@@ -434,13 +436,13 @@ final class SettingsPreferencesTests: XCTestCase {
         defer { window.close() }
 
         let userJson = """
-        {"id": "myUser", "username": "me"}
-        """.data(using: .utf8)!
+            {"id": "myUser", "username": "me"}
+            """.data(using: .utf8)!
         window.currentUser = try! JSONDecoder().decode(MMUser.self, from: userJson)
 
         let chJson = """
-        {"id": "dm1", "type": "D", "name": "myUser__otherUser", "display_name": "otherUser"}
-        """.data(using: .utf8)!
+            {"id": "dm1", "type": "D", "name": "myUser__otherUser", "display_name": "otherUser"}
+            """.data(using: .utf8)!
         let ch = try! JSONDecoder().decode(MMChannel.self, from: chJson)
         window.channelsById[ch.id] = ch
 
@@ -453,20 +455,20 @@ final class SettingsPreferencesTests: XCTestCase {
         defer { window.close() }
 
         let botJson = """
-        {"id": "b1", "username": "botty", "is_bot": true}
-        """.data(using: .utf8)!
+            {"id": "b1", "username": "botty", "is_bot": true}
+            """.data(using: .utf8)!
         let bot = try! JSONDecoder().decode(MMUser.self, from: botJson)
         XCTAssertEqual(window.userBadgeString(for: bot), "BOT")
 
         let guestJson = """
-        {"id": "g1", "username": "guest_user", "roles": "system_guest"}
-        """.data(using: .utf8)!
+            {"id": "g1", "username": "guest_user", "roles": "system_guest"}
+            """.data(using: .utf8)!
         let guest = try! JSONDecoder().decode(MMUser.self, from: guestJson)
         XCTAssertEqual(window.userBadgeString(for: guest), "GUEST")
 
         let regularJson = """
-        {"id": "u1", "username": "alice", "roles": "system_user"}
-        """.data(using: .utf8)!
+            {"id": "u1", "username": "alice", "roles": "system_user"}
+            """.data(using: .utf8)!
         let regular = try! JSONDecoder().decode(MMUser.self, from: regularJson)
         XCTAssertNil(window.userBadgeString(for: regular))
     }
@@ -475,7 +477,8 @@ final class SettingsPreferencesTests: XCTestCase {
         let window = makeWindow()
         defer { window.close() }
 
-        let u1 = try! JSONDecoder().decode(MMUser.self, from: "{\"id\":\"u1\",\"username\":\"alice\"}".data(using: .utf8)!)
+        let u1 = try! JSONDecoder().decode(
+            MMUser.self, from: "{\"id\":\"u1\",\"username\":\"alice\"}".data(using: .utf8)!)
         window.dmUsers = [u1]
         window.dmSearchResults = [u1]
         window.selectedDMUserIds = ["u1"]
@@ -495,11 +498,14 @@ final class SettingsPreferencesTests: XCTestCase {
         let window = makeWindow()
         defer { window.close() }
 
-        let teamA = try! JSONDecoder().decode(MMTeam.self, from: "{\"id\":\"tA\",\"name\":\"team-a\",\"display_name\":\"Team A\"}".data(using: .utf8)!)
-        let teamB = try! JSONDecoder().decode(MMTeam.self, from: "{\"id\":\"tB\",\"name\":\"team-b\",\"display_name\":\"Team B\"}".data(using: .utf8)!)
+        let teamA = try! JSONDecoder().decode(
+            MMTeam.self, from: "{\"id\":\"tA\",\"name\":\"team-a\",\"display_name\":\"Team A\"}".data(using: .utf8)!)
+        let teamB = try! JSONDecoder().decode(
+            MMTeam.self, from: "{\"id\":\"tB\",\"name\":\"team-b\",\"display_name\":\"Team B\"}".data(using: .utf8)!)
 
         window.activeTeam = teamA
-        let u1 = try! JSONDecoder().decode(MMUser.self, from: "{\"id\":\"u1\",\"username\":\"alice\"}".data(using: .utf8)!)
+        let u1 = try! JSONDecoder().decode(
+            MMUser.self, from: "{\"id\":\"u1\",\"username\":\"alice\"}".data(using: .utf8)!)
         window.dmUsers = [u1]
 
         window.updateTeamHeader(with: teamB)
@@ -530,12 +536,26 @@ final class SettingsPreferencesTests: XCTestCase {
         let window = makeWindow()
         defer { window.close() }
 
-        let team = try! JSONDecoder().decode(MMTeam.self, from: "{\"id\":\"t1\",\"name\":\"team-one\",\"display_name\":\"Team One\"}".data(using: .utf8)!)
+        let team = try! JSONDecoder().decode(
+            MMTeam.self, from: "{\"id\":\"t1\",\"name\":\"team-one\",\"display_name\":\"Team One\"}".data(using: .utf8)!
+        )
         window.activeTeam = team
 
-        let pubCh = try! JSONDecoder().decode(MMChannel.self, from: "{\"id\":\"chPub\",\"team_id\":\"t1\",\"type\":\"O\",\"display_name\":\"Town Square\",\"name\":\"town-square\"}".data(using: .utf8)!)
-        let privChJoined = try! JSONDecoder().decode(MMChannel.self, from: "{\"id\":\"chPriv1\",\"team_id\":\"t1\",\"type\":\"P\",\"display_name\":\"Executives\",\"name\":\"executives\"}".data(using: .utf8)!)
-        let privChUnjoined = try! JSONDecoder().decode(MMChannel.self, from: "{\"id\":\"chPriv2\",\"team_id\":\"t1\",\"type\":\"P\",\"display_name\":\"Secret Ops\",\"name\":\"secret-ops\"}".data(using: .utf8)!)
+        let pubCh = try! JSONDecoder().decode(
+            MMChannel.self,
+            from:
+                "{\"id\":\"chPub\",\"team_id\":\"t1\",\"type\":\"O\",\"display_name\":\"Town Square\",\"name\":\"town-square\"}"
+                .data(using: .utf8)!)
+        let privChJoined = try! JSONDecoder().decode(
+            MMChannel.self,
+            from:
+                "{\"id\":\"chPriv1\",\"team_id\":\"t1\",\"type\":\"P\",\"display_name\":\"Executives\",\"name\":\"executives\"}"
+                .data(using: .utf8)!)
+        let privChUnjoined = try! JSONDecoder().decode(
+            MMChannel.self,
+            from:
+                "{\"id\":\"chPriv2\",\"team_id\":\"t1\",\"type\":\"P\",\"display_name\":\"Secret Ops\",\"name\":\"secret-ops\"}"
+                .data(using: .utf8)!)
 
         window.channelsById[pubCh.id] = pubCh
         window.channelsById[privChJoined.id] = privChJoined

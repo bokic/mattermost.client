@@ -186,8 +186,11 @@ public final class AppcastParser: NSObject, XMLParserDelegate, @unchecked Sendab
             guard let downloadURL = enclosureURL else { return }
 
             let cleanTitle = currentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            let version = enclosureVersion.isEmpty ? cleanTitle : enclosureVersion.trimmingCharacters(in: .whitespacesAndNewlines)
-            let shortVersion = enclosureShortVersion.isEmpty ? version : enclosureShortVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            let version =
+                enclosureVersion.isEmpty ? cleanTitle : enclosureVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            let shortVersion =
+                enclosureShortVersion.isEmpty
+                ? version : enclosureShortVersion.trimmingCharacters(in: .whitespacesAndNewlines)
             let dateStr = currentPubDate.trimmingCharacters(in: .whitespacesAndNewlines)
             let pubDate = Self.rfc2822Formatter.date(from: dateStr) ?? Self.iso8601Formatter.date(from: dateStr)
             let cleanLink = currentReleaseNotesLink.trimmingCharacters(in: .whitespacesAndNewlines)

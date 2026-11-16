@@ -70,7 +70,9 @@ final class ProfileTests: XCTestCase {
 
         // Expired custom status returns nil
         let pastDate = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
-        user.props = ["customStatus": "{\"emoji\":\"beach_umbrella\",\"text\":\"Vacation\",\"expires_at\":\"\(pastDate)\"}"]
+        user.props = [
+            "customStatus": "{\"emoji\":\"beach_umbrella\",\"text\":\"Vacation\",\"expires_at\":\"\(pastDate)\"}"
+        ]
         XCTAssertNil(window.userCustomStatus(for: user))
     }
 

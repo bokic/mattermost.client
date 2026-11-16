@@ -14,7 +14,8 @@ extension MainWindow {
         let menu = NSMenu()
         let muted = isChannelMuted(channelId)
         let favorite = favoriteChannelIds.contains(channelId)
-        let unread = (unreadByChannel[channelId] ?? 0) > 0
+        let unread =
+            (unreadByChannel[channelId] ?? 0) > 0
             || (mentionsByChannel[channelId] ?? 0) > 0
 
         func add(_ title: String, _ action: Selector, _ id: String? = nil, state: NSControl.StateValue = .off) {
@@ -113,14 +114,14 @@ extension MainWindow {
 
     @objc private func contextMarkUnread(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
-              let ws = webService, ws.isLogged()
+            let ws = webService, ws.isLogged()
         else { return }
         let userId = currentUser?.id ?? ws.currentUserId
         guard !userId.isEmpty else { return }
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             guard let list = try? await ws.fetchChannelPosts(channelId: id, perPage: 1),
-                  let post = list.order.compactMap({ list.posts[$0] }).first
+                let post = list.order.compactMap({ list.posts[$0] }).first
             else { return }
             do {
                 try await ws.markChannelUnread(userId: userId, channelId: id, postId: post.id)
@@ -143,7 +144,7 @@ extension MainWindow {
 
     @objc private func contextCopyLink(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
-              let channel = channelsById[id]
+            let channel = channelsById[id]
         else { return }
         let teamName = activeTeam?.name ?? ""
         let path = "/\(teamName)/channels/\(channel.name)"
@@ -154,7 +155,7 @@ extension MainWindow {
 
     @objc private func contextLeaveChannel(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
-              let channel = channelsById[id]
+            let channel = channelsById[id]
         else { return }
         let alert = NSAlert()
         alert.messageText = "Leave \(channelDisplayName(for: channel))?"
@@ -178,7 +179,7 @@ extension MainWindow {
 
     @objc private func contextSetNotificationPreference(_ sender: NSMenuItem) {
         guard let values = sender.representedObject as? [String],
-              values.count == 2
+            values.count == 2
         else { return }
         setChannelNotificationPreference(channelId: values[0], desktop: values[1])
     }

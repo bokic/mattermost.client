@@ -14,8 +14,8 @@ extension MainWindow {
         guard linkPreviewsEnabled else { return }
         let key = url.absoluteString
         guard linkPreviewsByURL[key] == nil,
-              !linkPreviewLoading.contains(key),
-              !linkPreviewFailures.contains(key)
+            !linkPreviewLoading.contains(key),
+            !linkPreviewFailures.contains(key)
         else { return }
 
         linkPreviewLoading.insert(key)
@@ -133,7 +133,8 @@ extension MainWindow {
                 Task { @MainActor [weak imageView] in
                     defer { self.linkPreviewImageLoading.remove(key) }
                     if let data = await LinkPreviewService.fetchImageData(url: imageURL),
-                       let image = NSImage(data: data) {
+                        let image = NSImage(data: data)
+                    {
                         self.linkPreviewImages[key] = image
                         imageView?.image = image
                     }
@@ -142,7 +143,8 @@ extension MainWindow {
         }
 
         card.onHoverChanged = { [weak card] isHovered in
-            card?.color = isHovered
+            card?.color =
+                isHovered
                 ? Theme.shared.centerHover
                 : Theme.shared.centerHoverSubtle
             card?.setNeedsAppearanceUpdate()

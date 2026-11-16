@@ -58,7 +58,8 @@ final class DraftStore: DraftStoreProtocol {
     private func reload() {
         // Load channel drafts
         if let data = defaults.data(forKey: scope.key("channelDrafts")),
-           let drafts = try? decoder.decode([String: ComposerDraft].self, from: data) {
+            let drafts = try? decoder.decode([String: ComposerDraft].self, from: data)
+        {
             cachedChannelDrafts = drafts
         } else {
             cachedChannelDrafts = [:]
@@ -66,7 +67,8 @@ final class DraftStore: DraftStoreProtocol {
 
         // Load thread drafts
         if let data = defaults.data(forKey: scope.key("threadDrafts")),
-           let drafts = try? decoder.decode([String: String].self, from: data) {
+            let drafts = try? decoder.decode([String: String].self, from: data)
+        {
             cachedThreadDrafts = drafts
         } else {
             cachedThreadDrafts = [:]

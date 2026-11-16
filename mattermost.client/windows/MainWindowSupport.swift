@@ -173,7 +173,7 @@ class FileTypeIconView: NSView {
         guard !label.isEmpty else { return }
         let attrs: [NSAttributedString.Key: Any] = [
             .font: MMFont.font(ofSize: 8, weight: .bold),
-            .foregroundColor: blue
+            .foregroundColor: blue,
         ]
         let size = (label as NSString).size(withAttributes: attrs)
         label.draw(
@@ -218,7 +218,7 @@ enum EmojiCatalog {
         ("Objects", "lightbulb"),
         ("Symbols", "heart"),
         ("Flags", "flag"),
-        ("Custom", "star.square")
+        ("Custom", "star.square"),
     ]
 
     private static let categoryNames: [String: String] = [
@@ -238,20 +238,22 @@ enum EmojiCatalog {
     static let entries: [EmojiEntry] = {
         let bundles = [Bundle.main, Bundle(for: MainWindow.self)]
         for bundle in bundles {
-            let url = bundle.url(forResource: "emoji", withExtension: "json", subdirectory: "Resources")
+            let url =
+                bundle.url(forResource: "emoji", withExtension: "json", subdirectory: "Resources")
                 ?? bundle.url(forResource: "emoji", withExtension: "json")
             guard let url = url,
-                  let data = try? Data(contentsOf: url),
-                  let records = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+                let data = try? Data(contentsOf: url),
+                let records = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
             else { continue }
 
             var seen = Set<String>()
             var entries: [EmojiEntry] = []
             for record in records {
                 guard let unified = record["unified"] as? String,
-                      let glyph = emojiGlyph(unified: unified)
+                    let glyph = emojiGlyph(unified: unified)
                 else { continue }
-                let names = (record["short_names"] as? [String])
+                let names =
+                    (record["short_names"] as? [String])
                     ?? (record["short_name"] as? String).map { [$0] }
                     ?? []
                 let categorySlug = record["category"] as? String ?? ""
@@ -273,7 +275,7 @@ enum EmojiCatalog {
         var scalars = String.UnicodeScalarView()
         for part in unified.split(separator: "-") {
             guard let value = UInt32(part, radix: 16),
-                  let scalar = UnicodeScalar(value)
+                let scalar = UnicodeScalar(value)
             else { return nil }
             scalars.append(scalar)
         }
@@ -290,7 +292,7 @@ enum EmojiCatalog {
         "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐",
         "coffee": "☕", "computer": "💻", "palm_tree": "🌴", "beer": "🍺",
         "pizza": "🍕", "cake": "🎂", "sunny": "☀️", "rainbow": "🌈",
-        "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔"
+        "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔",
     ]
 
     static let allGlyphs: [String: String] = {
@@ -355,9 +357,10 @@ final class ComposerTextView: NSTextView {
 
     override func paste(_ sender: Any?) {
         if let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage,
-           let tiff = image.tiffRepresentation,
-           let rep = NSBitmapImageRep(data: tiff),
-           let png = rep.representation(using: .png, properties: [:]) {
+            let tiff = image.tiffRepresentation,
+            let rep = NSBitmapImageRep(data: tiff),
+            let png = rep.representation(using: .png, properties: [:])
+        {
             onImagePasted?(png, "pasted-image.png")
             return
         }
@@ -372,7 +375,7 @@ final class ComposerTextView: NSTextView {
             .rtf,
             .rtfd,
             .tiff,
-            .png
+            .png,
         ])
     }
 
@@ -436,7 +439,7 @@ final class ComposerTextView: NSTextView {
         guard string.isEmpty, !placeholderString.isEmpty, let font = font else { return }
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: placeholderColor
+            .foregroundColor: placeholderColor,
         ]
         let origin = NSPoint(
             x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0),

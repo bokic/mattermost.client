@@ -111,8 +111,8 @@ extension MainWindow {
 
     func createSidebarCategoryInteractive() {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              let userId = currentCategoryUserId()
+            let team = activeTeam,
+            let userId = currentCategoryUserId()
         else { return }
         let alert = NSAlert()
         alert.messageText = "New category"
@@ -149,15 +149,16 @@ extension MainWindow {
 
     func renameSidebarCategoryInteractive(_ categoryId: String) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              let userId = currentCategoryUserId()
+            let team = activeTeam,
+            let userId = currentCategoryUserId()
         else { return }
         let alert = NSAlert()
         alert.messageText = "Rename category"
         alert.addButton(withTitle: "Rename")
         alert.addButton(withTitle: "Cancel")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        field.stringValue = sidebarCategories
+        field.stringValue =
+            sidebarCategories
             .first(where: { $0.id == categoryId })?
             .titleLabel.stringValue ?? ""
         alert.accessoryView = field
@@ -184,9 +185,9 @@ extension MainWindow {
 
     @objc private func deleteSidebarCategoryMenuSelected(_ sender: NSMenuItem) {
         guard let categoryId = sender.representedObject as? String,
-              let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              let userId = currentCategoryUserId()
+            let ws = webService, ws.isLogged(),
+            let team = activeTeam,
+            let userId = currentCategoryUserId()
         else { return }
         let alert = NSAlert()
         alert.messageText = "Delete category?"
@@ -223,10 +224,11 @@ extension MainWindow {
 
     func moveSidebarCategory(_ categoryId: String, offset: Int) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              let userId = currentCategoryUserId()
+            let team = activeTeam,
+            let userId = currentCategoryUserId()
         else { return }
-        let displayedIds = sidebarCategories
+        let displayedIds =
+            sidebarCategories
             .map(\.id)
             .filter { !$0.lowercased().contains("favorites") }
         guard let displayedIndex = displayedIds.firstIndex(of: categoryId) else { return }
@@ -234,7 +236,7 @@ extension MainWindow {
         guard displayedIds.indices.contains(targetDisplayedIndex) else { return }
         let targetId = displayedIds[targetDisplayedIndex]
         guard let sourceIndex = sidebarCategoryOrderIds.firstIndex(of: categoryId),
-              let targetIndex = sidebarCategoryOrderIds.firstIndex(of: targetId)
+            let targetIndex = sidebarCategoryOrderIds.firstIndex(of: targetId)
         else { return }
         var order = sidebarCategoryOrderIds
         order.swapAt(sourceIndex, targetIndex)
@@ -310,10 +312,10 @@ extension MainWindow {
 
     @objc private func addChannelChoiceSelected(_ sender: NSMenuItem) {
         guard let ids = sender.representedObject as? [String],
-              ids.count == 2,
-              let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              let userId = currentCategoryUserId()
+            ids.count == 2,
+            let ws = webService, ws.isLogged(),
+            let team = activeTeam,
+            let userId = currentCategoryUserId()
         else { return }
         let categoryId = ids[0]
         let channelId = ids[1]
@@ -335,8 +337,8 @@ extension MainWindow {
 
     func persistSidebarCategoryCollapsed(_ collapsed: Bool, categoryId: String) {
         guard let ws = webService, ws.isLogged(),
-              let team = activeTeam,
-              let userId = currentCategoryUserId()
+            let team = activeTeam,
+            let userId = currentCategoryUserId()
         else { return }
         Task { @MainActor in
             _ = try? await ws.updateSidebarCategory(

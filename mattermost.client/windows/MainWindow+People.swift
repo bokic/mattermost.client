@@ -127,7 +127,8 @@ extension MainWindow {
         default: symbolName = nil
         }
         guard let symbolName = symbolName,
-              let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else { return }
+            let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        else { return }
 
         let inset = max(2, dot.bounds.width * 0.16)
         let glyph = NSImageView(frame: dot.bounds.insetBy(dx: inset, dy: inset))
@@ -172,10 +173,13 @@ extension MainWindow {
 
         if let ws = webService, ws.isLogged() {
             let targetUserId = currentUser?.id ?? ws.currentUserId
-            DebugLog.log("selectUserStatus: index=\(index), statStr=\(statStr), targetUserId=\(targetUserId), dndEndTime=\(String(describing: dndEndTime))")
+            DebugLog.log(
+                "selectUserStatus: index=\(index), statStr=\(statStr), targetUserId=\(targetUserId), dndEndTime=\(String(describing: dndEndTime))"
+            )
             Task { @MainActor [weak self] in
                 do {
-                    let updated = try await ws.updateUserStatus(userId: targetUserId, status: statStr, dndEndTime: dndEndTime)
+                    let updated = try await ws.updateUserStatus(
+                        userId: targetUserId, status: statStr, dndEndTime: dndEndTime)
                     DebugLog.log("Successfully updated user status on backend for \(targetUserId) to \(updated.status)")
                 } catch {
                     DebugLog.error("Failed to update user status on server: \(error)")
@@ -274,7 +278,8 @@ extension MainWindow {
 
     func normalizeCustomStatusEmoji(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let withoutColons = trimmed.hasPrefix(":") && trimmed.hasSuffix(":") && trimmed.count > 2
+        let withoutColons =
+            trimmed.hasPrefix(":") && trimmed.hasSuffix(":") && trimmed.count > 2
             ? String(trimmed.dropFirst().dropLast())
             : trimmed
         if let entry = EmojiCatalog.entries.first(where: { $0.glyph == withoutColons }) {
@@ -307,10 +312,11 @@ extension MainWindow {
 
     func applyServerCustomStatus(from user: MMUser) {
         guard let raw = user.props?["customStatus"],
-              !raw.isEmpty,
-              raw != "{}",
-              let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            !raw.isEmpty,
+            raw != "{}",
+            let data = raw.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
             clearLocalCustomStatus()
             return
         }
@@ -406,7 +412,8 @@ extension MainWindow {
 
         let suggestionsPopup = NSPopUpButton(frame: NSRect(x: 0, y: 78, width: 320, height: 26), pullsDown: true)
         let suggestionsMenu = NSMenu()
-        let suggestionsHeader = NSMenuItem(title: L10n.string("Suggestions & recent statuses…"), action: nil, keyEquivalent: "")
+        let suggestionsHeader = NSMenuItem(
+            title: L10n.string("Suggestions & recent statuses…"), action: nil, keyEquivalent: "")
         suggestionsMenu.addItem(suggestionsHeader)
         for preset in Self.presetCustomStatuses {
             let glyph = emojiGlyph(for: preset.emoji)
@@ -751,8 +758,9 @@ extension MainWindow {
 
         // 3. Welcome hero if active channel is DM with this user
         if let activeId = activeChannelId.isEmpty ? nil : activeChannelId,
-           let ch = channelsById[activeId], ch.type == "D",
-           resolveDMTargetUserId(for: ch) == userId {
+            let ch = channelsById[activeId], ch.type == "D",
+            resolveDMTargetUserId(for: ch) == userId
+        {
             heroIllustrationCircle.color = .clear
             heroWhiteBubble.isHidden = true
             heroBlueBubble.isHidden = true
@@ -1041,7 +1049,8 @@ extension MainWindow {
             profileAnchorFrame = .zero
             let x = round((containerBounds.width - panelWidth) / 2)
             let y = round((containerBounds.height - panelHeight) / 2)
-            profilePopoverPanel.frame = NSRect(x: max(margin, x), y: max(margin, y), width: panelWidth, height: panelHeight)
+            profilePopoverPanel.frame = NSRect(
+                x: max(margin, x), y: max(margin, y), width: panelWidth, height: panelHeight)
         }
     }
 
@@ -1163,7 +1172,8 @@ extension MainWindow {
         var infoItems: [(icon: String, text: String)] = []
 
         if let custom = userCustomStatus(for: user) {
-            let glyph = custom.emoji.isEmpty ? "💬" : (MainWindow.emojiGlyphs[custom.emoji] ?? emojiGlyph(for: custom.emoji))
+            let glyph =
+                custom.emoji.isEmpty ? "💬" : (MainWindow.emojiGlyphs[custom.emoji] ?? emojiGlyph(for: custom.emoji))
             let text = [glyph, custom.text].filter { !$0.isEmpty }.joined(separator: " ")
             infoItems.append(("quote.bubble", text))
         }
@@ -1317,7 +1327,9 @@ extension MainWindow {
         usernameLabel.frame = NSRect(x: textX, y: headerY + 12, width: textWidth, height: 18)
 
         let totalHeight = headerY + 64 + padding
-        closeButton.frame = NSRect(x: width - padding - closeSize + 4, y: totalHeight - padding - closeSize + 4, width: closeSize, height: closeSize)
+        closeButton.frame = NSRect(
+            x: width - padding - closeSize + 4, y: totalHeight - padding - closeSize + 4, width: closeSize,
+            height: closeSize)
 
         profilePopoverPanel.frame = NSRect(x: 0, y: 0, width: width, height: totalHeight)
     }
@@ -1365,15 +1377,17 @@ extension MainWindow {
             }
         }
         guard let raw = user.props?["customStatus"],
-              let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let data = raw.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
             return nil
         }
         let text = (json["text"] as? String) ?? ""
         let emoji = (json["emoji"] as? String) ?? ""
         if let expiresAtString = json["expires_at"] as? String,
-           let expiresAt = ISO8601DateFormatter().date(from: expiresAtString),
-           expiresAt <= Date() {
+            let expiresAt = ISO8601DateFormatter().date(from: expiresAtString),
+            expiresAt <= Date()
+        {
             return nil
         }
         if text.isEmpty && emoji.isEmpty { return nil }
