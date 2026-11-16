@@ -106,14 +106,11 @@ extension MainWindow {
         }
     }
 
+    static let userStatusTypes = ["online", "away", "dnd", "offline"]
+
     func statusString(for index: Int) -> String {
-        switch index {
-        case 0: return "online"
-        case 1: return "away"
-        case 2: return "dnd"
-        case 3: return "offline"
-        default: return "offline"
-        }
+        guard Self.userStatusTypes.indices.contains(index) else { return "offline" }
+        return Self.userStatusTypes[index]
     }
 
     func updateStatusCheck(in dot: RoundedEdgePanel, status: String) {
@@ -143,13 +140,7 @@ extension MainWindow {
     }
 
     func indexForStatus(_ status: String) -> Int {
-        switch status.lowercased() {
-        case "online": return 0
-        case "away": return 1
-        case "dnd": return 2
-        case "offline": return 3
-        default: return 3
-        }
+        Self.userStatusTypes.firstIndex(of: status.lowercased()) ?? 3
     }
 
     func selectUserStatus(_ index: Int, dndEndTime: Int64? = nil) {
@@ -162,11 +153,12 @@ extension MainWindow {
         }
         let statStr = statusString(for: index)
         currentUserStatus = statStr
-        if let currentId = currentUser?.id {
+        if let currentId = currentUser?.id, !currentId.isEmpty {
             userStatusById[currentId] = statStr
+            updateChatWidgetUserStatus(userId: currentId, status: statStr)
+        } else {
+            updateChatWidgetUserStatus(userId: "", status: statStr)
         }
-        userStatusById["usr"] = statStr
-        userStatusById["sample_usr"] = statStr
 
         let color = statusColor(for: statStr)
         statusDotPanel.color = color
@@ -174,8 +166,6 @@ extension MainWindow {
         updateStatusCheck(in: statusDotPanel, status: statStr)
         menuAvatarStatusDot?.color = color
         menuAvatarStatusDot?.setNeedsAppearanceUpdate()
-
-        updateChatWidgetUserStatus(userId: currentUser?.id ?? "usr", status: statStr)
 
         setStatusMenuOpen(false)
         setDndSubMenuOpen(false)
@@ -659,9 +649,11 @@ extension MainWindow {
     }
 
     func updateChatWidgetUserStatus(userId: String, status: String) {
-        userStatusById[userId] = status
+        if !userId.isEmpty {
+            userStatusById[userId] = status
+        }
         let color = statusColor(for: status)
-        let isForCurrent = (userId == (currentUser?.id ?? "usr") || userId == "usr" || userId == "sample_usr")
+        let isForCurrent = (userId.isEmpty || userId == currentUser?.id)
         if isForCurrent {
             currentUserStatus = status
             applyCurrentUserStatus(status)
@@ -1108,7 +1100,7 @@ extension MainWindow {
         profilePopoverPanel.addSubview(avatarCircle)
 
         // 3. Presence dot on avatar
-        let isCurrent = (user.id == currentUser?.id || user.id == "usr" || user.id == "sample_usr")
+        let isCurrent = (user.id == currentUser?.id)
         let statStr = isCurrent ? currentUserStatus : (userStatusById[user.id] ?? "offline")
         let dotColor = statusColor(for: statStr)
         let presenceDot = RoundedEdgePanel()
@@ -1364,7 +1356,7 @@ extension MainWindow {
     }
 
     func userCustomStatus(for user: MMUser) -> (emoji: String, text: String)? {
-        if user.id == currentUser?.id || user.id == "usr" || user.id == "sample_usr" {
+        if user.id == currentUser?.id {
             if let expiry = customStatusExpiresAt, expiry <= Date() {
                 return nil
             }

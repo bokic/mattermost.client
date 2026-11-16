@@ -962,7 +962,7 @@ extension MainWindow {
 
         let token = rhsRequestTokenByMode[key] ?? 0
         let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
-        let pageSize = 60
+        let pageSize = TimelinePager.pageSize
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1124,7 +1124,7 @@ extension MainWindow {
 
         let token = rhsRequestTokenByMode[key] ?? 0
         let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
-        let pageSize = 60
+        let pageSize = TimelinePager.pageSize
         let teamId = team.id
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1460,7 +1460,7 @@ extension MainWindow {
 
         let token = rhsRequestTokenByMode[key] ?? 0
         let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
-        let pageSize = 60
+        let pageSize = TimelinePager.pageSize
         let channelId = activeChannelId
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1812,7 +1812,7 @@ extension MainWindow {
 
         let token = rhsRequestTokenByMode[key] ?? 0
         let page = reset ? 0 : (rhsPageByMode[key] ?? 0) + 1
-        let pageSize = 60
+        let pageSize = TimelinePager.pageSize
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {

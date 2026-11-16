@@ -6,19 +6,8 @@
 //
 
 import Cocoa
-import UniformTypeIdentifiers
 import ImageIO
-
-class MainWindowViewController: NSViewController {
-    override func loadView() {
-        self.view = NSView()
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        // Do view setup here.
-    }
-}
+import UniformTypeIdentifiers
 
 class TimelineFlippedView: NSView {
     override var isFlipped: Bool { true }
@@ -291,6 +280,32 @@ enum EmojiCatalog {
         return String(scalars)
     }
 
+    static let fallbackGlyphs: [String: String] = [
+        "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎", "-1": "👎",
+        "smile": "😄", "grinning": "😀", "joy": "😂", "heart": "❤️",
+        "red_heart": "❤️", "tada": "🎉", "eyes": "👀", "fire": "🔥",
+        "wave": "👋", "clap": "👏", "pray": "🙏", "rocket": "🚀",
+        "white_check_mark": "✅", "x": "❌", "thinking_face": "🤔",
+        "cry": "😢", "sob": "😭", "sunglasses": "😎", "100": "💯",
+        "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐",
+        "coffee": "☕", "computer": "💻", "palm_tree": "🌴", "beer": "🍺",
+        "pizza": "🍕", "cake": "🎂", "sunny": "☀️", "rainbow": "🌈",
+        "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔"
+    ]
+
+    static let allGlyphs: [String: String] = {
+        var map = fallbackGlyphs
+        for entry in entries {
+            map[entry.name.lowercased()] = entry.glyph
+        }
+        return map
+    }()
+
+    static func glyph(for name: String) -> String? {
+        let clean = name.trimmingCharacters(in: CharacterSet(charactersIn: ":")).lowercased()
+        return allGlyphs[clean]
+    }
+
     static let entriesByName: [String: EmojiEntry] = {
         Dictionary(entries.map { ($0.name, $0) }, uniquingKeysWith: { _, latest in latest })
     }()
@@ -336,7 +351,7 @@ final class ComposerTextView: NSTextView {
     var onDropStateChanged: ((Bool) -> Void)?
     var onImagePasted: ((Data, String) -> Void)?
 
-    var isFileDropTarget = false
+    private var isDropTargetActive = false
 
     override func paste(_ sender: Any?) {
         if let image = NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage,
@@ -372,7 +387,7 @@ final class ComposerTextView: NSTextView {
         guard !urls.isEmpty, onFilesDropped != nil else {
             return super.draggingEntered(sender)
         }
-        isFileDropTarget = true
+        isDropTargetActive = true
         onDropStateChanged?(true)
         return .copy
     }
@@ -382,15 +397,15 @@ final class ComposerTextView: NSTextView {
         guard !urls.isEmpty, onFilesDropped != nil else {
             return super.draggingUpdated(sender)
         }
-        if !isFileDropTarget {
-            isFileDropTarget = true
+        if !isDropTargetActive {
+            isDropTargetActive = true
             onDropStateChanged?(true)
         }
         return .copy
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        isFileDropTarget = false
+        isDropTargetActive = false
         onDropStateChanged?(false)
         super.draggingExited(sender)
     }
@@ -404,14 +419,14 @@ final class ComposerTextView: NSTextView {
         guard !urls.isEmpty, let onFilesDropped = onFilesDropped else {
             return super.performDragOperation(sender)
         }
-        isFileDropTarget = false
+        isDropTargetActive = false
         onDropStateChanged?(false)
         onFilesDropped(urls)
         return true
     }
 
     override func concludeDragOperation(_ sender: NSDraggingInfo?) {
-        isFileDropTarget = false
+        isDropTargetActive = false
         onDropStateChanged?(false)
         super.concludeDragOperation(sender)
     }

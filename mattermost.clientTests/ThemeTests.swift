@@ -126,4 +126,38 @@ final class ThemeTests: XCTestCase {
         let customTheme = MMTheme(json: [:])
         XCTAssertEqual(customTheme.isDark, isSystemDark)
     }
+
+    func testParseColorSupportedFormats() {
+        // 4-digit hex #RGBA
+        let fourDigit = MMTheme.parseColor("#f008")
+        XCTAssertNotNil(fourDigit)
+        let fourRgb = fourDigit?.usingColorSpace(.sRGB)
+        XCTAssertEqual(fourRgb?.redComponent ?? 0, 1.0, accuracy: 0.02)
+        XCTAssertEqual(fourRgb?.alphaComponent ?? 0, CGFloat(0x88) / 255.0, accuracy: 0.02)
+
+        // CSS rgb(r, g, b)
+        let rgbColor = MMTheme.parseColor("rgb(255, 128, 0)")
+        XCTAssertNotNil(rgbColor)
+        let rgbComp = rgbColor?.usingColorSpace(.sRGB)
+        XCTAssertEqual(rgbComp?.redComponent ?? 0, 1.0, accuracy: 0.02)
+        XCTAssertEqual(rgbComp?.greenComponent ?? 0, 128.0 / 255.0, accuracy: 0.02)
+        XCTAssertEqual(rgbComp?.blueComponent ?? 0, 0.0, accuracy: 0.02)
+
+        // CSS rgba(r, g, b, a)
+        let rgbaColor = MMTheme.parseColor("rgba(0, 255, 128, 0.5)")
+        XCTAssertNotNil(rgbaColor)
+        let rgbaComp = rgbaColor?.usingColorSpace(.sRGB)
+        XCTAssertEqual(rgbaComp?.greenComponent ?? 0, 1.0, accuracy: 0.02)
+        XCTAssertEqual(rgbaComp?.alphaComponent ?? 0, 0.5, accuracy: 0.02)
+
+        // Named colors
+        XCTAssertEqual(MMTheme.parseColor("white"), .white)
+        XCTAssertEqual(MMTheme.parseColor("black"), .black)
+        XCTAssertEqual(MMTheme.parseColor("transparent"), .clear)
+        XCTAssertEqual(MMTheme.parseColor("blue"), .blue)
+
+        // Invalid fallback
+        XCTAssertNil(MMTheme.parseColor("not-a-color"))
+        XCTAssertNil(MMTheme.parseColor(""))
+    }
 }

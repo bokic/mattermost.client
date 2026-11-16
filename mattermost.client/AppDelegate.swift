@@ -131,7 +131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     
     private func handleZoomGesture(_ event: NSEvent) -> NSEvent? {
         guard let eventWindow = event.window,
-              eventWindow === mainWindow || eventWindow === loginWindow else { return event }
+              eventWindow === mainWindow || eventWindow === loginWindow,
+              eventWindow.attachedSheet == nil,
+              !eventWindow.isSheet else { return event }
         
         if event.type == .magnify {
             switch event.phase {

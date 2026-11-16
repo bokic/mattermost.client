@@ -324,28 +324,73 @@ struct MMTheme {
         self.isDark = MMTheme.luminance(of: self.centerBg) < 0.5
     }
 
-    private static func parseColor(_ raw: String) -> NSColor? {
-        var hex = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard hex.hasPrefix("#") else { return nil }
-        hex.removeFirst()
-        if hex.count == 3 {
-            hex = hex.map { String($0) + String($0) }.joined()
+    static func parseColor(_ raw: String) -> NSColor? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // 1. Hex formats (#RGB, #RGBA, #RRGGBB, #RRGGBBAA)
+        if trimmed.hasPrefix("#") {
+            var hex = String(trimmed.dropFirst())
+            if hex.count == 3 {
+                // #RGB -> #RRGGBB
+                hex = hex.map { "\($0)\($0)" }.joined()
+            } else if hex.count == 4 {
+                // #RGBA -> #RRGGBBAA
+                hex = hex.map { "\($0)\($0)" }.joined()
+            }
+            guard hex.count == 6 || hex.count == 8,
+                  let value = UInt64(hex, radix: 16) else { return nil }
+            let red, green, blue, alpha: CGFloat
+            if hex.count == 8 {
+                red = CGFloat((value >> 24) & 0xFF) / 255
+                green = CGFloat((value >> 16) & 0xFF) / 255
+                blue = CGFloat((value >> 8) & 0xFF) / 255
+                alpha = CGFloat(value & 0xFF) / 255
+            } else {
+                red = CGFloat((value >> 16) & 0xFF) / 255
+                green = CGFloat((value >> 8) & 0xFF) / 255
+                blue = CGFloat(value & 0xFF) / 255
+                alpha = 1
+            }
+            return NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
         }
-        guard hex.count == 6 || hex.count == 8,
-              let value = UInt64(hex, radix: 16) else { return nil }
-        let red, green, blue, alpha: CGFloat
-        if hex.count == 8 {
-            red = CGFloat((value >> 24) & 0xFF) / 255
-            green = CGFloat((value >> 16) & 0xFF) / 255
-            blue = CGFloat((value >> 8) & 0xFF) / 255
-            alpha = CGFloat(value & 0xFF) / 255
-        } else {
-            red = CGFloat((value >> 16) & 0xFF) / 255
-            green = CGFloat((value >> 8) & 0xFF) / 255
-            blue = CGFloat(value & 0xFF) / 255
-            alpha = 1
+
+        // 2. CSS rgb(...) and rgba(...)
+        let lower = trimmed.lowercased()
+        if (lower.hasPrefix("rgb(") || lower.hasPrefix("rgba(")) && lower.hasSuffix(")") {
+            let startIdx = lower.firstIndex(of: "(").map { lower.index(after: $0) } ?? lower.startIndex
+            let endIdx = lower.index(before: lower.endIndex)
+            let inner = lower[startIdx..<endIdx]
+            let parts = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count == 3 || parts.count == 4 {
+                guard let r = Double(parts[0]),
+                      let g = Double(parts[1]),
+                      let b = Double(parts[2]) else { return nil }
+                let a = parts.count == 4 ? (Double(parts[3]) ?? 1.0) : 1.0
+                let red = CGFloat(max(0, min(255, r))) / 255.0
+                let green = CGFloat(max(0, min(255, g))) / 255.0
+                let blue = CGFloat(max(0, min(255, b))) / 255.0
+                let alpha = CGFloat(max(0, min(1.0, a)))
+                return NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+            }
         }
-        return NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+
+        // 3. Named colors
+        switch lower {
+        case "white": return .white
+        case "black": return .black
+        case "clear", "transparent": return .clear
+        case "red": return .red
+        case "green": return .green
+        case "blue": return .blue
+        case "yellow": return .yellow
+        case "orange": return .orange
+        case "gray", "grey": return .gray
+        case "cyan": return .cyan
+        case "magenta": return .magenta
+        case "purple": return .purple
+        default: return nil
+        }
     }
 
     private static func luminance(of color: NSColor) -> CGFloat {

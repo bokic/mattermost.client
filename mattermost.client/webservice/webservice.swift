@@ -432,7 +432,7 @@ final class WebService: NSObject, APIClientProtocol, WebSocketClientProtocol, Fi
         try await apiClient.removeUserFromTeam(teamId: teamId, userId: userId)
     }
 
-    func fetchTeamMembers(teamId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMTeamMember] {
+    func fetchTeamMembers(teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> [MMTeamMember] {
         try await apiClient.fetchTeamMembers(teamId: teamId, page: page, perPage: perPage)
     }
 
@@ -492,7 +492,7 @@ final class WebService: NSObject, APIClientProtocol, WebSocketClientProtocol, Fi
         try await apiClient.joinChannel(channelId: channelId, userId: userId)
     }
 
-    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = 60) async throws -> [MMChannelMember] {
+    func fetchChannelMembers(channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> [MMChannelMember] {
         try await apiClient.fetchChannelMembers(channelId: channelId, page: page, perPage: perPage)
     }
 
@@ -583,7 +583,7 @@ final class WebService: NSObject, APIClientProtocol, WebSocketClientProtocol, Fi
         try await apiClient.fetchPinnedPosts(channelId: channelId)
     }
 
-    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws -> MMPostList
+    func fetchFlaggedPosts(userId: String, teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> MMPostList
     {
         try await apiClient.fetchFlaggedPosts(userId: userId, teamId: teamId, page: page, perPage: perPage)
     }
@@ -641,11 +641,11 @@ final class WebService: NSObject, APIClientProtocol, WebSocketClientProtocol, Fi
 
     // MARK: - Threads
 
-    func fetchThreads(userId: String, teamId: String, perPage: Int = 60) async throws -> [MMThread] {
+    func fetchThreads(userId: String, teamId: String, perPage: Int = TimelinePager.pageSize) async throws -> [MMThread] {
         try await apiClient.fetchThreads(userId: userId, teamId: teamId, perPage: perPage)
     }
 
-    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = 60) async throws
+    func fetchThreadsPage(userId: String, teamId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws
         -> MMThreadsResponse
     {
         try await apiClient.fetchThreadsPage(userId: userId, teamId: teamId, page: page, perPage: perPage)
@@ -703,13 +703,13 @@ final class WebService: NSObject, APIClientProtocol, WebSocketClientProtocol, Fi
         try await fileTransfer.fetchFileData(fileId: fileId, preview: preview)
     }
 
-    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = 60) async throws
+    func searchChannelFiles(teamId: String, channelId: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws
         -> [MMFileInfo]
     {
         try await fileTransfer.searchChannelFiles(teamId: teamId, channelId: channelId, page: page, perPage: perPage)
     }
 
-    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = 60) async throws -> [MMFileInfo] {
+    func searchTeamFiles(teamId: String, terms: String, page: Int = 0, perPage: Int = TimelinePager.pageSize) async throws -> [MMFileInfo] {
         try await fileTransfer.searchTeamFiles(teamId: teamId, terms: terms, page: page, perPage: perPage)
     }
 

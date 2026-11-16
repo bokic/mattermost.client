@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **271/271 pass** |
+| `./test.sh` | **272/272 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,41 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **Legacy naming and small dead code** — `S`
-  - `typealias webservice = WebService` (`webservice.swift:387`), duplicate
-    `import UniformTypeIdentifiers` (`MainWindow.swift:9-12`), unused
-    `sendActiveChannelPost` (`MainWindow+Composer.swift:922-938`), `makeMattermostCompassIcon`
-    duplication, and test-only launch hooks in production (`MainWindow.swift:519-542`,
-    `LiveData:224`, `Sidebar:926`, `--demo`). Remove or gate behind `#if DEBUG`.
-  - `channelHeaderBorder` is styled then always hidden (`MainWindow+Layout.swift:28-30,545`).
-  - `Dictionary(uniqueKeysWithValues:)` on membership/category arrays traps on duplicate
-    server IDs (`MainWindow+Sidebar.swift:86,415`); use a uniquing initializer.
-  - Remaining force unwraps: `NSImage(named: "E82F")!` and
-    `NSImage(named: "Mattermost Logo")!` at property-init time (`MainWindow.swift:23-24`),
-    `contentView!` (`MainWindow+Layout.swift:657`) and `activeTeam!`
-    (`MainWindow+Sidebar.swift:826`); `LoginWindow.init(coder:)` (`LoginWindow.swift:18-20`)
-    is a `fatalError`.
-  - `AppDelegate.websocketConnected(isConnected:)` (`AppDelegate.swift:178-183`) and
-    `MainWindow.statusPromptPill` (`MainWindow.swift:350`, shadowed in `createPostRow`) are
-    unused dead declarations; `AppDelegate.zoomGestureMonitor` (`AppDelegate.swift:100-141`)
-    is never removed and intercepts pinch/scroll zoom gestures on any window (including modal
-    sheets and file panels).
-  - The theme parser accepts only `#RGB`/`#RRGGBB`/`#RRGGBBAA` (`Theme.swift:322-344`) and
-    silently falls back for CSS `rgba()`, named colors and 4-digit hex; document or support
-    those formats. The Connect button also lacks a Return key equivalent
-    (`LoginWindow.swift:91-95`).
-  - `threadItems` is written but never read outside a test (`MainWindow.swift:82-85`,
-    `MainWindow+RightPanel.swift:196`); `searchChannelFiles` hardcodes
-    `time_zone_offset: 0` (`webservice.swift:1045`); emoji data exists in two sources of
-    truth (`MainWindowSupport.swift:159-551` and `MainWindow.swift:667-686`);
-    `statusString(for:)`/`indexForStatus` duplicate the same mapping and demo IDs
-    `"usr"`/`"sample_usr"` remain in status logic (`MainWindow+People.swift:29-37,65-73,85-86`).
-  - `MainWindowViewController` is an empty stub and `ComposerTextView.isFileDropTarget` is
-    written but never read (`MainWindowSupport.swift:12-21,597,622-661`).
-  - The 60-post page size is duplicated between `MainWindow.swift:304`,
-    `TimelineSupport.swift:28` and the `webservice` default (`webservice.swift:984`); use one
-    shared constant.
 
 ---
 

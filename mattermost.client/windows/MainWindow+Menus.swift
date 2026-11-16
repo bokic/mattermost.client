@@ -1090,7 +1090,7 @@ extension MainWindow {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             defer { self.isLoadingDMUsers = false }
-            let pageSize = 60
+            let pageSize = TimelinePager.pageSize
             guard let users = try? await ws.fetchTeamUsers(teamId: team.id, page: page, perPage: pageSize) else {
                 if page == 0 {
                     self.dmUsers = []

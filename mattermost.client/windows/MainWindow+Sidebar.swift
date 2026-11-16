@@ -1563,7 +1563,12 @@ extension MainWindow {
                 let botCh = self.channelsByName["system-bot"]
                     ?? self.channelsByName["system bot"]
                     ?? allChannels.first(where: { self.isChannelBot(for: $0) })
-                let defaultCh = (CommandLine.arguments.contains("--system-bot") ? botCh : nil)
+                #if DEBUG
+                let isSystemBotArg = CommandLine.arguments.contains("--system-bot")
+                #else
+                let isSystemBotArg = false
+                #endif
+                let defaultCh = (isSystemBotArg ? botCh : nil)
                     ?? savedChannel
                     ?? self.channelsByName["town-square"]
                     ?? self.channelsByName["town square"]

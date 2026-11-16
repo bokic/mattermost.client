@@ -395,7 +395,6 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
     // Right Chat Panel views
     // 1. Channel Header Bar
-    let channelHeaderBorder = RoundedEdgePanel()
     let channelStarButton = RoundedEdgePanel()
     let channelStarIconView = NSImageView()
     var isChannelFavorited = false
@@ -776,7 +775,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         self.contentMinSize = NSSize(width: 860, height: 520)
 
         self.title = AppVersion.windowTitle
-        self.contentViewController = MainWindowViewController()
+        self.contentView = NSView(frame: rect)
         self.setContentSize(NSSize(width: rect.width, height: rect.height))
         self.center()
         // Restore the user's last window frame when one is stored; otherwise the
@@ -853,6 +852,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             self?.updateViews()
         })
         zoomController?.applyCurrentZoom()
+        #if DEBUG
         if CommandLine.arguments.contains("--custom-status-test") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in self?.showCustomStatusDialog() }
         }
@@ -877,6 +877,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
                 ])
             }
         }
+        #endif
         self.makeKeyAndOrderFront(nil)
 
         NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
@@ -1057,19 +1058,10 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         let gifURLs: [String]
     }
 
-    /// Shortcodes used by the reaction picker and the chip renderer.
-    static let emojiGlyphs: [String: String] = [
-        "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎", "-1": "👎",
-        "smile": "😄", "grinning": "😀", "joy": "😂", "heart": "❤️",
-        "red_heart": "❤️", "tada": "🎉", "eyes": "👀", "fire": "🔥",
-        "wave": "👋", "clap": "👏", "pray": "🙏", "rocket": "🚀",
-        "white_check_mark": "✅", "x": "❌", "thinking_face": "🤔",
-        "cry": "😢", "sob": "😭", "sunglasses": "😎", "100": "💯",
-        "ok_hand": "👌", "point_up": "☝️", "muscle": "💪", "star": "⭐",
-        "coffee": "☕", "computer": "💻", "palm_tree": "🌴", "beer": "🍺",
-        "pizza": "🍕", "cake": "🎂", "sunny": "☀️", "rainbow": "🌈",
-        "warning": "⚠️", "bulb": "💡", "lock": "🔒", "bell": "🔔"
-    ]
+    /// Shortcodes used by the reaction picker and the chip renderer, sourced from EmojiCatalog.
+    static var emojiGlyphs: [String: String] {
+        EmojiCatalog.allGlyphs
+    }
 
     /// The first page of the reaction picker, mirroring Mattermost's common reactions.
     static let quickReactions: [(name: String, glyph: String)] = [

@@ -420,7 +420,7 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
 
     // MARK: - Posts & Pagination
 
-    func fetchChannelPosts(channelId: String, pageSize: Int = 60) async throws -> ChannelPostsFetchResult {
+    func fetchChannelPosts(channelId: String, pageSize: Int = TimelinePager.pageSize) async throws -> ChannelPostsFetchResult {
         guard let ws = webService, ws.isLogged() else {
             return ChannelPostsFetchResult(
                 posts: [],
@@ -466,7 +466,7 @@ final class WorkspaceRepository: WorkspaceRepositoryProtocol {
         )
     }
 
-    func mergeOlderPosts(older: [MMPost], pageSize: Int = 60) -> OlderPostsMergeResult {
+    func mergeOlderPosts(older: [MMPost], pageSize: Int = TimelinePager.pageSize) -> OlderPostsMergeResult {
         let page = TimelinePager.merge(
             existing: state.currentChannelPosts,
             older: older,

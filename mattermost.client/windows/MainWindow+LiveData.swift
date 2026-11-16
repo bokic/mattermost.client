@@ -346,10 +346,15 @@ extension MainWindow {
             do {
                 let savedTeamId = UserDefaults.standard.string(forKey: "lastTeamId")
                 let savedChannelId = UserDefaults.standard.string(forKey: "lastChannelId")
+                #if DEBUG
+                let isSystemBotArg = CommandLine.arguments.contains("--system-bot")
+                #else
+                let isSystemBotArg = false
+                #endif
                 let initial = try await self.repository.loadInitialWorkspaceData(
                     savedTeamId: savedTeamId,
                     savedChannelId: savedChannelId,
-                    systemBotArg: CommandLine.arguments.contains("--system-bot")
+                    systemBotArg: isSystemBotArg
                 )
 
                 self.applyServerCustomStatus(from: initial.me)

@@ -1753,8 +1753,7 @@ extension MainWindow {
     }
 
     func emojiGlyph(for name: String) -> String {
-        if let entry = EmojiCatalog.entriesByName[name.lowercased()] { return entry.glyph }
-        if let glyph = Self.emojiGlyphs[name.lowercased()] { return glyph }
+        if let glyph = EmojiCatalog.glyph(for: name) { return glyph }
         // Already a unicode emoji?
         if name.unicodeScalars.contains(where: { $0.properties.isEmojiPresentation }) { return name }
         return ":" + name + ":"
@@ -3557,7 +3556,12 @@ extension MainWindow {
         // 1. Welcome Hero — only for an empty channel, not above every feed.
         let heroW: CGFloat = min(chatW - 40, 480)
         let heroH: CGFloat = 216
-        let showHero = currentChannelPosts.isEmpty && !CommandLine.arguments.contains("--demo")
+        #if DEBUG
+        let isDemoArg = CommandLine.arguments.contains("--demo")
+        #else
+        let isDemoArg = false
+        #endif
+        let showHero = currentChannelPosts.isEmpty && !isDemoArg
         if showHero {
             timelineHeroContainer.frame = NSRect(x: (chatW - heroW) / 2, y: currentY, width: heroW, height: heroH)
             timelineHeroContainer.isHidden = false
@@ -3572,7 +3576,7 @@ extension MainWindow {
         // 2. Posts and Date Separators (localized)
 
         var postsToRender = currentChannelPosts.filter { ($0.root_id ?? "").isEmpty }
-        if postsToRender.isEmpty && !(webService?.isLogged() ?? false) && CommandLine.arguments.contains("--demo") {
+        if postsToRender.isEmpty && !(webService?.isLogged() ?? false) && isDemoArg {
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
             if userStatusById["sarah"] == nil {
                 userStatusById["sarah"] = "away"

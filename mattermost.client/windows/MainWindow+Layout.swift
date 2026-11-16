@@ -25,10 +25,6 @@ extension MainWindow {
         chatPanel.addSubview(chatTimelineContainer, positioned: .below, relativeTo: chatEntryPanel)
 
         // 1. Channel Header Bar
-        channelHeaderBorder.cornerRadius = 0
-        channelHeaderBorder.color = dividerColor
-        chatPanel.addSubview(channelHeaderBorder)
-
         channelStarButton.cornerRadius = MMRadius.control
         channelStarButton.color = .clear
         if let starImg = NSImage(systemSymbolName: "star", accessibilityDescription: "Favorite") {
@@ -619,7 +615,6 @@ extension MainWindow {
         chatTimelineContainer.frame = NSRect(x: 0, y: 0, width: chatW, height: headerY)
 
         // 1. Channel Header Bar (web: 56pt tall, 12pt padding, 12pt top corners)
-        channelHeaderBorder.isHidden = true
         channelStarButton.frame = NSRect(x: 14, y: headerY + 16, width: MMMetric.iconButtonCompact, height: MMMetric.iconButtonCompact)
         channelStarIconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
 
