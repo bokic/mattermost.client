@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **195/195 pass** |
+| `./test.sh` | **202/202 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,22 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **The timeline is fully rebuilt for every post and avatar** — `L`
-  - `rebuildTimelineContent` destroys/recreates every row, date separator and attachment
-    view (`MainWindow+Timeline.swift:2216-2394`). Every realtime post (`LiveData:384-404`),
-    every image load (`Timeline:408-418`), every reaction (`:733`) and every avatar
-    completion (`People:308-354`) triggers a full rebuild. There is no cell reuse,
-    virtualization or diffing, so a 20-user channel can do ~20 full N-row rebuilds just from
-    avatars.
-  - Image/attachment rows unconditionally call `fetchFileData(..., preview: true)` and
-    `loadGiphyAnimatedImage` each time they are recreated (`:1378-1396,388-403`), so every
-    rebuild re-downloads all visible images. There is no in-memory preview image cache.
-  - Inline-image render paths perform synchronous disk I/O on the main thread
-    (`Data(contentsOf:)` at `:357,433`), and image loads rebuild without preserving the clip
-    offset (`:408-419`), so content shifts while reading.
-  - Introduce a row diff/update path keyed by post id, cache decoded previews, load disk data
-    off-main, and virtualize/lazy-load large channels. This is the main scalability risk.
 
 - [ ] **Caches and fetch tasks are unbounded** — `M`
   - `userAvatarsById` (`MainWindow.swift:430`), `inlineImageSizeCache`,

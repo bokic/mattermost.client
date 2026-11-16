@@ -208,6 +208,7 @@ extension MainWindow {
 
     func createDateSeparator(dateStr: String, width: CGFloat) -> NSView {
         let container = TimelineFlippedView()
+        container.identifier = NSUserInterfaceItemIdentifier("dateSep_\(dateStr)")
         let dividerColor = Theme.shared.centerText.withAlphaComponent(0.16)
         let separatorText = Theme.shared.centerText
 
@@ -329,21 +330,14 @@ extension MainWindow {
         }
         var naturalSize = inlineImageSizeCache[urlString] ?? NSSize(width: 240, height: 160)
 
-        // Use a disk-cached frame to establish the natural size before the network fetch.
+        // Use in-memory decoded image cache to avoid disk and network hits on relayout.
         var cachedImage: NSImage?
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("mattermost.client/giphy", isDirectory: true)
-        if let dir = cacheDir {
-            let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
-            let filename = TimelineCacheKey.stable(urlString) + ".gif"
-            let diskURL = dir.appendingPathComponent(filename)
-            let checkURL = (urlString.contains("ICOgUNjpvO0PC") && FileManager.default.fileExists(atPath: sampleFile.path)) ? sampleFile : diskURL
-            if let data = try? Data(contentsOf: checkURL), let image = NSImage(data: data) {
-                cachedImage = image
-                let pixels = pixelSize(of: image)
-                if inlineImageSizeCache[urlString] == nil, pixels.width > 0, pixels.height > 0 {
-                    naturalSize = pixels
-                }
+        let inlineKey = "inline_\(urlString)"
+        if let mem = TimelineImageCache.shared.image(forKey: inlineKey) {
+            cachedImage = mem
+            let pixels = pixelSize(of: mem)
+            if inlineImageSizeCache[urlString] == nil, pixels.width > 0, pixels.height > 0 {
+                naturalSize = pixels
             }
         }
 
@@ -415,52 +409,72 @@ extension MainWindow {
             if self.isRightPanelVisible && self.rightPanelMode == .thread {
                 self.renderThreadPanel()
             }
-            self.rebuildTimelineContent()
+            let clip = self.timelineScrollView.contentView
+            let wasNearBottom = clip.bounds.maxY >= (self.timelineDocView.frame.height - 40)
+            self.saveChannelScrollPosition(for: self.activeChannelId)
+            self.rebuildTimelineContent(scrollToBottom: false)
+            if wasNearBottom {
+                self.scrollTimelineToBottom()
+            } else {
+                _ = self.restoreChannelScrollPosition(for: self.activeChannelId)
+            }
         }
     }
 
     func loadGiphyAnimatedImage(from urlString: String, completion: @escaping @MainActor @Sendable (NSImage?) -> Void) {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
-        if let dir = cacheDir {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
-            if urlString.contains("ICOgUNjpvO0PC"), let data = try? Data(contentsOf: sampleFile), let img = NSImage(data: data) {
-                completion(img)
-                return
-            }
-            let filename = TimelineCacheKey.stable(urlString) + ".gif"
-            let diskURL = dir.appendingPathComponent(filename)
-            if let data = try? Data(contentsOf: diskURL), let img = NSImage(data: data) {
-                completion(img)
-                return
-            }
-        }
-
-        guard let url = URL(string: urlString) else {
-            completion(nil)
+        let inlineKey = "inline_\(urlString)"
+        if let mem = TimelineImageCache.shared.image(forKey: inlineKey) {
+            completion(mem)
             return
         }
 
-        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15)
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("mattermost.client/giphy", isDirectory: true)
 
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            let responseData = data
-            let maxBytes = 20 * 1024 * 1024
-            if let data = responseData, let dir = cacheDir, data.count <= maxBytes {
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let dir = cacheDir {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let sampleFile = dir.appendingPathComponent("sample_giphy.gif")
+                if urlString.contains("ICOgUNjpvO0PC"), let data = try? Data(contentsOf: sampleFile), let img = NSImage(data: data) {
+                    TimelineImageCache.shared.setImage(img, forKey: inlineKey)
+                    Task { @MainActor in completion(img) }
+                    return
+                }
                 let filename = TimelineCacheKey.stable(urlString) + ".gif"
                 let diskURL = dir.appendingPathComponent(filename)
-                try? data.write(to: diskURL)
-                Self.pruneGiphyCache(dir, keeping: 200)
-            }
-            Task { @MainActor in
-                if let data = responseData, data.count <= maxBytes, let image = NSImage(data: data) {
-                    completion(image)
-                } else {
-                    completion(nil)
+                if let data = try? Data(contentsOf: diskURL), let img = NSImage(data: data) {
+                    TimelineImageCache.shared.setImage(img, forKey: inlineKey)
+                    Task { @MainActor in completion(img) }
+                    return
                 }
             }
-        }.resume()
+
+            guard let url = URL(string: urlString) else {
+                Task { @MainActor in completion(nil) }
+                return
+            }
+
+            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15)
+            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+
+            URLSession.shared.dataTask(with: request) { data, _, _ in
+                let responseData = data
+                let maxBytes = 20 * 1024 * 1024
+                if let data = responseData, let dir = cacheDir, data.count <= maxBytes {
+                    let filename = TimelineCacheKey.stable(urlString) + ".gif"
+                    let diskURL = dir.appendingPathComponent(filename)
+                    try? data.write(to: diskURL)
+                    Self.pruneGiphyCache(dir, keeping: 200)
+                }
+                Task { @MainActor in
+                    if let data = responseData, data.count <= maxBytes, let image = NSImage(data: data) {
+                        TimelineImageCache.shared.setImage(image, forKey: inlineKey)
+                        completion(image)
+                    } else {
+                        completion(nil)
+                    }
+                }
+            }.resume()
+        }
     }
 
     nonisolated static func pruneGiphyCache(_ directory: URL, keeping limit: Int) {
@@ -851,7 +865,9 @@ extension MainWindow {
             threadPosts[index] = post
         }
         if wasInTimeline {
-            rebuildTimelineContent(scrollToBottom: false)
+            if !updatePostRowInTimeline(post) {
+                rebuildTimelineContent(scrollToBottom: false)
+            }
         }
         guard isRightPanelVisible else { return }
         switch rightPanelMode {
@@ -868,6 +884,144 @@ extension MainWindow {
         default:
             break
         }
+    }
+
+    @discardableResult
+    func updatePostRowInTimeline(_ post: MMPost) -> Bool {
+        guard let oldRow = timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_\(post.id)"
+        }) else { return false }
+
+        guard let postIndex = currentChannelPosts.firstIndex(where: { $0.id == post.id }) else { return false }
+
+        let chatW = isRightPanelVisible ? rightPanel.frame.minX : chatPanel.bounds.width
+        let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
+        let isSystem = (post.type?.hasPrefix("system_") ?? false) || (usersById[post.user_id]?.username == "System")
+
+        var isConsecutive = false
+        if postIndex > 0 {
+            let prev = currentChannelPosts[postIndex - 1]
+            let prevIsSystem = (prev.type?.hasPrefix("system_") ?? false) || (usersById[prev.user_id]?.username == "System")
+            let withinGrouping = (post.create_at - prev.create_at) <= 5 * 60 * 1000
+            isConsecutive = !isSystem && !prevIsSystem && post.user_id == prev.user_id && !post.user_id.isEmpty && withinGrouping
+        }
+
+        let (newRow, newHeight) = createPostRow(
+            post: post,
+            width: chatW,
+            timeStr: Self.localizedTimeFormatter.string(from: postDate),
+            isConsecutive: isConsecutive
+        )
+        newRow.frame.origin = oldRow.frame.origin
+
+        let oldHeight = oldRow.frame.height
+        let deltaHeight = newHeight - oldHeight
+        let oldOriginY = oldRow.frame.origin.y
+        let oldMaxY = oldRow.frame.maxY
+
+        let reactions = post.metadata?.reactions ?? []
+        let reactionsHash = reactions.reduce(into: 17) { hash, r in
+            hash = hash &* 31 &+ (r.user_id.hashValue ^ r.emoji_name.hashValue)
+        }
+        let fileIds = (post.metadata?.files ?? []).map { $0.id }
+        let key = TimelineRowKey(
+            postId: post.id,
+            message: post.message,
+            editAt: post.edit_at,
+            deleteAt: post.delete_at,
+            replyCount: post.reply_count ?? 0,
+            reactionsHash: reactionsHash,
+            isPinned: post.is_pinned ?? false,
+            isConsecutive: isConsecutive,
+            width: chatW,
+            fileIds: fileIds
+        )
+        renderedPostRows[post.id] = (newRow, newHeight, key)
+
+        if let idx = timelineDocView.subviews.firstIndex(where: { $0 === oldRow }) {
+            oldRow.removeFromSuperview()
+            timelineDocView.subviews.insert(newRow, at: idx)
+        } else {
+            oldRow.removeFromSuperview()
+            timelineDocView.addSubview(newRow)
+        }
+
+        let clip = timelineScrollView.contentView
+        let wasNearBottom = clip.bounds.maxY >= (timelineDocView.frame.height - 40)
+        let clipOriginY = clip.bounds.origin.y
+
+        if abs(deltaHeight) > 0.5 {
+            for subview in timelineDocView.subviews {
+                if subview !== newRow && subview.frame.origin.y > oldOriginY {
+                    subview.frame.origin.y += deltaHeight
+                }
+            }
+            let composerTop = 24 + composerTotalHeight
+            let scrollH = max(0, chatPanel.bounds.height - 56 - (connectionBanner.isHidden ? 0 : 26) - composerTop)
+            let newDocHeight = max(scrollH, timelineDocView.frame.height + deltaHeight)
+            timelineDocView.frame.size.height = newDocHeight
+
+            if wasNearBottom {
+                scrollTimelineToBottom()
+            } else if oldMaxY <= clipOriginY {
+                clip.scroll(to: NSPoint(x: 0, y: clipOriginY + deltaHeight))
+                timelineScrollView.reflectScrolledClipView(clip)
+            }
+        }
+
+        updateTimelineHoverState()
+        return true
+    }
+
+    @discardableResult
+    func deletePostRowFromTimeline(_ postId: String) -> Bool {
+        guard let row = timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_\(postId)"
+        }) else { return false }
+
+        let rowH = row.frame.height
+        let originY = row.frame.origin.y
+        let maxY = row.frame.maxY
+        row.removeFromSuperview()
+        renderedPostRows.removeValue(forKey: postId)
+
+        let clip = timelineScrollView.contentView
+        let wasNearBottom = clip.bounds.maxY >= (timelineDocView.frame.height - 40)
+        let clipOriginY = clip.bounds.origin.y
+
+        for subview in timelineDocView.subviews {
+            if subview.frame.origin.y > originY {
+                subview.frame.origin.y -= rowH
+            }
+        }
+        let composerTop = 24 + composerTotalHeight
+        let scrollH = max(0, chatPanel.bounds.height - 56 - (connectionBanner.isHidden ? 0 : 26) - composerTop)
+        let newDocHeight = max(scrollH, timelineDocView.frame.height - rowH)
+        timelineDocView.frame.size.height = newDocHeight
+
+        if wasNearBottom {
+            scrollTimelineToBottom()
+        } else if maxY <= clipOriginY {
+            clip.scroll(to: NSPoint(x: 0, y: max(0, clipOriginY - rowH)))
+            timelineScrollView.reflectScrolledClipView(clip)
+        }
+        updateTimelineHoverState()
+        return true
+    }
+
+    func updateAuthorInfo(for userId: String, username: String) {
+        guard !userId.isEmpty else { return }
+        let identifier = "authorLabel_\(userId)"
+        func update(_ view: NSView) {
+            if view.identifier?.rawValue == identifier, let label = view as? NSTextField {
+                label.stringValue = username
+                label.toolTip = username
+                label.setAccessibilityTitle(username)
+                return
+            }
+            view.subviews.forEach(update)
+        }
+        update(timelineDocView)
     }
 
     func setupPostInteractionPanels() {
@@ -1069,13 +1223,21 @@ extension MainWindow {
         let token = lightboxLoadToken
 
         if let file = file, let ws = webService {
-            Task { @MainActor [weak self] in
-                guard let self = self, self.lightboxLoadToken == token,
-                      let data = try? await ws.fetchFileData(fileId: file.id),
-                      let full = NSImage(data: data) else { return }
-                self.lightboxImageView.image = full
-                self.lightboxNaturalSize = self.pixelSize(of: full)
+            let fullKey = "attachment_full_\(file.id)"
+            if let cached = TimelineImageCache.shared.image(forKey: fullKey) {
+                self.lightboxImageView.image = cached
+                self.lightboxNaturalSize = self.pixelSize(of: cached)
                 self.layoutLightboxImage()
+            } else {
+                Task { @MainActor [weak self] in
+                    guard let self = self, self.lightboxLoadToken == token,
+                          let data = try? await ws.fetchFileData(fileId: file.id),
+                          let full = NSImage(data: data) else { return }
+                    TimelineImageCache.shared.setImage(full, forKey: fullKey)
+                    self.lightboxImageView.image = full
+                    self.lightboxNaturalSize = self.pixelSize(of: full)
+                    self.layoutLightboxImage()
+                }
             }
         } else if let remoteURL = remoteURL, let url = URL(string: remoteURL) {
             var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
@@ -1557,7 +1719,9 @@ extension MainWindow {
                     if self.isRightPanelVisible && self.rightPanelMode == .thread {
                         self.renderThreadPanel()
                     } else {
-                        self.rebuildTimelineContent()
+                        if !self.deletePostRowFromTimeline(post.id) {
+                            self.rebuildTimelineContent()
+                        }
                     }
                 } catch {
                     NSLog("Delete post failed: \(error.localizedDescription)")
@@ -1631,6 +1795,9 @@ extension MainWindow {
         container.borderColor = Theme.shared.centerText.withAlphaComponent(0.16)
         container.frame = NSRect(x: 0, y: 0, width: displaySize.width, height: displaySize.height)
 
+        let cacheKey = "attachment_preview_\(file.id)"
+        let cachedImage = TimelineImageCache.shared.image(forKey: cacheKey)
+
         let imageView = NSImageView()
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.imageAlignment = .alignLeft
@@ -1639,6 +1806,7 @@ extension MainWindow {
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = 7
         imageView.layer?.masksToBounds = true
+        imageView.image = cachedImage
         container.addSubview(imageView)
 
         // Download affordance shown on hover (`.image-preview-utility-buttons-container`).
@@ -1678,19 +1846,29 @@ extension MainWindow {
 
         if let ws = webService {
             Task { @MainActor [weak self, weak container, weak imageView] in
-                let mime = file.mime_type ?? ""
-                let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
-                let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
-                guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
-                      let image = NSImage(data: data) else { return }
+                let cacheKey = "attachment_preview_\(file.id)"
+                let image: NSImage
+                if let mem = TimelineImageCache.shared.image(forKey: cacheKey) {
+                    image = mem
+                } else {
+                    let mime = file.mime_type ?? ""
+                    let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
+                    let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
+                    guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
+                          let decoded = NSImage(data: data) else { return }
+                    TimelineImageCache.shared.setImage(decoded, forKey: cacheKey)
+                    image = decoded
+                }
                 imageView?.image = image
                 let previewPixels = self?.pixelSize(of: image) ?? image.size
 
                 var measured = previewPixels
+                let isAnimated = (file.mime_type ?? "") == "image/gif"
                 var measuredFromOriginal = isAnimated
                 if natural == .zero, !isAnimated,
                    let fullData = try? await ws.fetchFileData(fileId: file.id),
                    let fullImage = NSImage(data: fullData) {
+                    TimelineImageCache.shared.setImage(fullImage, forKey: "attachment_full_\(file.id)")
                     measured = self?.pixelSize(of: fullImage) ?? previewPixels
                     measuredFromOriginal = true
                 }
@@ -1724,6 +1902,9 @@ extension MainWindow {
         container.clipContentToBounds = true
         container.frame = NSRect(origin: .zero, size: size)
 
+        let cacheKey = "attachment_preview_\(file.id)"
+        let cachedImage = TimelineImageCache.shared.image(forKey: cacheKey)
+
         let imageView = NSImageView(frame: NSRect(x: 1, y: 1, width: size.width - 2, height: size.height - 2))
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.imageAlignment = .alignCenter
@@ -1731,6 +1912,7 @@ extension MainWindow {
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = MMRadius.control - 1
         imageView.layer?.masksToBounds = true
+        imageView.image = cachedImage
         container.addSubview(imageView)
 
         let download = RoundedEdgePanel()
@@ -1775,12 +1957,18 @@ extension MainWindow {
 
         if let ws = webService {
             Task { @MainActor [weak imageView] in
+                let cacheKey = "attachment_preview_\(file.id)"
+                if let cached = TimelineImageCache.shared.image(forKey: cacheKey) {
+                    imageView?.image = cached
+                    return
+                }
                 let mime = file.mime_type ?? ""
                 let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
                 let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
                 guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
                       let image = NSImage(data: data)
                 else { return }
+                TimelineImageCache.shared.setImage(image, forKey: cacheKey)
                 imageView?.image = image
             }
         }
@@ -2176,6 +2364,26 @@ extension MainWindow {
         )
         row.frame.origin = NSPoint(x: 0, y: insertionY)
         timelineDocView.addSubview(row)
+
+        let reactions = post.metadata?.reactions ?? []
+        let reactionsHash = reactions.reduce(into: 17) { hash, r in
+            hash = hash &* 31 &+ (r.user_id.hashValue ^ r.emoji_name.hashValue)
+        }
+        let fileIds = (post.metadata?.files ?? []).map { $0.id }
+        let key = TimelineRowKey(
+            postId: post.id,
+            message: post.message,
+            editAt: post.edit_at,
+            deleteAt: post.delete_at,
+            replyCount: post.reply_count ?? 0,
+            reactionsHash: reactionsHash,
+            isPinned: post.is_pinned ?? false,
+            isConsecutive: isConsecutive,
+            width: chatW,
+            fileIds: fileIds
+        )
+        renderedPostRows[post.id] = (row, rowHeight, key)
+
         let newHeight = max(scrollH, insertionY + rowHeight + (isConsecutive ? 2 : 4) + 16)
         timelineDocView.frame = NSRect(
             x: 0,
@@ -2535,6 +2743,7 @@ extension MainWindow {
 
         // Author label
         let authorLabel = NSTextField(labelWithString: authorName)
+        authorLabel.identifier = NSUserInterfaceItemIdentifier("authorLabel_\(post.user_id)")
         let authorFont = MMFont.font(ofSize: 14, weight: .semibold)
         authorLabel.font = authorFont
         authorLabel.textColor = darkText
@@ -3263,6 +3472,32 @@ extension MainWindow {
         return badge
     }
 
+    func createLoadOlderMessagesRow(width: CGFloat) -> NSView {
+        let loadRow = RoundedEdgePanel()
+        loadRow.identifier = NSUserInterfaceItemIdentifier("loadOlderMessagesRow")
+        loadRow.cornerRadius = MMRadius.control
+        loadRow.color = .clear
+        loadRow.frame = NSRect(x: 0, y: 0, width: width, height: 32)
+        let loadLabel = NSTextField(labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")
+        loadLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+        loadLabel.textColor = Theme.shared.centerTextMuted
+        loadLabel.alignment = .center
+        loadLabel.isEditable = false
+        loadLabel.isSelectable = false
+        loadLabel.frame = NSRect(x: 0, y: 7, width: width, height: 18)
+        loadRow.addSubview(loadLabel)
+        loadRow.onHoverChanged = { [weak loadRow] isHovered in
+            loadRow?.color = isHovered
+                ? Theme.shared.centerHover
+                : .clear
+            loadRow?.setNeedsAppearanceUpdate()
+        }
+        loadRow.onClick = { [weak self] in
+            self?.loadOlderPosts()
+        }
+        return loadRow
+    }
+
     func rebuildTimelineContent(scrollToBottom: Bool = false) {
         let fullChatW = chatPanel.bounds.width
         let chatW = isRightPanelVisible ? rightPanel.frame.minX : fullChatW
@@ -3275,9 +3510,7 @@ extension MainWindow {
         let scrollH = max(0, headerY - (connectionBanner.isHidden ? 0 : 26) - composerTop)
         timelineScrollView.frame = NSRect(x: 0, y: composerTop, width: chatW, height: scrollH)
 
-        timelineDocView.subviews.forEach { $0.removeFromSuperview() }
-        newMessagesDividerView = nil
-
+        var newSubviews: [NSView] = []
         var currentY: CGFloat = 16
 
         // 1. Welcome Hero — only for an empty channel, not above every feed.
@@ -3288,7 +3521,7 @@ extension MainWindow {
             timelineHeroContainer.frame = NSRect(x: (chatW - heroW) / 2, y: currentY, width: heroW, height: heroH)
             timelineHeroContainer.isHidden = false
             layoutHeroSubviews(heroW: heroW)
-            timelineDocView.addSubview(timelineHeroContainer)
+            newSubviews.append(timelineHeroContainer)
             currentY += heroH + 16
         } else {
             timelineHeroContainer.isHidden = true
@@ -3361,35 +3594,30 @@ extension MainWindow {
         }
 
         if !didLoadAllHistory && !postsToRender.isEmpty {
-            let loadRow = RoundedEdgePanel()
-            loadRow.cornerRadius = MMRadius.control
-            loadRow.color = .clear
-            loadRow.frame = NSRect(x: 0, y: currentY, width: chatW, height: 32)
-            let loadLabel = NSTextField(labelWithString: isLoadingOlderPosts ? "Loading older messages…" : "Load older messages")
-            loadLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
-            loadLabel.textColor = Theme.shared.centerTextMuted
-            loadLabel.alignment = .center
-            loadLabel.isEditable = false
-            loadLabel.isSelectable = false
-            loadLabel.frame = NSRect(x: 0, y: 7, width: chatW, height: 18)
-            loadRow.addSubview(loadLabel)
-            loadRow.onHoverChanged = { [weak loadRow] isHovered in
-                loadRow?.color = isHovered
-                    ? Theme.shared.centerHover
-                    : .clear
-                loadRow?.setNeedsAppearanceUpdate()
+            let loadRow: NSView
+            if let existing = timelineOlderPostsRow, abs(existing.frame.width - chatW) < 1 {
+                loadRow = existing
+                if let label = loadRow.subviews.compactMap({ $0 as? NSTextField }).first {
+                    label.stringValue = isLoadingOlderPosts ? "Loading older messages…" : "Load older messages"
+                }
+            } else {
+                let created = createLoadOlderMessagesRow(width: chatW)
+                timelineOlderPostsRow = created
+                loadRow = created
             }
-            loadRow.onClick = { [weak self] in
-                self?.loadOlderPosts()
-            }
-            timelineDocView.addSubview(loadRow)
+            loadRow.frame.origin = NSPoint(x: 0, y: currentY)
+            newSubviews.append(loadRow)
             currentY += 40
+        } else {
+            timelineOlderPostsRow = nil
         }
 
         var lastDateKey: Date? = nil
         var lastUserId: String? = nil
         var lastWasSystem = false
         var lastPostTimestamp: Int64 = 0
+        var renderedIdsInPass = Set<String>()
+
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
             let dateStr = TimelineDateSeparator.string(for: postDate)
@@ -3399,18 +3627,32 @@ extension MainWindow {
                 lastDateKey = dateKey
                 lastUserId = nil
                 lastWasSystem = false
-                let sepView = createDateSeparator(dateStr: dateStr, width: chatW)
+                let sepView: NSView
+                if let existing = renderedDateSeparators[dateStr], abs(existing.width - chatW) < 1 {
+                    sepView = existing.view
+                } else {
+                    let created = createDateSeparator(dateStr: dateStr, width: chatW)
+                    renderedDateSeparators[dateStr] = (created, chatW)
+                    sepView = created
+                }
                 sepView.frame.origin.y = currentY
-                timelineDocView.addSubview(sepView)
+                newSubviews.append(sepView)
                 currentY += 24 + 10
             }
 
             if post.id == newMessagesDividerPostId {
-                let dividerView = createNewMessagesDivider(width: chatW)
+                let dividerView: NSView
+                if let existing = newMessagesDividerView, abs(existing.frame.width - chatW) < 1 {
+                    dividerView = existing
+                } else {
+                    dividerView = createNewMessagesDivider(width: chatW)
+                    newMessagesDividerView = dividerView
+                }
                 dividerView.frame.origin.y = currentY
-                timelineDocView.addSubview(dividerView)
-                newMessagesDividerView = dividerView
+                newSubviews.append(dividerView)
                 currentY += 40
+            } else if newMessagesDividerPostId == nil {
+                newMessagesDividerView = nil
             }
 
             // Group with the previous post only when it is the same author and
@@ -3418,26 +3660,74 @@ extension MainWindow {
             let withinGroupingWindow = (post.create_at - lastPostTimestamp) <= 5 * 60 * 1000
             let isConsecutive = (!isSystem && !lastWasSystem && post.user_id == lastUserId
                 && !post.user_id.isEmpty && withinGroupingWindow)
-            let (rowView, rowH) = createPostRow(post: post, width: chatW, timeStr: Self.localizedTimeFormatter.string(from: postDate), isConsecutive: isConsecutive)
+
+            let reactions = post.metadata?.reactions ?? []
+            let reactionsHash = reactions.reduce(into: 17) { hash, r in
+                hash = hash &* 31 &+ (r.user_id.hashValue ^ r.emoji_name.hashValue)
+            }
+            let fileIds = (post.metadata?.files ?? []).map { $0.id }
+            let key = TimelineRowKey(
+                postId: post.id,
+                message: post.message,
+                editAt: post.edit_at,
+                deleteAt: post.delete_at,
+                replyCount: post.reply_count ?? 0,
+                reactionsHash: reactionsHash,
+                isPinned: post.is_pinned ?? false,
+                isConsecutive: isConsecutive,
+                width: chatW,
+                fileIds: fileIds
+            )
+
+            let rowView: NSView
+            let rowH: CGFloat
+            if let cached = renderedPostRows[post.id], cached.key == key {
+                rowView = cached.view
+                rowH = cached.height
+            } else {
+                let timeStr = Self.localizedTimeFormatter.string(from: postDate)
+                let (createdView, createdH) = createPostRow(post: post, width: chatW, timeStr: timeStr, isConsecutive: isConsecutive)
+                renderedPostRows[post.id] = (createdView, createdH, key)
+                rowView = createdView
+                rowH = createdH
+            }
             rowView.frame.origin.y = currentY
-            timelineDocView.addSubview(rowView)
+            newSubviews.append(rowView)
             currentY += rowH + (isConsecutive ? 2 : 4)
 
+            renderedIdsInPass.insert(post.id)
             lastUserId = post.user_id
             lastWasSystem = isSystem
             lastPostTimestamp = post.create_at
         }
 
+        // Evict cached posts no longer in timeline
+        for (postId, cached) in renderedPostRows where !renderedIdsInPass.contains(postId) {
+            cached.view.removeFromSuperview()
+            renderedPostRows.removeValue(forKey: postId)
+        }
+
         for pending in pendingOutgoingPosts where pending.channelId == activeChannelId {
             let (pendingRow, pendingHeight) = createPendingOutgoingRow(pending, width: chatW)
             pendingRow.frame.origin.y = currentY
-            timelineDocView.addSubview(pendingRow)
+            newSubviews.append(pendingRow)
             currentY += pendingHeight + 4
         }
 
         currentY += 16
         let totalHeight = max(scrollH, currentY)
         timelineDocView.frame = NSRect(x: 0, y: 0, width: chatW, height: totalHeight)
+
+        let existingSubviewsSet = Set(timelineDocView.subviews.map { ObjectIdentifier($0) })
+        let newSubviewsSet = Set(newSubviews.map { ObjectIdentifier($0) })
+
+        for subview in timelineDocView.subviews where !newSubviewsSet.contains(ObjectIdentifier(subview)) {
+            subview.removeFromSuperview()
+        }
+        for view in newSubviews where !existingSubviewsSet.contains(ObjectIdentifier(view)) {
+            timelineDocView.addSubview(view)
+        }
+        timelineDocView.subviews = newSubviews
 
         if scrollToBottom {
             DispatchQueue.main.async { [weak self] in

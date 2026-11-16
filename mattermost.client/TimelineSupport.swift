@@ -6,7 +6,51 @@
 //  them outside the window makes the behaviour straightforward to unit test.
 //
 
+import AppKit
 import Foundation
+
+/// In-memory cache for decoded attachment previews and inline images/gifs.
+public final class TimelineImageCache: @unchecked Sendable {
+    public static let shared = TimelineImageCache()
+
+    private let cache = NSCache<NSString, NSImage>()
+
+    public init(countLimit: Int = 300, totalCostLimit: Int = 100 * 1024 * 1024) {
+        cache.countLimit = countLimit
+        cache.totalCostLimit = totalCostLimit
+    }
+
+    public func image(forKey key: String) -> NSImage? {
+        cache.object(forKey: key as NSString)
+    }
+
+    public func setImage(_ image: NSImage, forKey key: String, cost: Int = 0) {
+        let estimatedCost = cost > 0 ? cost : Int(image.size.width * image.size.height * 4)
+        cache.setObject(image, forKey: key as NSString, cost: estimatedCost)
+    }
+
+    public func removeImage(forKey key: String) {
+        cache.removeObject(forKey: key as NSString)
+    }
+
+    public func clear() {
+        cache.removeAllObjects()
+    }
+}
+
+/// Identifies the rendered state of a post row to determine whether it can be reused without recreating views.
+struct TimelineRowKey: Equatable {
+    let postId: String
+    let message: String
+    let editAt: Int64?
+    let deleteAt: Int64?
+    let replyCount: Int
+    let reactionsHash: Int
+    let isPinned: Bool
+    let isConsecutive: Bool
+    let width: CGFloat
+    let fileIds: [String]
+}
 
 /// Result of merging a page of older posts into the current timeline.
 struct TimelinePageMerge {

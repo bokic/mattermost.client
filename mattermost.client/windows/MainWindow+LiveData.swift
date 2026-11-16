@@ -436,6 +436,7 @@ extension MainWindow {
             saveComposerDraft(for: previousChannelId)
             saveChannelScrollPosition(for: previousChannelId)
             if rightPanelMode == .thread { saveThreadDraft() }
+            clearTimelineRowCache()
         }
         activeChannelId = ch.id
         UserDefaults.standard.set(ch.id, forKey: "lastChannelId")
@@ -694,8 +695,8 @@ extension MainWindow {
             self.usersByUsername[user.username.lowercased()] = user
             self.fetchAvatarIfNeeded(for: user.id)
             // The new user's display name was unknown when the row was built;
-            // refresh once now that it is available.
-            self.rebuildTimelineContent(scrollToBottom: false)
+            // update in place without full timeline rebuild.
+            self.updateAuthorInfo(for: user.id, username: user.username)
         }
     }
 

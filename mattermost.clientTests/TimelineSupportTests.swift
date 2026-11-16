@@ -124,7 +124,226 @@ final class TimelineSupportTests: XCTestCase {
         )
     }
 
-    private func makePost(id: String, createAt: Int64) -> MMPost {
+    // MARK: - Timeline Image Cache & Diffing
+
+    func testTimelineImageCacheStoreAndRetrieve() {
+        let cache = TimelineImageCache(countLimit: 10, totalCostLimit: 1024 * 1024)
+        let image = NSImage(size: NSSize(width: 50, height: 50))
+        cache.setImage(image, forKey: "test_key")
+
+        XCTAssertNotNil(cache.image(forKey: "test_key"))
+        cache.removeImage(forKey: "test_key")
+        XCTAssertNil(cache.image(forKey: "test_key"))
+
+        cache.setImage(image, forKey: "key1")
+        cache.setImage(image, forKey: "key2")
+        cache.clear()
+        XCTAssertNil(cache.image(forKey: "key1"))
+        XCTAssertNil(cache.image(forKey: "key2"))
+    }
+
+    func testTimelineRowKeyEqualityAndDiff() {
+        let key1 = TimelineRowKey(
+            postId: "p1",
+            message: "Hello",
+            editAt: nil,
+            deleteAt: nil,
+            replyCount: 0,
+            reactionsHash: 42,
+            isPinned: false,
+            isConsecutive: false,
+            width: 800,
+            fileIds: ["f1"]
+        )
+        let key2 = TimelineRowKey(
+            postId: "p1",
+            message: "Hello",
+            editAt: nil,
+            deleteAt: nil,
+            replyCount: 0,
+            reactionsHash: 42,
+            isPinned: false,
+            isConsecutive: false,
+            width: 800,
+            fileIds: ["f1"]
+        )
+        let keyModifiedMessage = TimelineRowKey(
+            postId: "p1",
+            message: "Hello World",
+            editAt: nil,
+            deleteAt: nil,
+            replyCount: 0,
+            reactionsHash: 42,
+            isPinned: false,
+            isConsecutive: false,
+            width: 800,
+            fileIds: ["f1"]
+        )
+        let keyModifiedReactions = TimelineRowKey(
+            postId: "p1",
+            message: "Hello",
+            editAt: nil,
+            deleteAt: nil,
+            replyCount: 0,
+            reactionsHash: 99,
+            isPinned: false,
+            isConsecutive: false,
+            width: 800,
+            fileIds: ["f1"]
+        )
+
+        XCTAssertEqual(key1, key2)
+        XCTAssertNotEqual(key1, keyModifiedMessage)
+        XCTAssertNotEqual(key1, keyModifiedReactions)
+    }
+
+    func testRebuildTimelineContentReusesUnchangedRows() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let post1 = makePost(id: "p1", createAt: 1000)
+        let post2 = makePost(id: "p2", createAt: 2000)
+        window.currentChannelPosts = [post1, post2]
+        window.rebuildTimelineContent(scrollToBottom: false)
+
+        let initialRow1 = window.timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_p1"
+        })
+        let initialRow2 = window.timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_p2"
+        })
+        XCTAssertNotNil(initialRow1)
+        XCTAssertNotNil(initialRow2)
+
+        // Rebuild again without changes: rows MUST be reused directly (identical view instances)
+        window.rebuildTimelineContent(scrollToBottom: false)
+
+        let secondRow1 = window.timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_p1"
+        })
+        let secondRow2 = window.timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_p2"
+        })
+
+        XCTAssertTrue(initialRow1 === secondRow1, "Unchanged row p1 must be reused from cache")
+        XCTAssertTrue(initialRow2 === secondRow2, "Unchanged row p2 must be reused from cache")
+    }
+
+    func testUpdatePostRowInTimelineReplacesTargetRowInPlace() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let post1 = makePost(id: "p1", createAt: 1000)
+        let post2 = makePost(id: "p2", createAt: 2000)
+        window.currentChannelPosts = [post1, post2]
+        window.rebuildTimelineContent(scrollToBottom: false)
+
+        let originalRow2 = window.timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_p2"
+        })
+
+        let updatedPost1 = makePost(
+            id: "p1", createAt: 1000, message: "Updated message content that causes re-rendering")
+        window.currentChannelPosts[0] = updatedPost1
+
+        let didUpdate = window.updatePostRowInTimeline(updatedPost1)
+        XCTAssertTrue(didUpdate)
+
+        let newRow2 = window.timelineDocView.subviews.first(where: {
+            $0.identifier?.rawValue == "postRow_p2"
+        })
+        XCTAssertTrue(originalRow2 === newRow2, "Post 2 must not be recreated when Post 1 updates")
+    }
+
+    func testDeletePostRowFromTimelineRemovesRowAndShiftsSubsequent() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let post1 = makePost(id: "p1", createAt: 1000)
+        let post2 = makePost(id: "p2", createAt: 2000)
+        window.currentChannelPosts = [post1, post2]
+        window.rebuildTimelineContent(scrollToBottom: false)
+
+        let initialY2 =
+            window.timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_p2"
+            })?.frame.origin.y ?? 0
+
+        let didDelete = window.deletePostRowFromTimeline("p1")
+        XCTAssertTrue(didDelete)
+        XCTAssertNil(
+            window.timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_p1"
+            }))
+
+        let newY2 =
+            window.timelineDocView.subviews.first(where: {
+                $0.identifier?.rawValue == "postRow_p2"
+            })?.frame.origin.y ?? 0
+        XCTAssertLessThan(newY2, initialY2, "Post 2 should shift upward after deleting Post 1")
+    }
+
+    func testUpdateTimelineAvatarUpdatesAvatarInPlace() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let post = makePost(id: "p1", createAt: 1000)
+        window.currentChannelPosts = [post]
+        window.rebuildTimelineContent(scrollToBottom: false)
+
+        let newAvatar = NSImage(size: NSSize(width: 32, height: 32))
+        window.updateTimelineAvatar(userId: "user-1", image: newAvatar)
+
+        var foundAvatarImage: NSImage?
+        func checkAvatar(_ view: NSView) {
+            if view.identifier?.rawValue == "avatar_user-1",
+                let imgView = view.subviews.compactMap({ $0 as? NSImageView }).first
+            {
+                foundAvatarImage = imgView.image
+                return
+            }
+            view.subviews.forEach(checkAvatar)
+        }
+        checkAvatar(window.timelineDocView)
+
+        XCTAssertTrue(foundAvatarImage === newAvatar, "Avatar view should have updated in place")
+    }
+
+    func testUpdateAuthorInfoUpdatesAuthorLabelInPlace() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        let post = makePost(id: "p1", createAt: 1000)
+        window.currentChannelPosts = [post]
+        window.rebuildTimelineContent(scrollToBottom: false)
+
+        window.updateAuthorInfo(for: "user-1", username: "new_alice")
+
+        var foundLabelText: String?
+        func checkLabel(_ view: NSView) {
+            if view.identifier?.rawValue == "authorLabel_user-1",
+                let label = view as? NSTextField
+            {
+                foundLabelText = label.stringValue
+                return
+            }
+            view.subviews.forEach(checkLabel)
+        }
+        checkLabel(window.timelineDocView)
+
+        XCTAssertEqual(foundLabelText, "new_alice", "Author label should update in place")
+    }
+
+    private func makeWindow() -> MainWindow {
+        MainWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: true
+        )
+    }
+
+    private func makePost(id: String, createAt: Int64, message: String? = nil) -> MMPost {
         MMPost(
             id: id,
             create_at: createAt,
@@ -136,7 +355,7 @@ final class TimelineSupportTests: XCTestCase {
             channel_id: "town-square",
             root_id: nil,
             original_id: nil,
-            message: id,
+            message: message ?? id,
             type: nil
         )
     }

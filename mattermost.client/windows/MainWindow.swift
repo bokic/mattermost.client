@@ -452,6 +452,16 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let chatTimelineContainer = TimelineContainerView()
     let timelineScrollView = TimelineScrollView()
     let timelineDocView = TimelineFlippedView()
+    var renderedPostRows: [String: (view: NSView, height: CGFloat, key: TimelineRowKey)] = [:]
+    var renderedDateSeparators: [String: (view: NSView, width: CGFloat)] = [:]
+    var timelineOlderPostsRow: NSView?
+
+    func clearTimelineRowCache() {
+        renderedPostRows.removeAll()
+        renderedDateSeparators.removeAll()
+        timelineOlderPostsRow = nil
+    }
+
     var currentChannelPosts: [MMPost] {
         get { viewModel.currentChannelPosts }
         set { viewModel.currentChannelPosts = newValue }
