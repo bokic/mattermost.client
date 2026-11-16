@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **206/206 pass** |
+| `./test.sh` | **213/213 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,12 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **Status polling is expensive and duplicative** — `M`
-  - A 15 s timer calls `requestStatuses` plus a REST `POST /users/status/ids` for every known
-    user (`MainWindow+People.swift:356-384`), and each result recursively walks the entire
-    timeline view hierarchy (`:245-271`). Rely on WebSocket status events, batch REST
-    refreshes, and update only visible/known status dots.
 
 - [ ] **Live-data glue is still concentrated in `MainWindow+LiveData`** — `M`
   - `ChatViewModel` is a 44-line state holder; loading, pagination, read state,

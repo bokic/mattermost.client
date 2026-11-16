@@ -464,6 +464,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         renderedDateSeparators.removeAll()
         timelineOlderPostsRow = nil
         cancelAttachmentThumbnailTasks()
+        pruneStatusDots()
     }
 
     func cancelRightPanelThumbnailTasks() {
@@ -714,6 +715,45 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var lastTypingSentAt: Date?
     var menuAvatarStatusDot: RoundedEdgePanel?
     var statusPollingTimer: Timer?
+    var statusDotsByUserId: [String: NSHashTable<RoundedEdgePanel>] = [:]
+    var isFetchingStatusesViaREST = false
+    var lastRESTStatusPollTime: Date = .distantPast
+
+    func registerStatusDot(_ dot: RoundedEdgePanel, for userId: String) {
+        guard !userId.isEmpty else { return }
+        let table: NSHashTable<RoundedEdgePanel>
+        if let existing = statusDotsByUserId[userId] {
+            table = existing
+        } else {
+            let newTable = NSHashTable<RoundedEdgePanel>.weakObjects()
+            statusDotsByUserId[userId] = newTable
+            table = newTable
+        }
+        table.add(dot)
+    }
+
+    func unregisterStatusDot(_ dot: RoundedEdgePanel, for userId: String) {
+        guard !userId.isEmpty, let table = statusDotsByUserId[userId] else { return }
+        table.remove(dot)
+        if table.allObjects.isEmpty {
+            statusDotsByUserId.removeValue(forKey: userId)
+        }
+    }
+
+    func statusDots(for userId: String) -> [RoundedEdgePanel] {
+        guard let table = statusDotsByUserId[userId] else { return [] }
+        let dots = table.allObjects
+        if dots.isEmpty {
+            statusDotsByUserId.removeValue(forKey: userId)
+        }
+        return dots
+    }
+
+    func pruneStatusDots() {
+        for (userId, table) in statusDotsByUserId where table.allObjects.isEmpty {
+            statusDotsByUserId.removeValue(forKey: userId)
+        }
+    }
 
     override init(contentRect rect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
 

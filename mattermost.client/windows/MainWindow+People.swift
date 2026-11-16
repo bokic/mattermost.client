@@ -681,25 +681,27 @@ extension MainWindow {
         let isForCurrent = (userId == (currentUser?.id ?? "usr") || userId == "usr" || userId == "sample_usr")
         if isForCurrent {
             currentUserStatus = status
+            applyCurrentUserStatus(status)
         }
-        var updatedCount = 0
-        func updateInView(_ view: NSView) {
-            for subview in view.subviews {
-                if let raw = subview.identifier?.rawValue {
-                    if (isForCurrent && raw == "statusDot_currentUser") ||
-                        raw == "statusDot_\(userId)" {
-                        if let dotPanel = subview as? RoundedEdgePanel {
-                            dotPanel.color = color
-                            dotPanel.setNeedsAppearanceUpdate()
-                            self.updateStatusCheck(in: dotPanel, status: status)
-                            updatedCount += 1
-                        }
-                    }
-                }
-                updateInView(subview)
+
+        var candidateDots: [RoundedEdgePanel] = []
+        candidateDots.append(contentsOf: statusDots(for: userId))
+        if isForCurrent {
+            candidateDots.append(contentsOf: statusDots(for: "statusDot_currentUser"))
+            if let currentId = currentUser?.id, currentId != userId {
+                candidateDots.append(contentsOf: statusDots(for: currentId))
             }
         }
-        updateInView(timelineDocView)
+
+        var seen = Set<ObjectIdentifier>()
+        var updatedCount = 0
+        for dotPanel in candidateDots {
+            guard seen.insert(ObjectIdentifier(dotPanel)).inserted, dotPanel.superview != nil else { continue }
+            dotPanel.color = color
+            dotPanel.setNeedsAppearanceUpdate()
+            updateStatusCheck(in: dotPanel, status: status)
+            updatedCount += 1
+        }
         DebugLog.log("updateChatWidgetUserStatus: userId=\(userId), status=\(status), updatedDotsCount=\(updatedCount)")
     }
 
@@ -789,31 +791,69 @@ extension MainWindow {
         updateTimelineAvatar(userId: userId, image: image)
     }
 
-    func refreshUserStatuses() {
+    func refreshUserStatuses(forceRest: Bool = false) {
         guard let ws = webService, ws.isLogged() else { return }
-        DebugLog.log("refreshUserStatuses triggered, requesting via WS get_statuses")
-        ws.requestStatuses()
-        let knownIds = Array(Set(usersById.keys.filter { isLikelyMattermostId($0) }))
-        if !knownIds.isEmpty {
-            DebugLog.log("refreshUserStatuses: fetching REST statuses for \(knownIds.count) users: \(knownIds)")
-            Task { @MainActor [weak self] in
+        if ws.isWebSocketConnected && !forceRest {
+            DebugLog.log("refreshUserStatuses: WS connected, requesting via WS get_statuses")
+            ws.requestStatuses()
+            return
+        }
+        batchFetchUserStatusesViaREST(force: forceRest)
+    }
+
+    func batchFetchUserStatusesViaREST(userIds: [String]? = nil, force: Bool = false) {
+        guard let ws = webService, ws.isLogged() else { return }
+        guard !isFetchingStatusesViaREST else {
+            DebugLog.log("batchFetchUserStatusesViaREST: already in progress, skipping")
+            return
+        }
+
+        let now = Date()
+        if !force && now.timeIntervalSince(lastRESTStatusPollTime) < 30.0 {
+            DebugLog.log("batchFetchUserStatusesViaREST: throttled, skipping")
+            return
+        }
+
+        let targetIds: [String]
+        if let userIds = userIds {
+            targetIds = Array(Set(userIds.filter { isLikelyMattermostId($0) }))
+        } else {
+            targetIds = Array(Set(usersById.keys.filter { isLikelyMattermostId($0) }))
+        }
+
+        guard !targetIds.isEmpty else { return }
+
+        isFetchingStatusesViaREST = true
+        lastRESTStatusPollTime = now
+        DebugLog.log("batchFetchUserStatusesViaREST: fetching REST statuses for \(targetIds.count) users")
+
+        Task { @MainActor [weak self] in
+            defer { self?.isFetchingStatusesViaREST = false }
+            guard let self = self, let ws = self.webService else { return }
+
+            let batchSize = 100
+            for startIdx in stride(from: 0, to: targetIds.count, by: batchSize) {
+                let endIdx = min(startIdx + batchSize, targetIds.count)
+                let chunk = Array(targetIds[startIdx..<endIdx])
                 do {
-                    let statuses = try await ws.fetchUserStatuses(userIds: knownIds)
-                    DebugLog.log("refreshUserStatuses: received REST statuses: \(statuses.map { "\($0.user_id)=\($0.status)" }.joined(separator: ", "))")
+                    let statuses = try await ws.fetchUserStatuses(userIds: chunk)
+                    DebugLog.log("batchFetchUserStatusesViaREST: received \(statuses.count) statuses")
                     for st in statuses {
-                        guard let self = self else { continue }
                         if let end = st.dnd_end_time, end > 0 {
                             self.dndEndTimeByUser[st.user_id] = end
                         }
                         let status = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
+                        let oldStatus = self.userStatusById[st.user_id]
                         self.userStatusById[st.user_id] = status
-                        self.updateChatWidgetUserStatus(userId: st.user_id, status: status)
-                        if st.user_id == self.currentUser?.id, status != st.status {
-                            self.applyCurrentUserStatus(status)
+                        if oldStatus != status {
+                            self.updateChatWidgetUserStatus(userId: st.user_id, status: status)
+                            if st.user_id == self.currentUser?.id {
+                                self.applyCurrentUserStatus(status)
+                            }
                         }
                     }
                 } catch {
-                    DebugLog.error("refreshUserStatuses REST fetch error: \(error)")
+                    DebugLog.error("batchFetchUserStatusesViaREST chunk error: \(error)")
                 }
             }
         }
@@ -852,14 +892,22 @@ extension MainWindow {
             }
         }
         let allTargetIds = Array(targetIds.filter { isLikelyMattermostId($0) })
-        if !allTargetIds.isEmpty, let statuses = try? await ws.fetchUserStatuses(userIds: allTargetIds) {
-            for st in statuses {
-                if let end = st.dnd_end_time, end > 0 {
-                    self.dndEndTimeByUser[st.user_id] = end
+        let unknownTargetIds = allTargetIds.filter { self.userStatusById[$0] == nil }
+        if !unknownTargetIds.isEmpty {
+            if ws.isWebSocketConnected {
+                ws.requestStatusesByIds(unknownTargetIds)
+            } else if let statuses = try? await ws.fetchUserStatuses(userIds: unknownTargetIds) {
+                for st in statuses {
+                    if let end = st.dnd_end_time, end > 0 {
+                        self.dndEndTimeByUser[st.user_id] = end
+                    }
+                    let status = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
+                    let oldStatus = self.userStatusById[st.user_id]
+                    self.userStatusById[st.user_id] = status
+                    if oldStatus != status {
+                        self.updateChatWidgetUserStatus(userId: st.user_id, status: status)
+                    }
                 }
-                let status = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
-                self.userStatusById[st.user_id] = status
-                self.updateChatWidgetUserStatus(userId: st.user_id, status: status)
             }
         }
         for ch in dmChannels {
@@ -1087,6 +1135,10 @@ extension MainWindow {
         presenceDot.borderWidth = 2
         presenceDot.frame = NSRect(x: padding + avatarSize - 16, y: 0, width: 16, height: 16)
         updateStatusCheck(in: presenceDot, status: statStr)
+        registerStatusDot(presenceDot, for: user.id)
+        if isCurrent {
+            registerStatusDot(presenceDot, for: "statusDot_currentUser")
+        }
         profilePopoverPanel.addSubview(presenceDot)
 
         // 4. Header text (Full name, @username, badge)

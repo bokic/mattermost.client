@@ -235,14 +235,17 @@ extension MainWindow {
         }
 
         ws.onMultipleStatusesReceived = { [weak self] statuses in
-            DebugLog.log("ws.onMultipleStatusesReceived: \(statuses)")
+            DebugLog.log("ws.onMultipleStatusesReceived: \(statuses.count) statuses")
             guard let self = self else { return }
             for (userId, status) in statuses {
                 let normalized = self.normalizedStatusForKnownUser(status, userId: userId)
+                let oldStatus = self.userStatusById[userId]
                 self.userStatusById[userId] = normalized
-                self.updateChatWidgetUserStatus(userId: userId, status: normalized)
-                if userId == self.currentUser?.id, normalized != status {
-                    self.applyCurrentUserStatus(normalized)
+                if oldStatus != normalized {
+                    self.updateChatWidgetUserStatus(userId: userId, status: normalized)
+                    if userId == self.currentUser?.id {
+                        self.applyCurrentUserStatus(normalized)
+                    }
                 }
             }
         }
@@ -251,10 +254,13 @@ extension MainWindow {
             DebugLog.log("ws.onStatusChanged: userId=\(userId), status=\(status)")
             guard let self = self else { return }
             let normalized = self.normalizedStatusForKnownUser(status, userId: userId)
+            let oldStatus = self.userStatusById[userId]
             self.userStatusById[userId] = normalized
-            self.updateChatWidgetUserStatus(userId: userId, status: normalized)
-            if let myId = self.currentUser?.id ?? webService?.currentUserId, myId == userId {
-                self.applyCurrentUserStatus(normalized)
+            if oldStatus != normalized {
+                self.updateChatWidgetUserStatus(userId: userId, status: normalized)
+                if let myId = self.currentUser?.id ?? webService?.currentUserId, myId == userId {
+                    self.applyCurrentUserStatus(normalized)
+                }
             }
         }
 
@@ -343,11 +349,13 @@ extension MainWindow {
         }
 
         statusPollingTimer?.invalidate()
-        statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
+        statusPollingTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.clearExpiredCustomStatusIfNeeded()
-                self?.refreshCustomStatus()
-                self?.refreshUserStatuses()
+                guard let self = self else { return }
+                self.clearExpiredCustomStatusIfNeeded()
+                if let ws = self.webService, !ws.isWebSocketConnected {
+                    self.refreshUserStatuses()
+                }
             }
         }
 
@@ -519,13 +527,17 @@ extension MainWindow {
                 }
             }
             let allUserIds = Array(Set(posts.map { $0.user_id }.filter { $0 != "system" }))
-            if !allUserIds.isEmpty,
-               let fetchedStatuses = try? await ws.fetchUserStatuses(userIds: allUserIds) {
-                for st in fetchedStatuses {
-                    if let end = st.dnd_end_time, end > 0 {
-                        self.dndEndTimeByUser[st.user_id] = end
+            let unknownStatusIds = allUserIds.filter { self.userStatusById[$0] == nil && self.isLikelyMattermostId($0) }
+            if !unknownStatusIds.isEmpty {
+                if ws.isWebSocketConnected {
+                    ws.requestStatusesByIds(unknownStatusIds)
+                } else if let fetchedStatuses = try? await ws.fetchUserStatuses(userIds: unknownStatusIds) {
+                    for st in fetchedStatuses {
+                        if let end = st.dnd_end_time, end > 0 {
+                            self.dndEndTimeByUser[st.user_id] = end
+                        }
+                        self.userStatusById[st.user_id] = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
                     }
-                    self.userStatusById[st.user_id] = self.normalizedStatus(st.status, dndEndTime: st.dnd_end_time)
                 }
             }
             // Discard results for a channel that is no longer open.
@@ -874,6 +886,7 @@ extension MainWindow {
     @objc func appDidBecomeActive() {
         clearExpiredCustomStatusIfNeeded()
         refreshCustomStatus()
+        refreshUserStatuses()
         guard !activeChannelId.isEmpty else { return }
         markActiveChannelViewed()
     }

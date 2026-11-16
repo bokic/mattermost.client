@@ -2957,8 +2957,13 @@ extension MainWindow {
             let usrDot = RoundedEdgePanel()
             if isCurrentUser {
                 usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_currentUser")
+                registerStatusDot(usrDot, for: "statusDot_currentUser")
+                if let currentId = currentUser?.id {
+                    registerStatusDot(usrDot, for: currentId)
+                }
             } else {
                 usrDot.identifier = NSUserInterfaceItemIdentifier("statusDot_\(post.user_id)")
+                registerStatusDot(usrDot, for: post.user_id)
             }
             let dotSize: CGFloat = 12
             let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "offline")
