@@ -9,9 +9,20 @@ on:
 
 jobs:
   build-test:
+    name: Build & Test (Debug)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/Build/Intermediates.noindex
+            build/ModuleCache.noindex
+          key: ${{ runner.os }}-xcode-debug-${{ hashFiles('mattermost.client.xcodeproj/project.pbxproj', '**/*.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-debug-
 
       - name: Show toolchain
         run: |
@@ -21,19 +32,28 @@ jobs:
       - name: Build
         run: ./build.sh
 
-      - name: Test
+      - name: Test & Check Coverage
         run: ./test.sh
 
+      - name: Upload Test Results & Coverage Bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: build/TestResults.xcresult
+          if-no-files-found: ignore
 
   lint:
+    name: Lint Migrated Files
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Lint migrated files
+      - name: Lint
         run: ./lint.sh
 
   deployment-floor:
+    name: Deployment Floor (macOS 15)
     # Always-on check that the binary advertises the documented macOS 15 floor.
     runs-on: macos-15
     steps:
@@ -52,26 +72,33 @@ jobs:
           fi
           otool -l "$APP/Contents/MacOS/mattermost.client" | grep -A4 LC_BUILD_VERSION
 
-  release:
-    # A universal, checksummed Release DMG is built and smoke-launched for tags
-    # and manual runs. Signing/notarization is a protected manual step because
-    # it needs the Developer ID certificate and notary credentials.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+  release-check:
+    name: Release Build & Universal Lipo Check
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Cache Release build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/Build/Intermediates.noindex
+            build/ModuleCache.noindex
+          key: ${{ runner.os }}-xcode-release-${{ hashFiles('mattermost.client.xcodeproj/project.pbxproj', '**/*.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-release-
+
       - name: Show toolchain
         run: |
           xcodebuild -version
           swift --version
 
-      - name: Build Release DMG
+      - name: Build Release DMG (Universal)
         run: ./build_release.sh --adhoc
 
-      - name: Verify artifact
+      - name: Verify Universal Architectures (lipo)
         run: |
           set -euo pipefail
           APP="build/Build/Products/Release/mattermost.client.app"
@@ -80,6 +107,10 @@ jobs:
           printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -qx arm64
           printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -qx x86_64
           codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Verify DMG Artifact
+        run: |
+          set -euo pipefail
           DMG="$(find build/Build/Products/Release -maxdepth 1 -name 'mattermost.client-*.dmg' | head -1)"
           [ -n "$DMG" ] || { echo "::error::No DMG produced"; exit 1; }
           shasum -a 256 "$DMG" | tee "$DMG.ci.sha256"
@@ -103,10 +134,10 @@ jobs:
           wait "$PID" 2>/dev/null || true
           echo "Release app stayed alive for the smoke window."
 
-      - name: Upload DMG
+      - name: Upload Release DMG Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mattermost-client-release
+          name: mattermost-client-release-universal
           path: |
             build/Build/Products/Release/mattermost.client-*.dmg
             build/Build/Products/Release/mattermost.client-*.dmg.sha256

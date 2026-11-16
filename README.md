@@ -144,7 +144,8 @@ mattermost.client/
 ├── lint.sh                                     # swift-format lint for migrated source files
 ├── version.sh                                  # Tag + commits-since-tag build version
 ├── .swift-format                               # swift-format configuration (4-space indent)
-├── .github/workflows/ci.yml                    # Build, test and lint on macOS runners
+├── .github/workflows/ci.yml                    # Build, test, coverage and universal release check on macOS runners
+├── .github/workflows/release.yml               # Manual/tag Developer ID signing and notarization workflow
 ├── tools/                                      # Web-client DOM/computed-style measurement tools
 ├── build_release.sh                            # Builds Release build and packages DMG installer
 ├── LICENSE                                     # MIT License

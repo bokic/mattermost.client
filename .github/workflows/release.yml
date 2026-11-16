@@ -1,0 +1,104 @@
+name: Release (Signed & Notarized)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.8.1; leave blank to use version from version.sh)'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Sign, Notarize & Publish Release
+    runs-on: macos-15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Set up signing keychain
+        if: env.DEVELOPER_ID_CERTIFICATE_BASE64 != ''
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'ci-temp-keychain' }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERT_PATH="$RUNNER_TEMP/developer_id.p12"
+          echo "$DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$CERT_PATH"
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build, Sign & Notarize
+        env:
+          DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+          NOTARYTOOL_PROFILE: ${{ secrets.NOTARYTOOL_PROFILE }}
+          NOTARYTOOL_KEY: ${{ secrets.NOTARYTOOL_KEY }}
+          NOTARYTOOL_KEY_ID: ${{ secrets.NOTARYTOOL_KEY_ID }}
+          NOTARYTOOL_ISSUER: ${{ secrets.NOTARYTOOL_ISSUER }}
+          NOTARYTOOL_APPLE_ID: ${{ secrets.NOTARYTOOL_APPLE_ID }}
+          NOTARYTOOL_PASSWORD: ${{ secrets.NOTARYTOOL_PASSWORD }}
+          NOTARYTOOL_TEAM_ID: ${{ secrets.NOTARYTOOL_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${NOTARYTOOL_KEY_ID:-}" ] || [ -n "${NOTARYTOOL_APPLE_ID:-}" ] || [ -n "${NOTARYTOOL_PROFILE:-}" ]; then
+            echo "Running official Developer ID signing and notarization..."
+            ./build_release.sh
+          else
+            echo "::warning::Notarization credentials not configured in secrets; falling back to --adhoc build"
+            ./build_release.sh --adhoc
+          fi
+
+      - name: Verify Universal Architectures (lipo)
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release/mattermost.client.app"
+          ARCHS="$(lipo -archs "$APP/Contents/MacOS/mattermost.client")"
+          echo "Architectures: $ARCHS"
+          printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -qx arm64
+          printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -qx x86_64
+
+      - name: Smoke launch
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release/mattermost.client.app/Contents/MacOS/mattermost.client"
+          "$APP" >/tmp/mattermost-smoke.log 2>&1 &
+          PID=$!
+          for _ in $(seq 1 20); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "::error::Release app exited during launch"
+              cat /tmp/mattermost-smoke.log
+              exit 1
+            fi
+            sleep 0.5
+          done
+          kill "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          echo "Release app stayed alive for the smoke window."
+
+      - name: Upload Notarized Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mattermost-client-signed-dmg
+          path: |
+            build/Build/Products/Release/mattermost.client-*.dmg
+            build/Build/Products/Release/mattermost.client-*.dmg.sha256
+          if-no-files-found: error

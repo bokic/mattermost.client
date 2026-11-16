@@ -42,11 +42,6 @@ completed baseline remains at the end.
 
 ## P5 — Quality, tooling & documentation
 
-- [ ] **CI is Debug-only and does not report coverage** — `M`
-  - `.github/workflows/ci.yml` has no caching, no `-resultBundlePath`, no coverage, no
-    Release/universal check, no artifact upload and no notarization job. Add a Release job,
-    `lipo` verification, coverage, and a signed/notarized release workflow (manual gate).
-
 - [ ] **Lint only covers 15 migrated files** — `S`
   - `lint.sh` explicitly excludes all `MainWindow+*` files, `AppDelegate`, `LoginWindow`,
     `Theme`, `KeychainHelper`, `MMFont` and the project scripts. Reformat the remaining

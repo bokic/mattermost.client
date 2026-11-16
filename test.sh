@@ -94,6 +94,18 @@ echo "Line coverage: ${COVERAGE_PERCENT}% (minimum ${COVERAGE_MIN_PERCENT}%)"
 
 if python3 -c "import sys; sys.exit(0 if float('${COVERAGE_PERCENT}') >= float('${COVERAGE_MIN_PERCENT}') else 1)"; then
     echo "All unit tests passed!"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        {
+            echo "## mattermost.client Test Summary"
+            echo
+            echo "- **Status**: Passed"
+            echo "- **Line Coverage**: ${COVERAGE_PERCENT}% (minimum gate: ${COVERAGE_MIN_PERCENT}%)"
+            echo
+            echo '```text'
+            grep -E "Test Suite 'All tests'|Executed [0-9]+ tests" "$LOG_FILE" | tail -4 || true
+            echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+    fi
 else
     echo "Coverage ${COVERAGE_PERCENT}% is below the ${COVERAGE_MIN_PERCENT}% gate."
     exit 1
