@@ -9,7 +9,7 @@ build/release scripts, CI, README/AUDIT._
 | Check | Result |
 |---|---|
 | `./build.sh` | **Succeeds**, 0 compiler warnings |
-| `./test.sh` | **202/202 pass** |
+| `./test.sh` | **206/206 pass** |
 | `./lint.sh` | **Passes** (`swift-format --strict` on the migrated allowlist) |
 | Deployment target | macOS 15.0 |
 | Release archs | `arm64 x86_64` (universal), `ONLY_ACTIVE_ARCH = NO` |
@@ -37,12 +37,6 @@ completed baseline remains at the end.
 ---
 
 ## P4 — Architecture, performance & maintainability
-
-- [ ] **Caches and fetch tasks are unbounded** — `M`
-  - `userAvatarsById` (`MainWindow.swift:430`), `inlineImageSizeCache`,
-    `attachmentSizeCache` (`:133-134`), `customEmojiImages` and the GIF disk cache
-    (`MainWindow+Timeline.swift:420-463`) have no cap or eviction. Use `NSCache`/LRU caps,
-    cancel thumbnail tasks when a panel closes, and prune the GIF cache.
 
 - [ ] **Status polling is expensive and duplicative** — `M`
   - A 15 s timer calls `requestStatuses` plus a REST `POST /users/status/ids` for every known

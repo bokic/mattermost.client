@@ -414,12 +414,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         notificationIds.removeAll()
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
         updateUnreadIndicators()
-        mainWindow?.close()
-        mainWindow = nil
         showLoginWindow()
     }
     
     func showLoginWindow() {
+        mainWindow?.cancelAllThumbnailTasks()
+        mainWindow?.cancelAvatarFetchTasks()
+        mainWindow?.clearAllCaches()
         mainWindow?.close()
         mainWindow = nil
         loginWindow = LoginWindow(

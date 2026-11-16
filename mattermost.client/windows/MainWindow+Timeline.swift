@@ -463,7 +463,7 @@ extension MainWindow {
                     let filename = TimelineCacheKey.stable(urlString) + ".gif"
                     let diskURL = dir.appendingPathComponent(filename)
                     try? data.write(to: diskURL)
-                    Self.pruneGiphyCache(dir, keeping: 200)
+                    Self.pruneGiphyCache(dir, keeping: 200, maxTotalBytes: 50 * 1024 * 1024)
                 }
                 Task { @MainActor in
                     if let data = responseData, data.count <= maxBytes, let image = NSImage(data: data) {
@@ -477,22 +477,39 @@ extension MainWindow {
         }
     }
 
-    nonisolated static func pruneGiphyCache(_ directory: URL, keeping limit: Int) {
+    func pruneGiphyDiskCache() {
+        guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("mattermost.client/giphy", isDirectory: true) else { return }
+        DispatchQueue.global(qos: .utility).async {
+            Self.pruneGiphyCache(dir, keeping: 200, maxTotalBytes: 50 * 1024 * 1024)
+        }
+    }
+
+    nonisolated static func pruneGiphyCache(_ directory: URL, keeping limit: Int = 200, maxTotalBytes: Int = 50 * 1024 * 1024) {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(
             at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
         ) else { return }
         let gifs = files.filter { $0.pathExtension.lowercased() == "gif" }
-        guard gifs.count > limit else { return }
+        guard !gifs.isEmpty else { return }
+
         let sorted = gifs.sorted {
             let lhs = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
             let rhs = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            return lhs < rhs
+            return lhs > rhs
         }
-        for file in sorted.prefix(gifs.count - limit) {
-            try? fm.removeItem(at: file)
+
+        var totalSize = 0
+        var count = 0
+        for file in sorted {
+            count += 1
+            let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            totalSize += size
+            if count > limit || totalSize > maxTotalBytes {
+                try? fm.removeItem(at: file)
+            }
         }
     }
 
@@ -1229,9 +1246,12 @@ extension MainWindow {
                 self.lightboxNaturalSize = self.pixelSize(of: cached)
                 self.layoutLightboxImage()
             } else {
-                Task { @MainActor [weak self] in
+                lightboxFetchTask?.cancel()
+                lightboxFetchTask = Task { @MainActor [weak self] in
+                    defer { self?.lightboxFetchTask = nil }
                     guard let self = self, self.lightboxLoadToken == token,
                           let data = try? await ws.fetchFileData(fileId: file.id),
+                          !Task.isCancelled,
                           let full = NSImage(data: data) else { return }
                     TimelineImageCache.shared.setImage(full, forKey: fullKey)
                     self.lightboxImageView.image = full
@@ -1277,6 +1297,8 @@ extension MainWindow {
     }
 
     func closeLightbox() {
+        lightboxFetchTask?.cancel()
+        lightboxFetchTask = nil
         lightboxOverlay.isHidden = true
         lightboxOverlay.removeFromSuperview()
         isLightboxVisible = false
@@ -1845,7 +1867,10 @@ extension MainWindow {
         }
 
         if let ws = webService {
-            Task { @MainActor [weak self, weak container, weak imageView] in
+            let fileId = file.id
+            attachmentThumbnailTasks[fileId]?.cancel()
+            let task = Task { @MainActor [weak self, weak container, weak imageView] in
+                defer { self?.attachmentThumbnailTasks.removeValue(forKey: fileId) }
                 let cacheKey = "attachment_preview_\(file.id)"
                 let image: NSImage
                 if let mem = TimelineImageCache.shared.image(forKey: cacheKey) {
@@ -1855,10 +1880,12 @@ extension MainWindow {
                     let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
                     let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
                     guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
+                          !Task.isCancelled,
                           let decoded = NSImage(data: data) else { return }
                     TimelineImageCache.shared.setImage(decoded, forKey: cacheKey)
                     image = decoded
                 }
+                guard !Task.isCancelled else { return }
                 imageView?.image = image
                 let previewPixels = self?.pixelSize(of: image) ?? image.size
 
@@ -1867,11 +1894,13 @@ extension MainWindow {
                 var measuredFromOriginal = isAnimated
                 if natural == .zero, !isAnimated,
                    let fullData = try? await ws.fetchFileData(fileId: file.id),
+                   !Task.isCancelled,
                    let fullImage = NSImage(data: fullData) {
                     TimelineImageCache.shared.setImage(fullImage, forKey: "attachment_full_\(file.id)")
                     measured = self?.pixelSize(of: fullImage) ?? previewPixels
                     measuredFromOriginal = true
                 }
+                guard !Task.isCancelled else { return }
                 guard natural == .zero, measured.width > 0, measured.height > 0 else { return }
                 // A preview can be downscaled; only cache dimensions measured from
                 // the original image. Otherwise keep the placeholder layout and do
@@ -1888,6 +1917,7 @@ extension MainWindow {
                 )
                 self?.scheduleImageRelayout()
             }
+            attachmentThumbnailTasks[fileId] = task
         }
 
         return (container, displaySize.height)
@@ -1956,7 +1986,10 @@ extension MainWindow {
         }
 
         if let ws = webService {
-            Task { @MainActor [weak imageView] in
+            let fileId = file.id
+            attachmentThumbnailTasks[fileId]?.cancel()
+            let task = Task { @MainActor [weak self, weak imageView] in
+                defer { self?.attachmentThumbnailTasks.removeValue(forKey: fileId) }
                 let cacheKey = "attachment_preview_\(file.id)"
                 if let cached = TimelineImageCache.shared.image(forKey: cacheKey) {
                     imageView?.image = cached
@@ -1966,11 +1999,14 @@ extension MainWindow {
                 let ext = ((file.name ?? "") as NSString).pathExtension.lowercased()
                 let isAnimated = mime == "image/gif" || ext == "gif" || ext == "webp"
                 guard let data = try? await ws.fetchFileData(fileId: file.id, preview: !isAnimated),
+                      !Task.isCancelled,
                       let image = NSImage(data: data)
                 else { return }
                 TimelineImageCache.shared.setImage(image, forKey: cacheKey)
+                guard !Task.isCancelled else { return }
                 imageView?.image = image
             }
+            attachmentThumbnailTasks[fileId] = task
         }
 
         container.accessibilityTitle = file.name ?? "Image attachment"

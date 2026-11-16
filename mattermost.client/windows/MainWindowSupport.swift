@@ -24,10 +24,20 @@ class TimelineFlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// Bounded, evicting image cache for avatars and custom emoji.
+/// Bounded, evicting image cache for avatars, emoji, and thumbnails.
 @MainActor
 final class BoundedImageCache {
     private let cache = NSCache<NSString, NSImage>()
+
+    var countLimit: Int {
+        get { cache.countLimit }
+        set { cache.countLimit = newValue }
+    }
+
+    var totalCostLimit: Int {
+        get { cache.totalCostLimit }
+        set { cache.totalCostLimit = newValue }
+    }
 
     init(countLimit: Int = 300, totalCostLimit: Int = 64 * 1024 * 1024) {
         cache.countLimit = countLimit
@@ -46,12 +56,25 @@ final class BoundedImageCache {
             cache.setObject(newValue, forKey: key as NSString, cost: cost)
         }
     }
+
+    func removeValue(forKey key: String) {
+        cache.removeObject(forKey: key as NSString)
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
+    }
 }
 
 /// Bounded cache for natural image/attachment sizes.
 @MainActor
 final class BoundedSizeCache {
     private let cache = NSCache<NSString, NSValue>()
+
+    var countLimit: Int {
+        get { cache.countLimit }
+        set { cache.countLimit = newValue }
+    }
 
     init(countLimit: Int = 500) {
         cache.countLimit = countLimit
@@ -66,6 +89,14 @@ final class BoundedSizeCache {
             }
             cache.setObject(NSValue(size: newValue), forKey: key as NSString)
         }
+    }
+
+    func removeValue(forKey key: String) {
+        cache.removeObject(forKey: key as NSString)
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
     }
 }
 

@@ -334,6 +334,90 @@ final class TimelineSupportTests: XCTestCase {
         XCTAssertEqual(foundLabelText, "new_alice", "Author label should update in place")
     }
 
+    func testBoundedImageCacheLimitsAndRemoval() {
+        let cache = BoundedImageCache(countLimit: 2, totalCostLimit: 1024 * 1024)
+        XCTAssertEqual(cache.countLimit, 2)
+        XCTAssertEqual(cache.totalCostLimit, 1024 * 1024)
+
+        let img = NSImage(size: NSSize(width: 10, height: 10))
+        cache["a"] = img
+        cache["b"] = img
+        XCTAssertNotNil(cache["a"])
+        XCTAssertNotNil(cache["b"])
+
+        cache.removeValue(forKey: "a")
+        XCTAssertNil(cache["a"])
+
+        cache["c"] = img
+        cache.removeAll()
+        XCTAssertNil(cache["b"])
+        XCTAssertNil(cache["c"])
+    }
+
+    func testBoundedSizeCacheLimitsAndRemoval() {
+        let cache = BoundedSizeCache(countLimit: 2)
+        XCTAssertEqual(cache.countLimit, 2)
+
+        cache["a"] = NSSize(width: 100, height: 50)
+        cache["b"] = NSSize(width: 200, height: 100)
+        XCTAssertEqual(cache["a"], NSSize(width: 100, height: 50))
+
+        cache.removeValue(forKey: "a")
+        XCTAssertNil(cache["a"])
+
+        cache.removeAll()
+        XCTAssertNil(cache["b"])
+    }
+
+    func testCancelThumbnailTasksAndClearCaches() {
+        let window = makeWindow()
+        defer { window.close() }
+
+        window.userAvatarsById["user1"] = NSImage(size: NSSize(width: 10, height: 10))
+        window.inlineImageSizeCache["url1"] = NSSize(width: 100, height: 100)
+        window.attachmentSizeCache["att1"] = NSSize(width: 200, height: 200)
+
+        window.filePreviewTasks["f1"] = Task {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        window.attachmentThumbnailTasks["a1"] = Task {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        window.cancelAllThumbnailTasks()
+        XCTAssertTrue(window.filePreviewTasks.isEmpty)
+        XCTAssertTrue(window.attachmentThumbnailTasks.isEmpty)
+
+        window.clearAllCaches()
+        XCTAssertNil(window.userAvatarsById["user1"])
+        XCTAssertNil(window.inlineImageSizeCache["url1"])
+        XCTAssertNil(window.attachmentSizeCache["att1"])
+    }
+
+    func testPruneGiphyCacheBySizeAndCount() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "giphy_prune_test_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let payload = Data(repeating: 0x47, count: 1024)
+        for i in 1...5 {
+            let fileURL = tempDir.appendingPathComponent("file_\(i).gif")
+            try payload.write(to: fileURL)
+            let pastDate = Date(timeIntervalSinceNow: -TimeInterval(100 - i * 10))
+            try FileManager.default.setAttributes(
+                [.modificationDate: pastDate], ofItemAtPath: fileURL.path)
+        }
+
+        MainWindow.pruneGiphyCache(tempDir, keeping: 3, maxTotalBytes: 100 * 1024)
+        var remaining = try FileManager.default.contentsOfDirectory(atPath: tempDir.path)
+        XCTAssertEqual(remaining.count, 3)
+
+        MainWindow.pruneGiphyCache(tempDir, keeping: 10, maxTotalBytes: 1500)
+        remaining = try FileManager.default.contentsOfDirectory(atPath: tempDir.path)
+        XCTAssertLessThanOrEqual(remaining.count, 1)
+    }
+
     private func makeWindow() -> MainWindow {
         MainWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),

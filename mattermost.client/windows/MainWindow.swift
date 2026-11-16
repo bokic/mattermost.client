@@ -455,11 +455,55 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     var renderedPostRows: [String: (view: NSView, height: CGFloat, key: TimelineRowKey)] = [:]
     var renderedDateSeparators: [String: (view: NSView, width: CGFloat)] = [:]
     var timelineOlderPostsRow: NSView?
+    var filePreviewTasks: [String: Task<Void, Never>] = [:]
+    var attachmentThumbnailTasks: [String: Task<Void, Never>] = [:]
+    var lightboxFetchTask: Task<Void, Never>?
 
     func clearTimelineRowCache() {
         renderedPostRows.removeAll()
         renderedDateSeparators.removeAll()
         timelineOlderPostsRow = nil
+        cancelAttachmentThumbnailTasks()
+    }
+
+    func cancelRightPanelThumbnailTasks() {
+        for (_, task) in filePreviewTasks {
+            task.cancel()
+        }
+        filePreviewTasks.removeAll()
+        filePreviewLoading.removeAll()
+    }
+
+    func cancelAttachmentThumbnailTasks() {
+        for (_, task) in attachmentThumbnailTasks {
+            task.cancel()
+        }
+        attachmentThumbnailTasks.removeAll()
+    }
+
+    func cancelAvatarFetchTasks() {
+        for (_, task) in userAvatarFetchTasks {
+            task.cancel()
+        }
+        userAvatarFetchTasks.removeAll()
+    }
+
+    func cancelAllThumbnailTasks() {
+        cancelRightPanelThumbnailTasks()
+        cancelAttachmentThumbnailTasks()
+        lightboxFetchTask?.cancel()
+        lightboxFetchTask = nil
+    }
+
+    func clearAllCaches() {
+        userAvatarsById.removeAll()
+        customEmojiImages.removeAll()
+        inlineImageSizeCache.removeAll()
+        attachmentSizeCache.removeAll()
+        filePreviewImages.removeAll()
+        linkPreviewImages.removeAll()
+        TimelineImageCache.shared.clear()
+        clearTimelineRowCache()
     }
 
     var currentChannelPosts: [MMPost] {
@@ -689,6 +733,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         // Restore the user's last window frame when one is stored; otherwise the
         // default 1440x783 content size from AppDelegate is used.
         self.setFrameAutosaveName("MainWindowFrame")
+        self.pruneGiphyDiskCache()
 
         mainPanel.color = Theme.shared.sidebarBg
         mainPanel.cornerRadius = MMRadius.panel
@@ -997,6 +1042,8 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     override func close() {
         statusPollingTimer?.invalidate()
         statusPollingTimer = nil
+        cancelAllThumbnailTasks()
+        cancelAvatarFetchTasks()
         super.close()
     }
 

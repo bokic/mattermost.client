@@ -259,9 +259,11 @@ extension MainWindow {
         for key in rhsRequestTokenByMode.keys {
             rhsRequestTokenByMode[key, default: 0] += 1
         }
+        cancelRightPanelThumbnailTasks()
     }
 
     func clearRightPanelContent() {
+        cancelRightPanelThumbnailTasks()
         rightPanelDoc.subviews.forEach { $0.removeFromSuperview() }
         let width = max(rightPanelScroll.bounds.width, rightPanel.bounds.width)
         rightPanelDoc.frame = NSRect(x: 0, y: 0, width: width, height: 1)
@@ -1607,15 +1609,23 @@ extension MainWindow {
                     thumbImage = cached
                 } else if let ws = webService, !filePreviewLoading.contains(file.id) {
                     filePreviewLoading.insert(file.id)
-                    Task { @MainActor [weak imageView] in
-                        defer { self.filePreviewLoading.remove(file.id) }
-                        if let data = try? await ws.fetchFileData(fileId: file.id, preview: true),
+                    let fileId = file.id
+                    filePreviewTasks[fileId]?.cancel()
+                    let task = Task { @MainActor [weak self, weak imageView] in
+                        defer {
+                            self?.filePreviewLoading.remove(fileId)
+                            self?.filePreviewTasks.removeValue(forKey: fileId)
+                        }
+                        guard !Task.isCancelled else { return }
+                        if let data = try? await ws.fetchFileData(fileId: fileId, preview: true),
+                           !Task.isCancelled,
                            let image = NSImage(data: data) {
-                            self.filePreviewImages[file.id] = image
+                            self?.filePreviewImages[fileId] = image
                             imageView?.image = image
                             thumbImage = image
                         }
                     }
+                    filePreviewTasks[fileId] = task
                 }
             } else {
                 let icon = FileTypeIconView(frame: thumbFrame)
