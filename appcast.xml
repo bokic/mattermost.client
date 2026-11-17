@@ -6,6 +6,18 @@
     <description>Most recent changes with links to updates.</description>
     <language>en</language>
     <item>
+      <title>Version 0.9.0</title>
+      <pubDate>Mon, 16 Nov 2026 21:55:07 +0000</pubDate>
+      <sparkle:releaseNotesLink>https://github.com/bokic/mattermost.client/releases/tag/v0.9.0</sparkle:releaseNotesLink>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/bokic/mattermost.client/releases/download/v0.9.0/mattermost.client-0.9.0.dmg"
+                 sparkle:version="0.9.0"
+                 sparkle:shortVersionString="0.9.0"
+                 sparkle:sha256="87b015079d60f408bd37ffc325adb4ad4c49933208fcba6da38955db69be0823"
+                 length="5354028"
+                 type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 0.8.0</title>
       <pubDate>Sun, 15 Nov 2026 22:00:00 +0000</pubDate>
       <sparkle:releaseNotesLink>https://github.com/bokic/mattermost.client/releases/tag/v0.8.0</sparkle:releaseNotesLink>
