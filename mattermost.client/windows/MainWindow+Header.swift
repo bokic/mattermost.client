@@ -44,16 +44,16 @@ extension MainWindow {
         productSwitcherPanel.onClick = { [weak self] in
             self?.toggleProductSwitcherMenu()
         }
-        productSwitcherPanel.accessibilityTitle = "Product Switcher"
-        productSwitcherPanel.accessibilityHelp = "Open product switcher menu"
+        productSwitcherPanel.accessibilityTitle = L10n.string("Product Switcher")
+        productSwitcherPanel.accessibilityHelp = L10n.string("Open product switcher menu")
         productSwitcherPanel.accessibilityRoleOverride = .button
         contentView?.addSubview(productSwitcherPanel)
 
         // Center: Search bar (non-editable trigger, no caret) + Help (?) button
         searchPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
         searchPanel.cornerRadius = MMRadius.control
-        searchPanel.accessibilityTitle = "Search"
-        searchPanel.accessibilityHelp = "Search messages and files"
+        searchPanel.accessibilityTitle = L10n.string("Search")
+        searchPanel.accessibilityHelp = L10n.string("Search messages and files")
         searchPanel.accessibilityRoleOverride = .button
         if let searchImg = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search") {
             searchIconView.image = searchImg.withSymbolConfiguration(.init(pointSize: 12, weight: .medium))
@@ -90,8 +90,8 @@ extension MainWindow {
         helpPanel.onClick = { [weak self] in
             self?.toggleHelpMenu()
         }
-        helpPanel.accessibilityTitle = "Help"
-        helpPanel.accessibilityHelp = "Open help menu"
+        helpPanel.accessibilityTitle = L10n.string("Help")
+        helpPanel.accessibilityHelp = L10n.string("Open help menu")
         helpPanel.accessibilityRoleOverride = .button
         contentView?.addSubview(helpPanel)
 
@@ -101,7 +101,7 @@ extension MainWindow {
             iconView: mentionsIconView,
             symbolName: "at",
             pointSize: 14,
-            accessibilityDescription: "Recent Mentions",
+            accessibilityDescription: L10n.string("Recent Mentions"),
             defaultTint: topBarTint,
             hoverBg: hoverBg,
             onClick: { [weak self] in
@@ -113,7 +113,7 @@ extension MainWindow {
             iconView: savedPostsIconView,
             symbolName: "bookmark",
             pointSize: 13,
-            accessibilityDescription: "Saved Posts",
+            accessibilityDescription: L10n.string("Saved Posts"),
             defaultTint: topBarTint,
             hoverBg: hoverBg,
             onClick: { [weak self] in
@@ -125,7 +125,7 @@ extension MainWindow {
             iconView: settingsIconView,
             symbolName: "gearshape",
             pointSize: 14,
-            accessibilityDescription: "Settings",
+            accessibilityDescription: L10n.string("Settings"),
             defaultTint: topBarTint,
             hoverBg: hoverBg,
             onClick: { [weak self] in
@@ -1168,7 +1168,8 @@ extension MainWindow {
             pill.onClick = { [weak self] in
                 self?.insertSearchFilter(pillName)
             }
-            pill.accessibilityTitle = "Insert \\(title) filter"
+            pill.accessibilityTitle = L10n.format("Insert %@ filter", title)
+            pill.accessibilityRoleOverride = .button
             searchPopoverPanel.addSubview(pill)
             pillX += pillW + 4
         }

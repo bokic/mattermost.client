@@ -53,8 +53,8 @@ extension MainWindow {
 
         rightPanelCloseButton.cornerRadius = MMRadius.control
         rightPanelCloseButton.color = .clear
-        rightPanelCloseButton.accessibilityTitle = "Close panel"
-        rightPanelCloseButton.accessibilityHelp = "Close right sidebar"
+        rightPanelCloseButton.accessibilityTitle = L10n.string("Close panel")
+        rightPanelCloseButton.accessibilityHelp = L10n.string("Close right sidebar")
         rightPanelCloseButton.accessibilityRoleOverride = .button
         let closeIcon = NSImageView()
         if let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close panel") {
@@ -97,7 +97,8 @@ extension MainWindow {
         threadReplyTextView.isAutomaticSpellingCorrectionEnabled = false
         threadReplyTextView.textContainerInset = NSSize(width: 0, height: 5)
         threadReplyTextView.textContainer?.lineFragmentPadding = 0
-        threadReplyTextView.placeholderString = "Reply to thread…"
+        threadReplyTextView.placeholderString = L10n.string("Reply to thread…")
+        threadReplyTextView.setAccessibilityLabel(L10n.string("Reply to thread"))
         threadReplyTextView.delegate = self
         threadReplyTextView.onFilesDropped = { [weak self] urls in
             self?.uploadThreadFiles(urls)
@@ -143,7 +144,8 @@ extension MainWindow {
         threadEmojiButton.onClick = { [weak self] in
             self?.toggleEmojiPanel(for: .thread)
         }
-        threadEmojiButton.accessibilityTitle = "Add emoji"
+        threadEmojiButton.accessibilityTitle = L10n.string("Add emoji")
+        threadEmojiButton.accessibilityHelp = L10n.string("Add emoji")
         threadEmojiButton.accessibilityRoleOverride = .button
         threadReplyPanel.addSubview(threadEmojiButton)
 
@@ -159,7 +161,8 @@ extension MainWindow {
         threadAttachButton.onClick = { [weak self] in
             self?.attachThreadFiles()
         }
-        threadAttachButton.accessibilityTitle = "Attach files"
+        threadAttachButton.accessibilityTitle = L10n.string("Attach files")
+        threadAttachButton.accessibilityHelp = L10n.string("Attach files")
         threadAttachButton.accessibilityRoleOverride = .button
         threadReplyPanel.addSubview(threadAttachButton)
 
@@ -174,7 +177,8 @@ extension MainWindow {
         threadSendButton.onClick = { [weak self] in
             self?.sendThreadReply()
         }
-        threadSendButton.accessibilityTitle = "Send reply"
+        threadSendButton.accessibilityTitle = L10n.string("Send reply")
+        threadSendButton.accessibilityHelp = L10n.string("Send reply")
         threadSendButton.accessibilityRoleOverride = .button
         threadReplyPanel.addSubview(threadSendButton)
         rightPanel.addSubview(threadReplyPanel)

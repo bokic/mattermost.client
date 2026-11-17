@@ -188,4 +188,30 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertEqual(window.channelSidebarButton.accessibilityTitle, "Threads")
         XCTAssertEqual(window.channelInfoButton.accessibilityTitle, "Channel Info")
     }
+
+    func testHeaderAndThreadReplyControlsHaveAccessibilityTitlesAndRoles() {
+        let window = MainWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: true
+        )
+        defer { window.close() }
+
+        XCTAssertEqual(window.productSwitcherPanel.accessibilityTitle, "Product Switcher")
+        XCTAssertEqual(window.productSwitcherPanel.accessibilityRole(), .button)
+        XCTAssertEqual(window.searchPanel.accessibilityTitle, "Search")
+        XCTAssertEqual(window.searchPanel.accessibilityRole(), .button)
+        XCTAssertEqual(window.helpPanel.accessibilityTitle, "Help")
+        XCTAssertEqual(window.helpPanel.accessibilityRole(), .button)
+        XCTAssertEqual(window.rightPanelCloseButton.accessibilityTitle, "Close panel")
+        XCTAssertEqual(window.rightPanelCloseButton.accessibilityRole(), .button)
+        XCTAssertEqual(window.threadEmojiButton.accessibilityTitle, "Add emoji")
+        XCTAssertEqual(window.threadEmojiButton.accessibilityRole(), .button)
+        XCTAssertEqual(window.threadAttachButton.accessibilityTitle, "Attach files")
+        XCTAssertEqual(window.threadAttachButton.accessibilityRole(), .button)
+        XCTAssertEqual(window.threadSendButton.accessibilityTitle, "Send reply")
+        XCTAssertEqual(window.threadSendButton.accessibilityRole(), .button)
+        XCTAssertEqual(window.threadReplyTextView.accessibilityLabel(), "Reply to thread")
+    }
 }

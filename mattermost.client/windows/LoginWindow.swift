@@ -241,6 +241,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         showPasswordButton.bezelStyle = .inline
         showPasswordButton.isBordered = false
         showPasswordButton.toolTip = L10n.string("Show password")
+        showPasswordButton.setAccessibilityLabel(L10n.string("Show password"))
         showPasswordButton.frame = NSRect(x: 440, y: 206, width: 28, height: 26)
         cardPanel.addSubview(showPasswordButton)
 
@@ -352,7 +353,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
         rememberPasswordButton.isEnabled = enabled
         connectButton.isEnabled = enabled
         ssoButton.isEnabled = enabled
-        connectButton.title = enabled ? L10n.string("Sign in") : "Signing in…"
+        connectButton.title = enabled ? L10n.string("Sign in") : L10n.string("Signing in…")
     }
 
     @objc func connectButtonPressed() {
@@ -468,6 +469,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
                 accessibilityDescription: L10n.string("Show password")
             )
             showPasswordButton.toolTip = L10n.string("Show password")
+            showPasswordButton.setAccessibilityLabel(L10n.string("Show password"))
             makeFirstResponder(passwordLabel)
         } else {
             visiblePasswordField.stringValue = passwordLabel.stringValue
@@ -478,6 +480,7 @@ class LoginWindow: NSWindow, NSTextFieldDelegate {
                 accessibilityDescription: L10n.string("Hide password")
             )
             showPasswordButton.toolTip = L10n.string("Hide password")
+            showPasswordButton.setAccessibilityLabel(L10n.string("Hide password"))
             makeFirstResponder(visiblePasswordField)
         }
     }
