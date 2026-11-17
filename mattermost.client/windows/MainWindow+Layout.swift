@@ -554,6 +554,14 @@ extension MainWindow {
             let isThreadMode = (rightPanelMode == .thread)
             let isMembersMode = (rightPanelMode == .members)
             let isFilesMode = (rightPanelMode == .files)
+            let threadTextWidth = max(120, panelWidth - 16 - 108)
+            let threadScrollHeight =
+                isThreadMode
+                ? threadReplyScrollHeight(forWidth: threadTextWidth)
+                : ThreadSupport.minThreadComposerScrollHeight
+            if isThreadMode {
+                threadComposerBaseHeight = ThreadSupport.threadComposerBaseOverhead + threadScrollHeight
+            }
             let replyBarHeight: CGFloat = isThreadMode ? threadComposerHeight : 0
             let listSearchHeight: CGFloat = (isMembersMode || isFilesMode) ? 34 : 0
             memberSearchField.isHidden = !isMembersMode
@@ -595,11 +603,12 @@ extension MainWindow {
                     width: panelWidth - 16,
                     height: threadComposerBaseHeight + trayHeight
                 )
-                let textWidth = max(120, panelWidth - 16 - 108)
-                threadReplyScroll.frame = NSRect(x: 10, y: 36, width: textWidth, height: 48)
+                let contentHeight = threadReplyTextContentHeight(forWidth: threadTextWidth)
+                threadReplyScroll.frame = NSRect(x: 10, y: 36, width: threadTextWidth, height: threadScrollHeight)
+                threadReplyTextView.minSize = NSSize(width: 0, height: threadScrollHeight)
                 threadReplyTextView.frame = NSRect(
                     origin: .zero,
-                    size: NSSize(width: textWidth, height: 48)
+                    size: NSSize(width: threadTextWidth, height: max(threadScrollHeight, contentHeight))
                 )
                 threadAttachmentTray.frame = NSRect(
                     x: 8,
@@ -848,6 +857,35 @@ extension MainWindow {
             height: MMMetric.iconButtonCompact)
         if !searchResultsPanel.isHidden {
             searchResultsScroll.frame = NSRect(x: 0, y: 0, width: resultsWidth, height: resultsHeight - 44)
+        }
+    }
+
+    func threadReplyTextContentHeight(forWidth width: CGFloat) -> CGFloat {
+        guard let layoutManager = threadReplyTextView.layoutManager,
+            let textContainer = threadReplyTextView.textContainer
+        else {
+            return ThreadSupport.minThreadComposerScrollHeight
+        }
+        let targetWidth = max(1, width - threadReplyTextView.textContainerInset.width * 2)
+        if abs(textContainer.containerSize.width - targetWidth) > 0.5 {
+            textContainer.containerSize = NSSize(width: targetWidth, height: .greatestFiniteMagnitude)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedHeight = layoutManager.usedRect(for: textContainer).height
+        return usedHeight + threadReplyTextView.textContainerInset.height * 2
+    }
+
+    func threadReplyScrollHeight(forWidth width: CGFloat) -> CGFloat {
+        ThreadSupport.composerScrollHeight(contentHeight: threadReplyTextContentHeight(forWidth: width))
+    }
+
+    func updateThreadComposerHeight() {
+        guard isRightPanelVisible, rightPanelMode == .thread else { return }
+        let width = max(120, threadReplyScroll.bounds.width)
+        let desiredBaseHeight =
+            ThreadSupport.threadComposerBaseOverhead + threadReplyScrollHeight(forWidth: width)
+        if abs(desiredBaseHeight - threadComposerBaseHeight) > 0.5 {
+            layoutRightChatPanel()
         }
     }
 }

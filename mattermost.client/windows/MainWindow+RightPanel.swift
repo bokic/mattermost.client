@@ -118,8 +118,11 @@ extension MainWindow {
         threadReplyScroll.autohidesScrollers = true
         threadReplyScroll.borderType = .noBorder
         threadReplyScroll.documentView = threadReplyTextView
-        threadReplyTextView.minSize = NSSize(width: 0, height: 48)
-        threadReplyTextView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: 48)
+        threadReplyTextView.minSize = NSSize(width: 0, height: ThreadSupport.minThreadComposerScrollHeight)
+        threadReplyTextView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         threadReplyTextView.isVerticallyResizable = true
         threadReplyTextView.isHorizontallyResizable = false
         threadReplyTextView.autoresizingMask = [.width]
@@ -937,6 +940,7 @@ extension MainWindow {
                     self.threadReplyTextView.string = ""
                     self.threadReplyTextView.needsDisplay = true
                     self.threadComposerSending = false
+                    self.updateThreadComposerHeight()
                     self.renderThreadAttachments()
                     self.updateThreadSendState()
                     self.loadThread()

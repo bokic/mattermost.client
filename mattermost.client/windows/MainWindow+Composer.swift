@@ -1230,6 +1230,7 @@ extension MainWindow {
         let text = draftStore.threadDraft(for: threadRootId) ?? threadDraftsByRootId[threadRootId] ?? ""
         threadReplyTextView.string = text
         threadReplyTextView.needsDisplay = true
+        updateThreadComposerHeight()
     }
 
     func clearThreadDraft(for rootId: String) {
@@ -1551,6 +1552,7 @@ extension MainWindow {
         guard let textView = notification.object as? NSTextView else { return }
         if textView === threadReplyTextView {
             threadReplyTextView.needsDisplay = true
+            updateThreadComposerHeight()
             updateThreadSendState()
             sendThreadTypingIfNeeded()
             updateCompletion(target: .thread)

@@ -85,6 +85,21 @@ final class ThreadSupportTests: XCTestCase {
         XCTAssertEqual(paginated.hidden, 1)
     }
 
+    func testComposerScrollHeightClampsAndRounds() {
+        XCTAssertEqual(
+            ThreadSupport.composerScrollHeight(contentHeight: 20),
+            ThreadSupport.minThreadComposerScrollHeight
+        )
+        XCTAssertEqual(
+            ThreadSupport.composerScrollHeight(contentHeight: 72.3),
+            73
+        )
+        XCTAssertEqual(
+            ThreadSupport.composerScrollHeight(contentHeight: 220),
+            ThreadSupport.maxThreadComposerScrollHeight
+        )
+    }
+
     private func makePost(_ index: Int) -> MMPost {
         MMPost(
             id: "post-\(index)",
