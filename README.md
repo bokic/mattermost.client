@@ -189,12 +189,6 @@ mattermost.client/
 
 ## Known limitations
 
-- Desktop notifications honor DND, per-user `notify_props`, mention keys and
-  channel mute, but there is no dedicated notification-preferences UI yet.
-- The search Files tab and result jumps are implemented; search pagination,
-  keyboard navigation and recent searches are still pending.
-- The sidebar is not scrollable yet, and custom categories cannot be
-  created/renamed/reordered from the client.
 - A notarized distribution build requires a Developer ID certificate and
   notary credentials; see [RELEASE.md](RELEASE.md). Users can check for updates
   via **Mattermost > Check for Updates…** or download manually from GitHub Releases.
