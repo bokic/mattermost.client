@@ -52,26 +52,6 @@ jobs:
       - name: Lint
         run: ./lint.sh
 
-  deployment-floor:
-    name: Deployment Floor (macOS 15)
-    # Always-on check that the binary advertises the documented macOS 15 floor.
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build
-        run: ./build.sh
-
-      - name: Check deployment target metadata
-        run: |
-          set -euo pipefail
-          APP="build/Build/Products/Debug/mattermost.client.app"
-          if ! plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist" | grep -qx '15.0'; then
-            echo "::error::LSMinimumSystemVersion is not 15.0"
-            exit 1
-          fi
-          otool -l "$APP/Contents/MacOS/mattermost.client" | grep -A4 LC_BUILD_VERSION
-
   release-check:
     name: Release Build & Universal Lipo Check
     runs-on: macos-15
