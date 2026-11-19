@@ -47,6 +47,7 @@ struct TimelineRowKey: Equatable {
     let replyCount: Int
     let reactionsHash: Int
     let isPinned: Bool
+    var isSaved: Bool = false
     let isConsecutive: Bool
     let width: CGFloat
     let fileIds: [String]

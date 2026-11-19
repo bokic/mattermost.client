@@ -156,8 +156,8 @@ extension MainWindow {
         avatarPanel.addSubview(avatarImageView)
 
         statusDotPanel.color = statusColor(for: currentUserStatus)
-        statusDotPanel.cornerRadius = MMRadius.panel
-        statusDotPanel.borderWidth = 1.35
+        statusDotPanel.cornerRadius = 6
+        statusDotPanel.borderWidth = 1.5
         statusDotPanel.borderColor = Theme.shared.sidebarTeamBarBg
 
         avatarButtonPanel.addSubview(avatarPanel)

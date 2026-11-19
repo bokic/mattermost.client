@@ -48,7 +48,7 @@ extension MainWindow {
 
         channelTitleButton.cornerRadius = MMRadius.control
         channelTitleButton.color = .clear
-        channelTitleLabel.font = MMFont.font(ofSize: 14, weight: .semibold)
+        channelTitleLabel.font = MMFont.font(ofSize: 16, weight: .bold)
         channelTitleLabel.textColor = darkText
         channelTitleLabel.isEditable = false
         channelTitleLabel.isSelectable = false
@@ -120,12 +120,19 @@ extension MainWindow {
             channelPinsIconView.image = pinImg.withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
             channelPinsIconView.contentTintColor = mutedText
         }
+        channelPinsCountLabel.font = MMFont.font(ofSize: 12, weight: .semibold)
+        channelPinsCountLabel.textColor = mutedText
+        channelPinsCountLabel.isEditable = false
+        channelPinsCountLabel.isSelectable = false
+        channelPinsCountLabel.isHidden = true
         channelPinsButton.addSubview(channelPinsIconView)
+        channelPinsButton.addSubview(channelPinsCountLabel)
         channelPinsButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
             self.channelPinsButton.color = isHovered ? hoverBg : .clear
             self.channelPinsButton.setNeedsAppearanceUpdate()
             self.channelPinsIconView.contentTintColor = isHovered ? darkText : mutedText
+            self.channelPinsCountLabel.textColor = isHovered ? darkText : mutedText
         }
         channelPinsButton.onClick = { [weak self] in
             self?.toggleRightPanel(mode: .pinned)
@@ -194,6 +201,10 @@ extension MainWindow {
             self?.toggleRightPanel(mode: .channelInfo)
         }
         chatPanel.addSubview(channelInfoButton)
+
+        channelHeaderBorder.cornerRadius = 0
+        channelHeaderBorder.color = dividerColor
+        chatPanel.addSubview(channelHeaderBorder)
 
         // 2. Welcome Hero Section (Illustration + Title + Subtitle + Invite button)
         timelineHeroContainer.cornerRadius = 0
@@ -634,7 +645,7 @@ extension MainWindow {
         let isBot = isCurrentChannelBot()
         channelHeaderBotBadge.isHidden = !isBot
 
-        let titleFont = channelTitleLabel.font ?? MMFont.font(ofSize: 14, weight: .bold)
+        let titleFont = channelTitleLabel.font ?? MMFont.font(ofSize: 16, weight: .bold)
         let titleStr = channelTitleLabel.stringValue.isEmpty ? "Town Square" : channelTitleLabel.stringValue
         let titleSize = (titleStr as NSString).size(withAttributes: [.font: titleFont])
         let titleTextW = min(max(ceil(titleSize.width) + 4, 40), max(chatW - 240, 100))
@@ -642,8 +653,8 @@ extension MainWindow {
 
         let botBadgeW: CGFloat = isBot ? 32 : 0
         let botBadgeSpacing: CGFloat = isBot ? 6 : 0
-        let titleBtnW = titleTextW + botBadgeSpacing + botBadgeW + 28
-        let titleBtnH: CGFloat = 24
+        let titleBtnW = titleTextW + botBadgeSpacing + botBadgeW + 24
+        let titleBtnH: CGFloat = 28
         channelTitleButton.frame = NSRect(
             x: 40, y: headerY + (headerH - titleBtnH) / 2, width: titleBtnW, height: titleBtnH)
         channelTitleLabel.frame = NSRect(x: 4, y: (titleBtnH - titleTextH) / 2, width: titleTextW, height: titleTextH)
@@ -669,15 +680,33 @@ extension MainWindow {
         channelMembersCountLabel.frame = NSRect(
             x: 22, y: (countBtnH - countTextH) / 2, width: countTextW, height: countTextH)
 
-        channelPinsButton.frame = NSRect(
-            x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact,
-            height: MMMetric.iconButtonCompact)
-        channelPinsIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+        let pinCountStr = channelPinsCountLabel.stringValue
+        if !pinCountStr.isEmpty {
+            let pinCountSize = (pinCountStr as NSString).size(withAttributes: [.font: countFont])
+            let pinCountW = ceil(pinCountSize.width) + 4
+            let pinCountH = ceil(pinCountSize.height)
+            let pinBtnW = 5 + 14 + 3 + pinCountW + 5
+            channelPinsButton.frame = NSRect(
+                x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: max(34, pinBtnW),
+                height: MMMetric.iconButtonCompact)
+            channelPinsIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+            channelPinsCountLabel.frame = NSRect(
+                x: 22, y: (MMMetric.iconButtonCompact - pinCountH) / 2, width: pinCountW, height: pinCountH)
+            channelPinsCountLabel.isHidden = false
+        } else {
+            channelPinsButton.frame = NSRect(
+                x: channelMembersButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact,
+                height: MMMetric.iconButtonCompact)
+            channelPinsIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+            channelPinsCountLabel.isHidden = true
+        }
 
         channelFilesButton.frame = NSRect(
             x: channelPinsButton.frame.maxX + 4, y: headerY + 16, width: MMMetric.iconButtonCompact,
             height: MMMetric.iconButtonCompact)
         channelFilesIconView.frame = NSRect(x: 5, y: 5, width: 14, height: 14)
+
+        channelHeaderBorder.frame = NSRect(x: 0, y: headerY, width: chatW, height: 1)
 
         // Web: 32pt icon buttons at the trailing edge, 4pt apart, 12pt from the right.
         channelInfoButton.frame = NSRect(
@@ -765,11 +794,11 @@ extension MainWindow {
         let topBarY = size.height - topBarHeight
 
         let gutter: CGFloat = MMMetric.panelGutter
-        // Web: sidebar occupies 264pt starting 5pt from the window edge, then the
-        // white channel card starts at 269pt; both share a 4pt gutter.
+        // Web: sidebar fills the left edge seamlessly (269pt), then the
+        // rounded white channel card sits inset by a 4pt gutter on right & bottom.
         let chatPanelX: CGFloat = MMMetric.chatPanelLeading
-        mainPanel.frame = NSRect(x: gutter, y: gutter, width: size.width - gutter * 2, height: topBarY - gutter)
-        mainPanel.cornerRadius = MMRadius.window
+        mainPanel.frame = NSRect(x: 0, y: 0, width: chatPanelX, height: topBarY)
+        mainPanel.cornerRadius = 0
         chatPanel.frame = NSRect(
             x: chatPanelX, y: gutter, width: size.width - chatPanelX - gutter, height: topBarY - gutter)
         chatPanel.cornerRadius = MMRadius.window
@@ -808,8 +837,8 @@ extension MainWindow {
         let idealSearchX = (size.width - searchWidth) / 2
         let searchX = max(minSearchX, idealSearchX)
         searchPanel.frame = NSRect(x: searchX, y: topBarY + 8, width: searchWidth, height: 28)
-        searchIconView.frame = NSRect(x: 4, y: 5, width: 18, height: 18)
-        searchLabel.frame = NSRect(x: 29, y: 4, width: searchWidth - 37, height: 20)
+        searchIconView.frame = NSRect(x: 8, y: 5, width: 18, height: 18)
+        searchLabel.frame = NSRect(x: 32, y: 4, width: searchWidth - 40, height: 20)
 
         helpPanel.frame = NSRect(
             x: searchX + searchWidth + 8, y: topBarY + 8, width: MMMetric.iconButtonSmall,
@@ -824,7 +853,8 @@ extension MainWindow {
         avatarButtonPanel.frame = NSRect(x: size.width - 44, y: topBarY + 6, width: 40, height: 32)
         avatarPanel.frame = NSRect(x: 8, y: 4, width: MMMetric.avatarSmall, height: MMMetric.avatarSmall)
         avatarLabel.frame = NSRect(x: 0, y: 5, width: 24, height: 14)
-        statusDotPanel.frame = NSRect(x: 21, y: 1, width: 16, height: 16)
+        statusDotPanel.frame = NSRect(x: 21, y: 2, width: 13, height: 13)
+        statusDotPanel.cornerRadius = 6.5
         updateStatusCheck(in: statusDotPanel, status: currentUserStatus)
         statusMenu.frame = NSRect(x: size.width - 259, y: topBarY - 356, width: 248, height: 354)
         dndSubMenu.frame = NSRect(

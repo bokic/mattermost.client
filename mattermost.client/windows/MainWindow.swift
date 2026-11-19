@@ -452,12 +452,14 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
     let channelMembersCountLabel = NSTextField(labelWithString: "1")
     let channelPinsButton = RoundedEdgePanel()
     let channelPinsIconView = NSImageView()
+    let channelPinsCountLabel = NSTextField(labelWithString: "")
     let channelFilesButton = RoundedEdgePanel()
     let channelFilesIconView = NSImageView()
     let channelSidebarButton = RoundedEdgePanel()
     let channelSidebarIconView = NSImageView()
     let channelInfoButton = RoundedEdgePanel()
     let channelInfoIconView = NSImageView()
+    let channelHeaderBorder = RoundedEdgePanel()
 
     // 2. Message Timeline & Welcome Hero
     let chatTimelineContainer = TimelineContainerView()
@@ -794,7 +796,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         self.pruneGiphyDiskCache()
 
         mainPanel.color = Theme.shared.sidebarBg
-        mainPanel.cornerRadius = MMRadius.panel
+        mainPanel.cornerRadius = 0
 
         entryView.backgroundColor = .clear
         entryView.drawsBackground = false
@@ -813,7 +815,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
 
         chatEntryPanel.color = Theme.shared.centerText.withAlphaComponent(0.16)
         chatEntryPanel.cornerRadius = MMRadius.control
-        chatEntryPanel.borderWidth = 2
+        chatEntryPanel.borderWidth = 1
         chatPanel.addSubview(chatEntryPanel)
         chatEntryPanel.addSubview(entryView)
 
@@ -892,6 +894,7 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
             }
         #endif
         self.makeKeyAndOrderFront(nil)
+        self.makeFirstResponder(entryView)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(appDidBecomeActive), name: NSApplication.didBecomeActiveNotification, object: nil)
@@ -1046,10 +1049,84 @@ class MainWindow: NSWindow, NSTextViewDelegate, NSTextFieldDelegate, NSSearchFie
         mainPanel.setNeedsAppearanceUpdate()
         chatPanel.setNeedsAppearanceUpdate()
 
-        teamHeaderButton.color = Theme.shared.sidebarHeaderBg
+        // Top global bar chrome
+        let topBarTint = Theme.shared.sidebarText.withAlphaComponent(0.56)
+        let searchTint = Theme.shared.sidebarText.withAlphaComponent(0.64)
+        searchPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        searchPanel.setNeedsAppearanceUpdate()
+        searchIconView.contentTintColor = searchTint
+        searchLabel.textColor = searchTint
+        editionBadgePanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        editionBadgePanel.setNeedsAppearanceUpdate()
+        editionBadgeLabel.textColor = Theme.shared.sidebarText.withAlphaComponent(0.75)
+        helpIconView.contentTintColor = topBarTint
+        mentionsIconView.contentTintColor = topBarTint
+        savedPostsIconView.contentTintColor = topBarTint
+        settingsIconView.contentTintColor = topBarTint
+        statusDotPanel.borderColor = Theme.shared.sidebarTeamBarBg
+        statusDotPanel.setNeedsAppearanceUpdate()
+
+        // Left sidebar chrome
+        let sidebarMuted = Theme.shared.sidebarText.withAlphaComponent(0.64)
+        teamHeaderButton.color = .clear
         teamHeaderLabel.textColor = Theme.shared.sidebarHeaderText
         teamHeaderChevron.contentTintColor = Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
         teamHeaderButton.setNeedsAppearanceUpdate()
+        teamAddButton.color = Theme.shared.sidebarText.withAlphaComponent(0.12)
+        teamAddButton.setNeedsAppearanceUpdate()
+        teamAddIconView.contentTintColor = sidebarMuted
+        filterChannelButton.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        filterChannelButton.setNeedsAppearanceUpdate()
+        filterChannelIconView.contentTintColor = sidebarMuted
+        findChannelPanel.color = Theme.shared.sidebarText.withAlphaComponent(0.08)
+        findChannelPanel.setNeedsAppearanceUpdate()
+        findChannelIconView.contentTintColor = sidebarMuted
+        findChannelLabel.textColor = Theme.shared.sidebarText
+        findChannelLabel.placeholderAttributedString = NSAttributedString(
+            string: L10n.string("Find channel"),
+            attributes: [
+                .font: MMFont.font(ofSize: 12),
+                .foregroundColor: sidebarMuted,
+            ]
+        )
+        for cat in sidebarCategories {
+            cat.chevronView.contentTintColor = sidebarMuted
+            cat.titleLabel.textColor = sidebarMuted
+        }
+        if let fav = favoritesCategory {
+            fav.chevronView.contentTintColor = sidebarMuted
+            fav.titleLabel.textColor = sidebarMuted
+        }
+
+        // Channel header & composer chrome
+        let darkText = Theme.shared.centerText
+        let mutedText = Theme.shared.centerTextMuted
+        let dividerColor = Theme.shared.divider
+        channelHeaderBorder.color = dividerColor
+        channelHeaderBorder.setNeedsAppearanceUpdate()
+        channelTitleLabel.textColor = darkText
+        channelTitleChevron.contentTintColor = mutedText
+        channelMembersIconView.contentTintColor = mutedText
+        channelMembersCountLabel.textColor = mutedText
+        channelPinsIconView.contentTintColor = mutedText
+        channelPinsCountLabel.textColor = mutedText
+        channelFilesIconView.contentTintColor = mutedText
+        channelSidebarIconView.contentTintColor = mutedText
+        channelInfoIconView.contentTintColor = mutedText
+        refreshFavoriteState()
+
+        chatEntryPanel.color = Theme.shared.centerText.withAlphaComponent(0.16)
+        chatEntryPanel.setNeedsAppearanceUpdate()
+        entryView.textColor = darkText
+        entryView.insertionPointColor = Theme.shared.buttonBg
+        entryView.needsDisplay = true
+        composerPlaceholderLabel.textColor = Theme.shared.centerTextPlaceholder
+        composerHelpLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.64)
+        composerLeftSeparator.color = dividerColor
+        composerLeftSeparator.setNeedsAppearanceUpdate()
+        composerRightSeparator.color = dividerColor
+        composerRightSeparator.setNeedsAppearanceUpdate()
+        updateComposerSendState()
 
         emojiPanel.appearance = appearance
         emojiSearchField.appearance = appearance

@@ -747,10 +747,14 @@ extension MainWindow {
                 }
                 if matches {
                     item.isBotBadge = true
+                    item.hasCustomAvatar = true
                     item.iconView.image = image
                     item.iconView.imageScaling = .scaleProportionallyUpOrDown
                     item.iconView.contentTintColor = nil
-                    item.iconView.frame = NSRect(x: 16, y: 5, width: 18, height: 18)
+                    item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+                    item.iconView.wantsLayer = true
+                    item.iconView.layer?.cornerRadius = 9
+                    item.iconView.layer?.masksToBounds = true
                     sidebarCategories[catIndex].items[itemIndex] = item
                 }
             }
@@ -912,10 +916,14 @@ extension MainWindow {
                     fetchAvatarIfNeeded(for: targetId)
                     if let userImg = userAvatarsById[targetId] {
                         item.isBotBadge = true
+                        item.hasCustomAvatar = true
                         item.iconView.image = userImg
                         item.iconView.imageScaling = .scaleProportionallyUpOrDown
                         item.iconView.contentTintColor = nil
-                        item.iconView.frame = NSRect(x: 16, y: 5, width: 18, height: 18)
+                        item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+                        item.iconView.wantsLayer = true
+                        item.iconView.layer?.cornerRadius = 9
+                        item.iconView.layer?.masksToBounds = true
                     }
                 }
                 sidebarCategories[catIndex].items[itemIndex] = item

@@ -536,7 +536,16 @@ extension MainWindow {
     }
 
     func appendEditedIndicator(to attributedString: NSMutableAttributedString, font: NSFont, editDate: Date?) {
-        let editFont = MMFont.font(ofSize: max(10, font.pointSize - 2))
+        while attributedString.length > 0 {
+            let lastChar = (attributedString.string as NSString).character(at: attributedString.length - 1)
+            if lastChar == 0x0A || lastChar == 0x0D {
+                attributedString.deleteCharacters(in: NSRange(location: attributedString.length - 1, length: 1))
+            } else {
+                break
+            }
+        }
+        let baseEditFont = MMFont.font(ofSize: max(10, font.pointSize - 2))
+        let editFont = NSFontManager.shared.convert(baseEditFont, toHaveTrait: .italicFontMask)
         let editColor = Theme.shared.centerTextPlaceholder
 
         let space = NSAttributedString(
@@ -997,6 +1006,7 @@ extension MainWindow {
             replyCount: post.reply_count ?? 0,
             reactionsHash: reactionsHash,
             isPinned: post.is_pinned ?? false,
+            isSaved: savedPostIds.contains(post.id),
             isConsecutive: isConsecutive,
             width: chatW,
             fileIds: fileIds
@@ -2129,33 +2139,33 @@ extension MainWindow {
         card.addSubview(icon)
 
         let detailsLeft: CGFloat = 64
-        let nameWidth = min(151, max(60, cardW - detailsLeft - 40))
+        let nameWidth = max(60, cardW - detailsLeft - 48)
         let name = NSTextField(labelWithString: file.name ?? file.id)
-        name.font = MMFont.font(ofSize: 12, weight: .semibold)
+        name.font = MMFont.font(ofSize: 13.5, weight: .semibold)
         name.textColor = Theme.shared.centerText
         name.lineBreakMode = .byTruncatingMiddle
         name.isEditable = false
         name.isSelectable = false
-        name.frame = NSRect(x: detailsLeft, y: 13, width: nameWidth, height: 17)
+        name.frame = NSRect(x: detailsLeft, y: 12, width: nameWidth, height: 19)
         card.addSubview(name)
 
         let typeText = fileExtensionLabel(for: file)
         let typeLabel = NSTextField(labelWithString: typeText)
         typeLabel.font = MMFont.font(ofSize: 12)
-        typeLabel.textColor = Theme.shared.centerText
+        typeLabel.textColor = Theme.shared.centerTextMuted
         typeLabel.isEditable = false
         typeLabel.isSelectable = false
-        typeLabel.frame = NSRect(x: detailsLeft, y: 33, width: 60, height: 17)
+        typeLabel.frame = NSRect(x: detailsLeft, y: 34, width: 60, height: 17)
         card.addSubview(typeLabel)
 
         let typeWidth = ceil((typeText as NSString).size(withAttributes: [.font: MMFont.font(ofSize: 12)]).width)
         let sizeText = formatFileSize(file.size)
         let sizeLabel = NSTextField(labelWithString: sizeText)
         sizeLabel.font = MMFont.font(ofSize: 12)
-        sizeLabel.textColor = Theme.shared.centerText
+        sizeLabel.textColor = Theme.shared.centerTextMuted
         sizeLabel.isEditable = false
         sizeLabel.isSelectable = false
-        sizeLabel.frame = NSRect(x: detailsLeft + typeWidth + 4, y: 33, width: 70, height: 17)
+        sizeLabel.frame = NSRect(x: detailsLeft + typeWidth + 6, y: 34, width: 70, height: 17)
         card.addSubview(sizeLabel)
 
         let downloadButton = RoundedEdgePanel()
@@ -2516,6 +2526,7 @@ extension MainWindow {
             replyCount: post.reply_count ?? 0,
             reactionsHash: reactionsHash,
             isPinned: post.is_pinned ?? false,
+            isSaved: savedPostIds.contains(post.id),
             isConsecutive: isConsecutive,
             width: chatW,
             fileIds: fileIds
@@ -2565,24 +2576,77 @@ extension MainWindow {
         footer.identifier = NSUserInterfaceItemIdentifier("replyFooter_\(post.id)")
         footer.cornerRadius = MMRadius.control
         footer.color = .clear
-        footer.frame = NSRect(x: 0, y: 0, width: width, height: 26)
+        footer.frame = NSRect(x: 0, y: 0, width: width, height: 30)
 
+        // Mini participant avatar (matches web ThreadFooter's 24pt avatar)
+        let miniSize: CGFloat = 24
+        let miniAvatar = RoundedEdgePanel()
+        miniAvatar.cornerRadius = miniSize / 2
+        miniAvatar.clipContentToBounds = true
+        miniAvatar.frame = NSRect(x: 0, y: 3, width: miniSize, height: miniSize)
+        if let cached = userAvatarsById[post.user_id] {
+            miniAvatar.color = .clear
+            let iv = NSImageView(frame: NSRect(origin: .zero, size: NSSize(width: miniSize, height: miniSize)))
+            iv.image = cached
+            iv.imageScaling = .scaleProportionallyUpOrDown
+            miniAvatar.addSubview(iv)
+        } else {
+            let authorName = usersById[post.user_id]?.username ?? currentUser?.username ?? "U"
+            miniAvatar.color = MMPalette.avatarColor(for: post.user_id.isEmpty ? authorName : post.user_id)
+            let initial = authorName.first.map { String($0).uppercased() } ?? "U"
+            let initialLabel = NSTextField(labelWithString: initial)
+            initialLabel.font = MMFont.font(ofSize: 11, weight: .semibold)
+            initialLabel.textColor = .white
+            initialLabel.alignment = .center
+            initialLabel.isEditable = false
+            initialLabel.isSelectable = false
+            initialLabel.frame = NSRect(x: 0, y: 4, width: miniSize, height: 16)
+            miniAvatar.addSubview(initialLabel)
+        }
+        footer.addSubview(miniAvatar)
+
+        let mutedColor = Theme.shared.centerText.withAlphaComponent(0.72)
         let icon = NSImageView()
         if let image = NSImage(systemSymbolName: "arrowshape.turn.up.left", accessibilityDescription: "Thread") {
             icon.image = image.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-            icon.contentTintColor = Theme.shared.buttonBg
+            icon.contentTintColor = mutedColor
         }
-        icon.frame = NSRect(x: 4, y: 7, width: 13, height: 13)
+        icon.frame = NSRect(x: miniSize + 10, y: 8, width: 14, height: 14)
         footer.addSubview(icon)
 
-        let label = NSTextField(labelWithString: "\(count) \(count == 1 ? "reply" : "replies")")
-        label.font = MMFont.font(ofSize: 12, weight: .semibold)
-        label.textColor = Theme.shared.buttonBg
+        let repliesText = "\(count) \(count == 1 ? "reply" : "replies")"
+        let repliesFont = MMFont.font(ofSize: 12, weight: .semibold)
+        let repliesW = ceil((repliesText as NSString).size(withAttributes: [.font: repliesFont]).width) + 4
+        let label = NSTextField(labelWithString: repliesText)
+        label.font = repliesFont
+        label.textColor = mutedColor
         label.isEditable = false
         label.isSelectable = false
         label.lineBreakMode = .byTruncatingTail
-        label.frame = NSRect(x: 22, y: 5, width: max(60, width - 28), height: 16)
+        label.frame = NSRect(x: icon.frame.maxX + 6, y: 7, width: min(repliesW, max(60, width - 140)), height: 16)
         footer.addSubview(label)
+
+        // "Following" pill matching Mattermost web CRT footer
+        let followText = "Following"
+        let followFont = MMFont.font(ofSize: 12, weight: .semibold)
+        let followTextW = ceil((followText as NSString).size(withAttributes: [.font: followFont]).width)
+        let followPillW = followTextW + 18
+        let followX = label.frame.maxX + 10
+        if followX + followPillW <= width {
+            let followPill = RoundedEdgePanel()
+            followPill.cornerRadius = MMRadius.control
+            followPill.color = Theme.shared.buttonBg.withAlphaComponent(0.08)
+            followPill.frame = NSRect(x: followX, y: 3, width: followPillW, height: 24)
+            let followLabel = NSTextField(labelWithString: followText)
+            followLabel.font = followFont
+            followLabel.textColor = Theme.shared.buttonBg
+            followLabel.alignment = .center
+            followLabel.isEditable = false
+            followLabel.isSelectable = false
+            followLabel.frame = NSRect(x: 0, y: 4, width: followPillW, height: 16)
+            followPill.addSubview(followLabel)
+            footer.addSubview(followPill)
+        }
 
         footer.onHoverChanged = { [weak footer] isHovered in
             footer?.color = isHovered ? Theme.shared.centerHover : .clear
@@ -2652,7 +2716,7 @@ extension MainWindow {
             let bodyColor =
                 isDeleted
                 ? Theme.shared.centerTextMuted.withAlphaComponent(0.9)
-                : Theme.shared.centerText.withAlphaComponent(0.75)
+                : Theme.shared.centerText
             let mutable = NSMutableAttributedString(
                 attributedString: formattedMessage(bodyText, font: bodyFont, color: bodyColor))
             if isEdited {
@@ -2796,9 +2860,16 @@ extension MainWindow {
             isBotAccount(userObj)
             || (userObj == nil && authorName.lowercased() == "system-bot")
 
+        let isPinned = (post.is_pinned == true) && !isDeleted
+        let isSaved = savedPostIds.contains(post.id) && !isDeleted
+        let hasPreHeader = isPinned || isSaved
+
         // Post header/body metrics mirror the web client:
-        // 16pt top padding, 32pt avatar at 37pt, text column at 79pt, 14pt bottom padding.
-        let topPad: CGFloat = 16
+        // 16pt top padding (or 10pt + 22pt pre-header for Saved/Pinned), 32pt avatar at 37pt,
+        // text column at 79pt, 14pt bottom padding.
+        let preHeaderH: CGFloat = hasPreHeader ? 22 : 0
+        let topPad: CGFloat = hasPreHeader ? 10 : 16
+        let contentTopY = topPad + preHeaderH
         let bottomPad: CGFloat = 14
         let headerH: CGFloat = 20
         let avatarSize: CGFloat = 32
@@ -2830,18 +2901,47 @@ extension MainWindow {
         if linkPreview != nil { stackHeight += linkPreviewHeight + 6 }
         if attachmentsView != nil { stackHeight += attachmentsHeight + 2 }
         stackHeight += reactionsHeight
-        if showsReplyFooter { stackHeight += 30 }
+        if showsReplyFooter { stackHeight += 34 }
 
-        let totalRowH = topPad + headerH + stackHeight + bottomPad
+        let totalRowH = contentTopY + headerH + stackHeight + bottomPad
         row.frame = NSRect(x: 0, y: 0, width: width, height: totalRowH)
         // Rows use a flipped (top-down) coordinate system.
-        let headerTopY = topPad
+        let headerTopY = contentTopY
+
+        // Saved / Pinned pre-header row (matches web client)
+        if hasPreHeader {
+            let linkBlue = Theme.shared.linkColor
+            let preIcon = NSImageView()
+            let preSymbol = isPinned ? "pin.fill" : "bookmark.fill"
+            let preText: String
+            if isPinned && isSaved {
+                preText = "Pinned and Saved"
+            } else if isPinned {
+                preText = "Pinned"
+            } else {
+                preText = "Saved"
+            }
+            if let img = NSImage(systemSymbolName: preSymbol, accessibilityDescription: preText) {
+                preIcon.image = img.withSymbolConfiguration(.init(pointSize: 10.5, weight: .semibold))
+                preIcon.contentTintColor = linkBlue
+            }
+            preIcon.frame = NSRect(x: 56, y: topPad + 2, width: 13, height: 13)
+            row.addSubview(preIcon)
+
+            let preLabel = NSTextField(labelWithString: preText)
+            preLabel.font = MMFont.font(ofSize: 12, weight: .medium)
+            preLabel.textColor = linkBlue
+            preLabel.isEditable = false
+            preLabel.isSelectable = false
+            preLabel.frame = NSRect(x: contentX, y: topPad, width: min(200, bodyMaxW), height: 16)
+            row.addSubview(preLabel)
+        }
 
         // Avatar circle
         let avatarCircle = RoundedEdgePanel()
         avatarCircle.identifier = NSUserInterfaceItemIdentifier("avatar_\(post.user_id)")
         avatarCircle.cornerRadius = avatarSize / 2
-        avatarCircle.frame = NSRect(x: 37, y: topPad, width: avatarSize, height: avatarSize)
+        avatarCircle.frame = NSRect(x: 37, y: contentTopY, width: avatarSize, height: avatarSize)
 
         let cachedAvatar = userAvatarsById[post.user_id] ?? (isBotUser ? userAvatarsById["system-bot"] : nil)
         if !post.user_id.isEmpty {
@@ -2903,7 +3003,7 @@ extension MainWindow {
         authorLabel.maximumNumberOfLines = 1
         authorLabel.toolTip = authorName
         let authorSize = (authorName as NSString).size(withAttributes: [.font: authorFont])
-        let timeFont = MMFont.font(ofSize: 12.6)
+        let timeFont = MMFont.font(ofSize: 12)
         let timeSize = (timeStr as NSString).size(withAttributes: [.font: timeFont])
         let reservedTrailing = ceil(timeSize.width) + 8 + (isBotUser ? 40 : 0) + 12
         let authorW = min(
@@ -2937,39 +3037,20 @@ extension MainWindow {
             headerRightX = botBadge.frame.maxX + 8
         }
 
-        // Timestamp label
-        let timeLabel = NSTextField(labelWithString: timeStr)
-        timeLabel.font = timeFont
-        timeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.75)
-        timeLabel.isEditable = false
-        timeLabel.isSelectable = false
+        // Status prompt sits between author and timestamp (matches Mattermost web client).
         let timeW = ceil(timeSize.width) + 4
         let timeH = max(17, ceil(timeSize.height))
-        timeLabel.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - timeH) / 2, width: timeW, height: timeH)
-        row.addSubview(timeLabel)
-
-        if post.is_pinned == true {
-            let pinView = NSImageView()
-            if let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned") {
-                pinView.image = pinImage.withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
-                pinView.contentTintColor = Theme.shared.awayIndicator
-            }
-            pinView.frame = NSRect(x: timeLabel.frame.maxX + 6, y: headerTopY + 5, width: 13, height: 13)
-            row.addSubview(pinView)
-        }
-
-        // Status prompt follows the timestamp so long usernames never hide the time.
         if isCurrentUser && !isSystem {
             let statusPromptPill = RoundedEdgePanel()
             statusPromptPill.cornerRadius = MMRadius.control
-            statusPromptPill.color = hoverBg
+            statusPromptPill.color = Theme.shared.centerText.withAlphaComponent(0.06)
             let statusPromptIcon = NSImageView()
             if let smileImg = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: "Status") {
-                statusPromptIcon.image = smileImg.withSymbolConfiguration(.init(pointSize: 10, weight: .regular))
+                statusPromptIcon.image = smileImg.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
                 statusPromptIcon.contentTintColor = mutedText
             }
             let statusPromptLabel = NSTextField(labelWithString: "Update your status")
-            statusPromptLabel.font = MMFont.font(ofSize: 10, weight: .medium)
+            statusPromptLabel.font = MMFont.font(ofSize: 11.5, weight: .regular)
             statusPromptLabel.textColor = mutedText
             statusPromptLabel.isEditable = false
             statusPromptLabel.isSelectable = false
@@ -2977,14 +3058,13 @@ extension MainWindow {
             let promptTextW = ceil(promptSize.width) + 4
             let promptTextH = ceil(promptSize.height)
             let pillPadH: CGFloat = 6
-            let iconSize: CGFloat = 12
+            let iconSize: CGFloat = 13
             let iconSpacing: CGFloat = 4
             let pillW = pillPadH + iconSize + iconSpacing + promptTextW + pillPadH
-            let pillH = max(18, promptTextH + 4)
-            let pillX = timeLabel.frame.maxX + 8
-            if pillX + pillW <= width - 12 {
+            let pillH = max(20, promptTextH + 4)
+            if headerRightX + pillW + 8 + timeW <= width - 12 {
                 statusPromptPill.frame = NSRect(
-                    x: pillX,
+                    x: headerRightX,
                     y: headerTopY + (headerH - pillH) / 2,
                     width: pillW,
                     height: pillH
@@ -3000,15 +3080,25 @@ extension MainWindow {
                 statusPromptPill.addSubview(statusPromptIcon)
                 statusPromptPill.addSubview(statusPromptLabel)
                 statusPromptPill.onHoverChanged = { [weak statusPromptPill] isHovered in
-                    statusPromptPill?.color = isHovered ? dividerColor : hoverBg
+                    statusPromptPill?.color = isHovered ? dividerColor : Theme.shared.centerText.withAlphaComponent(0.06)
                     statusPromptPill?.setNeedsAppearanceUpdate()
                 }
                 statusPromptPill.onClick = { [weak self] in
                     self?.setStatusMenuOpen(true)
                 }
                 row.addSubview(statusPromptPill)
+                headerRightX = statusPromptPill.frame.maxX + 8
             }
         }
+
+        // Timestamp label
+        let timeLabel = NSTextField(labelWithString: timeStr)
+        timeLabel.font = timeFont
+        timeLabel.textColor = Theme.shared.centerText.withAlphaComponent(0.56)
+        timeLabel.isEditable = false
+        timeLabel.isSelectable = false
+        timeLabel.frame = NSRect(x: headerRightX, y: headerTopY + (headerH - timeH) / 2, width: timeW, height: timeH)
+        row.addSubview(timeLabel)
 
         // Body + GIFs stacked below the header.
         var stackTop = headerTopY + headerH
@@ -3065,9 +3155,9 @@ extension MainWindow {
 
         if showsReplyFooter {
             let footer = makeThreadReplyFooter(for: post, width: bodyMaxW)
-            footer.frame.origin = CGPoint(x: contentX, y: stackTop)
+            footer.frame.origin = CGPoint(x: contentX, y: stackTop + 2)
             row.addSubview(footer)
-            stackTop += 30
+            stackTop += 34
         }
 
         if !isSystem && !isBotUser {
@@ -3084,7 +3174,7 @@ extension MainWindow {
             }
             let dotSize: CGFloat = 12
             let stat = isCurrentUser ? currentUserStatus : (userStatusById[post.user_id] ?? "offline")
-            usrDot.frame = NSRect(x: 57, y: topPad + avatarSize - dotSize, width: dotSize, height: dotSize)
+            usrDot.frame = NSRect(x: 57, y: contentTopY + avatarSize - dotSize, width: dotSize, height: dotSize)
             usrDot.cornerRadius = dotSize / 2
             usrDot.color = statusColor(for: stat)
             usrDot.borderWidth = 1.5
@@ -3094,8 +3184,9 @@ extension MainWindow {
         }
 
         let isMentioned = !isSystem && !isDeleted && isCurrentUserMentioned(in: post)
-        let mentionBaseBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.18) : .clear
-        let mentionHoverBg = isMentioned ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.28) : msgHoverBg
+        let isHighlighted = isMentioned || hasPreHeader
+        let mentionBaseBg = isHighlighted ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.20) : .clear
+        let mentionHoverBg = isHighlighted ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.28) : msgHoverBg
         row.color = mentionBaseBg
 
         let toolbar =
@@ -3556,7 +3647,7 @@ extension MainWindow {
                 let fgColor = isMyMention ? Theme.shared.mentionHighlightLink : brandBlue
                 let bgColor =
                     isMyMention
-                    ? Theme.shared.mentionHighlightBg.withAlphaComponent(0.35)
+                    ? Theme.shared.mentionHighlightBg
                     : Theme.shared.buttonBg.withAlphaComponent(0.10)
                 result.addAttributes(
                     [
@@ -3808,6 +3899,13 @@ extension MainWindow {
         var lastPostTimestamp: Int64 = 0
         var renderedIdsInPass = Set<String>()
 
+        let pinnedCount = postsToRender.filter { ($0.is_pinned == true) && (($0.delete_at ?? 0) == 0) }.count
+        let newPinStr = pinnedCount > 0 ? "\(pinnedCount)" : ""
+        if channelPinsCountLabel.stringValue != newPinStr {
+            channelPinsCountLabel.stringValue = newPinStr
+            layoutRightChatPanel()
+        }
+
         for post in postsToRender {
             let postDate = Date(timeIntervalSince1970: TimeInterval(post.create_at) / 1000.0)
             let dateStr = TimelineDateSeparator.string(for: postDate)
@@ -3865,6 +3963,7 @@ extension MainWindow {
                 replyCount: post.reply_count ?? 0,
                 reactionsHash: reactionsHash,
                 isPinned: post.is_pinned ?? false,
+                isSaved: savedPostIds.contains(post.id),
                 isConsecutive: isConsecutive,
                 width: chatW,
                 fileIds: fileIds

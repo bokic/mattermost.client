@@ -448,7 +448,16 @@ final class ThemeManager {
     }
 
     private init() {
-        applySystemTheme()
+        switch themeOverride {
+        case .system:
+            applySystemTheme()
+        case .dark:
+            usesSystemAppearance = false
+            theme = .onyx
+        case .server, .light:
+            usesSystemAppearance = false
+            theme = .denim
+        }
     }
 
     /// Applies the theme preference for the active team, falling back to the global one.
@@ -481,7 +490,8 @@ final class ThemeManager {
             let data = raw.data(using: .utf8),
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            applySystemTheme()
+            usesSystemAppearance = false
+            theme = .denim
             return
         }
         if (json["type"] as? String)?.lowercased() == "system" {

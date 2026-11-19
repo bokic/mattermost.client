@@ -39,6 +39,15 @@ extension MainWindow {
                     }
                 }
                 self.favoriteChannelIds = Set(self.favoriteChannelOrder).union(favorites)
+                let flagged = Set(
+                    preferences
+                        .filter { $0["category"] == "flagged_post" }
+                        .compactMap { $0["name"] }
+                )
+                if flagged != self.savedPostIds {
+                    self.savedPostIds = flagged
+                    self.rebuildTimelineContent(scrollToBottom: false)
+                }
                 self.refreshFavoriteState()
                 self.rebuildFavoritesCategory()
             }
@@ -318,9 +327,9 @@ extension MainWindow {
         let hoverBg = Theme.shared.sidebarHoverBg
 
         // 1. Team Header Row: "None v" button + "+" button
-        teamHeaderButton.color = Theme.shared.sidebarHeaderBg
+        teamHeaderButton.color = .clear
         teamHeaderButton.cornerRadius = MMRadius.control
-        teamHeaderLabel.font = MMFont.font(ofSize: 16, weight: .semibold)
+        teamHeaderLabel.font = MMFont.font(ofSize: 16, weight: .bold)
         teamHeaderLabel.textColor = Theme.shared.sidebarHeaderText
         teamHeaderLabel.isEditable = false
         teamHeaderLabel.isSelectable = false
@@ -335,7 +344,7 @@ extension MainWindow {
         teamHeaderButton.addSubview(teamHeaderChevron)
         teamHeaderButton.onHoverChanged = { [weak self] isHovered in
             guard let self = self else { return }
-            self.teamHeaderButton.color = isHovered ? hoverBg : Theme.shared.sidebarHeaderBg
+            self.teamHeaderButton.color = isHovered ? hoverBg : .clear
             self.teamHeaderButton.setNeedsAppearanceUpdate()
             self.teamHeaderChevron.contentTintColor =
                 isHovered ? Theme.shared.sidebarHeaderText : Theme.shared.sidebarHeaderText.withAlphaComponent(0.85)
@@ -401,8 +410,14 @@ extension MainWindow {
             findChannelIconView.contentTintColor = mutedTint
         }
         findChannelLabel.font = MMFont.font(ofSize: 12)
-        findChannelLabel.textColor = mutedTint
-        findChannelLabel.placeholderString = "Find channel"
+        findChannelLabel.textColor = Theme.shared.sidebarText
+        findChannelLabel.placeholderAttributedString = NSAttributedString(
+            string: L10n.string("Find channel"),
+            attributes: [
+                .font: MMFont.font(ofSize: 12),
+                .foregroundColor: mutedTint,
+            ]
+        )
         findChannelLabel.isEditable = true
         findChannelLabel.isSelectable = true
         findChannelLabel.isBezeled = false
@@ -481,7 +496,7 @@ extension MainWindow {
             }
         channelsItems.append(
             createSidebarItem(
-                id: "add-channels", symbolName: "plus", title: L10n.string("Add Channels"), isSelectable: false,
+                id: "add-channels", symbolName: "plus.square.fill", title: L10n.string("Add Channels"), isSelectable: false,
                 isBotBadge: false, showsCloseOnHover: false)
         )
         let channelsCat = createSidebarCategory(
@@ -503,7 +518,7 @@ extension MainWindow {
             }
         dmItems.append(
             createSidebarItem(
-                id: "invite-members", symbolName: "plus", title: L10n.string("Invite Members"), isSelectable: false,
+                id: "invite-members", symbolName: "plus.square.fill", title: L10n.string("Invite Members"), isSelectable: false,
                 isBotBadge: false, showsCloseOnHover: false)
         )
         let dmCat = createSidebarCategory(
@@ -638,7 +653,7 @@ extension MainWindow {
             if cat.type == "channels" {
                 let addChannelsItem = createSidebarItem(
                     id: "add-channels",
-                    symbolName: "plus",
+                    symbolName: "plus.square.fill",
                     title: L10n.string("Add Channels"),
                     isSelectable: false,
                     isBotBadge: false,
@@ -648,7 +663,7 @@ extension MainWindow {
             } else if cat.type == "direct_messages" {
                 let inviteMembersItem = createSidebarItem(
                     id: "invite-members",
-                    symbolName: "plus",
+                    symbolName: "plus.square.fill",
                     title: L10n.string("Invite Members"),
                     isSelectable: false,
                     isBotBadge: false,
@@ -873,7 +888,7 @@ extension MainWindow {
         row.color = .clear
 
         let leftBar = RoundedEdgePanel()
-        leftBar.cornerRadius = 2
+        leftBar.cornerRadius = 1.5
         leftBar.color = Theme.shared.sidebarActiveBorder
         leftBar.isHidden = true
         row.addSubview(leftBar)
@@ -883,6 +898,9 @@ extension MainWindow {
             iconView.image = custom
             iconView.imageScaling = .scaleProportionallyUpOrDown
             iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
+            iconView.wantsLayer = true
+            iconView.layer?.cornerRadius = 9
+            iconView.layer?.masksToBounds = true
             row.addSubview(iconView)
         } else if isBotBadge {
             if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: title) {
@@ -1659,8 +1677,8 @@ extension MainWindow {
         filterMenu.frame = NSRect(x: sidebarX + 16, y: topBarY - 83 - 8 - 68, width: 180, height: 68)
 
         findChannelPanel.frame = NSRect(x: sidebarX + 48, y: topBarY - 83, width: 200, height: 28)
-        findChannelIconView.frame = NSRect(x: 2, y: 5, width: 18, height: 18)
-        findChannelLabel.frame = NSRect(x: 29, y: 4, width: 165, height: 20)
+        findChannelIconView.frame = NSRect(x: 8, y: 5, width: 18, height: 18)
+        findChannelLabel.frame = NSRect(x: 30, y: 4, width: 164, height: 20)
 
         let query = channelFilterQuery.lowercased()
         func matches(_ title: String) -> Bool {
@@ -1688,7 +1706,7 @@ extension MainWindow {
                 hasVisibleUnreadContent = hasVisibleUnreadContent || sidebarUnreadOnly
                 threads.row.isHidden = false
                 threads.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
-                threads.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+                threads.leftBar.frame = NSRect(x: 0, y: 0, width: 3, height: 32)
                 threads.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                 threads.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 64, height: 20)
                 currentY += 32
@@ -1716,12 +1734,12 @@ extension MainWindow {
                 if !visibleFavorites.isEmpty { hasVisibleUnreadContent = true }
                 favorites.headerRow.isHidden = false
                 favorites.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
-                favorites.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
+                favorites.chevronView.frame = NSRect(x: 6, y: 8, width: 16, height: 16)
                 let chevron = isFavoritesCollapsed ? "chevron.right" : "chevron.down"
                 if let img = NSImage(systemSymbolName: chevron, accessibilityDescription: "Favorites") {
                     favorites.chevronView.image = img.withSymbolConfiguration(.init(pointSize: 9, weight: .bold))
                 }
-                favorites.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
+                favorites.titleLabel.frame = NSRect(x: 22, y: 7, width: sidebarWidth - 64, height: 18)
                 currentY += 32
                 for item in favorites.items {
                     if !matches(item.label.stringValue)
@@ -1733,7 +1751,7 @@ extension MainWindow {
                     }
                     item.row.isHidden = false
                     item.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
-                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 3, height: 32)
                     item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                     item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
                     item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 7, width: 18, height: 18)
@@ -1778,8 +1796,8 @@ extension MainWindow {
             category.headerRow.isHidden = false
             if !visibleItems.isEmpty { hasVisibleUnreadContent = true }
             category.headerRow.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
-            category.chevronView.frame = NSRect(x: 1, y: 8, width: 16, height: 16)
-            category.titleLabel.frame = NSRect(x: 17, y: 7, width: sidebarWidth - 60, height: 18)
+            category.chevronView.frame = NSRect(x: 6, y: 8, width: 16, height: 16)
+            category.titleLabel.frame = NSRect(x: 22, y: 7, width: sidebarWidth - 64, height: 18)
             category.addButton?.frame = NSRect(x: sidebarWidth - 32, y: 6, width: 20, height: 20)
             currentY += 32
 
@@ -1795,7 +1813,7 @@ extension MainWindow {
                 } else {
                     item.row.isHidden = false
                     item.row.frame = NSRect(x: sidebarX, y: currentY, width: sidebarWidth, height: 32)
-                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 4, height: 32)
+                    item.leftBar.frame = NSRect(x: 0, y: 0, width: 3, height: 32)
                     item.iconView.frame = NSRect(x: 21, y: 7, width: 18, height: 18)
                     item.label.frame = NSRect(x: 49, y: 6, width: sidebarWidth - 74, height: 20)
                     item.hoverCloseView?.frame = NSRect(x: sidebarWidth - 28, y: 7, width: 18, height: 18)
